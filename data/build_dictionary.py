@@ -6,16 +6,13 @@ import fileinput
 
 from collections import OrderedDict
 
-from nltk.tokenize import wordpunct_tokenize
-
-
 def main():
     for filename in sys.argv[1:]:
         print 'Processing', filename
         word_freqs = OrderedDict()
         with open(filename, 'r') as f:
             for line in f:
-                words_in = wordpunct_tokenize(line.strip())
+                words_in = line.strip().split(' ')
                 for w in words_in:
                     if w not in word_freqs:
                         word_freqs[w] = 0
