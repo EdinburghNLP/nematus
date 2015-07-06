@@ -17,7 +17,7 @@ class TextIterator:
         with open(target_dict, 'rb') as f:
             self.target_dict = pkl.load(f)
 
-        self.batch_size = 128
+        self.batch_size = batch_size
         self.maxlen = maxlen
 
         self.n_words_source = n_words_source
