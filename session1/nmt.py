@@ -300,7 +300,6 @@ def param_init_gru_cond_simple(options, params, prefix='gru_cond', nin=None, dim
 def gru_cond_simple_layer(tparams, state_below, options, prefix='gru', 
                           mask=None, context=None, one_step=False, 
                           init_state=None, 
-                          context_mask=None,
                           **kwargs):
 
     assert context, 'Context must be provided'
@@ -450,7 +449,6 @@ def build_model(tparams, options):
     proj = get_layer(options['decoder'])[1](tparams, emb, options, 
                                             prefix='decoder', 
                                             mask=y_mask, context=ctx, 
-                                            context_mask=x_mask,
                                             one_step=False, 
                                             init_state=init_state)
     proj_h = proj[0]
@@ -492,7 +490,8 @@ def build_sampler(tparams, options, trng):
     proj = get_layer(options['encoder'])[1](tparams, emb, options, prefix='encoder')
     ctx = proj[0][-1]
     ctx_mean = ctx
-    init_state = get_layer('ff')[1](tparams, ctx_mean, options, prefix='ff_state', activ='tanh')
+    init_state = get_layer('ff')[1](tparams, ctx_mean, options, 
+                                    prefix='ff_state', activ='tanh')
 
     print 'Building f_init...',
     outs = [init_state, ctx]
@@ -633,7 +632,6 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True):
 
     n_done = 0
 
-    iterator.start()
     for x, y in iterator:
         n_done += len(x)
 
@@ -644,6 +642,9 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True):
         pprobs = f_log_probs(x,x_mask,y,y_mask)
         for pp in pprobs:
             probs.append(pp)
+
+        if numpy.isnan(numpy.mean(probs)):
+            import ipdb; ipdb.set_trace()
 
         if verbose:
             print >>sys.stderr, '%d samples computed'%(n_done)
@@ -765,9 +766,11 @@ def train(dim_word=100, # word vector dimensionality
           validFreq=1000,
           saveFreq=1000, # save the parameters after every saveFreq updates
           sampleFreq=100, # generate some samples after every sampleFreq updates
-          datasets=['../data/training/europarl-v7.fr-en.en.tok', '../data/training/europarl-v7.fr-en.fr.tok'],
+          datasets=['/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok', 
+                    '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
           valid_datasets=['../data/dev/newstest2011.en.tok', '../data/dev/newstest2011.fr.tok'],
-          dictionaries=['../data/training/europarl-v7.fr-en.en.tok.pkl', '../data/training/europarl-v7.fr-en.fr.tok.pkl'],
+          dictionaries=['/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok.pkl', 
+                        '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
           reload_=False):
 
@@ -814,8 +817,6 @@ def train(dim_word=100, # word vector dimensionality
           cost = \
           build_model(tparams, model_options)
     inps = [x, x_mask, y, y_mask]
-
-    theano.printing.debugprint(cost.mean(), file=open('cost.txt', 'w'))
 
     print 'Buliding sampler'
     f_init, f_next = build_sampler(tparams, model_options, trng)
@@ -921,10 +922,10 @@ def train(dim_word=100, # word vector dimensionality
             if numpy.mod(uidx, sampleFreq) == 0:
                 # FIXME: random selection?
                 for jj in xrange(numpy.minimum(5,x.shape[1])):
-                    stochastic = False
+                    stochastic = True
                     sample, score = gen_sample(tparams, f_init, f_next, x[:,jj][:,None], 
                                                model_options, trng=trng, k=1, maxlen=30, 
-                                               stochastic=stochastic, argmax=True)
+                                               stochastic=stochastic, argmax=False)
                     print 'Source ',jj,': ',
                     for vv in x[:,jj]:
                         if vv == 0:
@@ -960,7 +961,8 @@ def train(dim_word=100, # word vector dimensionality
 
             if numpy.mod(uidx, validFreq) == 0:
                 use_noise.set_value(0.)
-                valid_err = pred_probs(f_log_probs, prepare_data, model_options, valid).mean()
+                valid_errs = pred_probs(f_log_probs, prepare_data, model_options, valid)
+                valid_err = valid_errs.mean()
                 history_errs.append(valid_err)
 
                 if uidx == 0 or valid_err <= numpy.array(history_errs).min():
@@ -972,6 +974,9 @@ def train(dim_word=100, # word vector dimensionality
                         print 'Early Stop!'
                         estop = True
                         break
+
+                if numpy.isnan(valid_err):
+                    import ipdb; ipdb.set_trace()
 
                 print 'Valid ', valid_err
 
