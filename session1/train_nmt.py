@@ -15,10 +15,10 @@ def main(job_id, params):
                                         optimizer=params['optimizer'][0], 
                                         maxlen=30,
                                         batch_size=32,
-                                        valid_batch_size=32,
-                                        validFreq=1000,
-                                        dispFreq=1,
-                                        saveFreq=1000,
+                                        valid_batch_size=8,
+                                        validFreq=5000,
+                                        dispFreq=10,
+                                        saveFreq=5000,
                                         sampleFreq=10,
                                         use_dropout=params['use-dropout'][0])
     return validerr
@@ -26,13 +26,13 @@ def main(job_id, params):
 if __name__ == '__main__':
     main(0, {
         'model': ['model.npz'],
-        'dim_word': [100],
-        'dim': [256],
-        'n-words': [20000], 
+        'dim_word': [256],
+        'dim': [512],
+        'n-words': [30000], 
         'optimizer': ['adam'],
         'decay-c': [0.], 
         'use-dropout': [False],
         'learning-rate': [0.0001],
-        'reload': [False]})
+        'reload': [True]})
 
 
