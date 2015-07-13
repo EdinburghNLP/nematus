@@ -521,9 +521,11 @@ def build_model(tparams, options):
     logit_ctx = get_layer('ff')[1](tparams, ctxs, options, 
                                     prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-    logit = get_layer('ff')[1](tparams, logit, options, prefix='ff_logit', activ='linear')
+    logit = get_layer('ff')[1](tparams, logit, options, 
+                               prefix='ff_logit', activ='linear')
     logit_shp = logit.shape
-    probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1], logit_shp[2]]))
+    probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1], 
+                                               logit_shp[2]]))
 
     # cost
     y_flat = y.flatten()
@@ -552,7 +554,8 @@ def build_sampler(tparams, options, trng):
     projr = get_layer(options['encoder'])[1](tparams, embr, options, prefix='encoder_r')
     ctx = concatenate([proj[0],projr[0][::-1]], axis=proj[0].ndim-1)
     ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
-    init_state = get_layer('ff')[1](tparams, ctx_mean, options, prefix='ff_state', activ='tanh')
+    init_state = get_layer('ff')[1](tparams, ctx_mean, options, 
+                                    prefix='ff_state', activ='tanh')
 
     print 'Building f_init...',
     outs = [init_state, ctx]
