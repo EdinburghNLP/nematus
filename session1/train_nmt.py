@@ -13,9 +13,9 @@ def main(job_id, params):
                                         decay_c=params['decay-c'][0],
                                         lrate=params['learning-rate'][0],
                                         optimizer=params['optimizer'][0], 
-                                        maxlen=30,
-                                        batch_size=32,
-                                        valid_batch_size=8,
+                                        maxlen=50,
+                                        batch_size=4,
+                                        valid_batch_size=4,
                                         validFreq=5000,
                                         dispFreq=10,
                                         saveFreq=5000,
@@ -26,13 +26,13 @@ def main(job_id, params):
 if __name__ == '__main__':
     main(0, {
         'model': ['model.npz'],
-        'dim_word': [256],
-        'dim': [512],
+        'dim_word': [500],
+        'dim': [1024],
         'n-words': [30000], 
         'optimizer': ['adam'],
         'decay-c': [0.], 
         'use-dropout': [False],
         'learning-rate': [0.0001],
-        'reload': [True]})
+        'reload': [False]})
 
 
