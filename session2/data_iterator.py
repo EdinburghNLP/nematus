@@ -43,7 +43,7 @@ class TextIterator:
         ii = 0
 
         try:
-            for ii in xrange(self.batch_size):
+            while True:
                 ss = self.source.readline()
                 if ss == "":
                     raise IOError
@@ -65,6 +65,9 @@ class TextIterator:
 
                 source.append(ss)
                 target.append(tt)
+
+                if len(source) >= self.batch_size or len(target) >= self.batch_size:
+                    break
         except IOError:
             self.end_of_data = True
 
