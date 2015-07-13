@@ -28,7 +28,7 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
     def _translate(seq):
         sample, score = gen_sample(tparams, f_init, f_next, numpy.array(seq).reshape([len(seq),1]), options,
-                                   trng=trng, k=k, maxlen=200, stochastic=False)
+                                   trng=trng, k=k, maxlen=200, stochastic=False, argmax=False)
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
