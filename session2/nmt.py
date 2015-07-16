@@ -485,12 +485,14 @@ def build_model(tparams, options):
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
                                             prefix='encoder',
                                             mask=x_mask)
-    embr = tparams['Wemb'][xr.flatten()].reshape([n_timesteps, n_samples, options['dim_word']])
+    embr = tparams['Wemb'][xr.flatten()]
+    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
     projr = get_layer(options['encoder'])[1](tparams, embr, options,
                                              prefix='encoder_r',
                                              mask=xr_mask)
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
-    ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
+    ctx_mean = (ctx * x_mask[:,:,None]).sum(0) / x_mask.sum(0)[:,None]
+    #ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
 
     # initial decoder state
     init_state = get_layer('ff')[1](tparams, ctx_mean, options, 
@@ -553,7 +555,8 @@ def build_sampler(tparams, options, trng):
     proj = get_layer(options['encoder'])[1](tparams, emb, options, prefix='encoder')
     projr = get_layer(options['encoder'])[1](tparams, embr, options, prefix='encoder_r')
     ctx = concatenate([proj[0],projr[0][::-1]], axis=proj[0].ndim-1)
-    ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
+    ctx_mean = ctx.mean(0)
+    #ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
     init_state = get_layer('ff')[1](tparams, ctx_mean, options, 
                                     prefix='ff_state', activ='tanh')
 
@@ -819,6 +822,7 @@ def train(dim_word=100, # word vector dimensionality
           decay_c=0., 
           alpha_c=0., 
           diag_c=0.,
+          clip_c=-1.,
           lrate=0.01, 
           n_words_src=100000,
           n_words=100000,
@@ -917,6 +921,17 @@ def train(dim_word=100, # word vector dimensionality
     print 'Building f_grad...',
     f_grad = theano.function(inps, grads, profile=profile)
     print 'Done'
+
+    if clip_c > 0.:
+        g2 = 0.
+        for g in grads:
+            g2 += (g**2).sum()
+        new_grads = []
+        for g in grads:
+            new_grads.append(tensor.switch(g2 > (clip_c**2), 
+                                           g / tensor.sqrt(g2) * clip_c,
+                                           g))
+        grads = new_grads
 
     lr = tensor.scalar(name='lr')
     print 'Building optimizers...',
