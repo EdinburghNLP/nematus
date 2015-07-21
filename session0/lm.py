@@ -405,12 +405,12 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True):
 
     n_done = 0
 
-    for x, y in iterator:
+    for x in iterator:
         n_done += len(x)
 
-        x, x_mask, y, y_mask = prepare_data(x, y, n_words=options['n_words'])
+        x, x_mask = prepare_data(x, n_words=options['n_words'])
 
-        pprobs = f_log_probs(x,x_mask,y,y_mask)
+        pprobs = f_log_probs(x, x_mask)
         for pp in pprobs:
             probs.append(pp)
 
@@ -537,7 +537,7 @@ def train(dim_word=100, # word vector dimensionality
           sampleFreq=100, # generate some samples after every sampleFreq updates
           dataset='/data/lisatmp3/chokyun/wikipedia/extracted/wiki.tok.txt.gz', 
           valid_dataset='../data/dev/newstest2011.en.tok', 
-          dictionary='/data/lisatmp3/chokyun/wikipedia/extracted/wiki_dictionary.pkl',
+          dictionary='/data/lisatmp3/chokyun/wikipedia/extracted/wiki.tok.txt.gz.pkl',
           use_dropout=False,
           reload_=False):
 
