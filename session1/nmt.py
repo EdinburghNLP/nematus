@@ -555,7 +555,7 @@ def gen_sample(tparams, f_init, f_next, x, options, trng=None, k=1, maxlen=30,
 
     ret = f_init(x)
     next_state, ctx0 = ret[0], ret[1]
-    next_w = -1
+    next_w = [-1]
 
     for ii in xrange(maxlen):
         ctx = numpy.tile(ctx0, [live_k, 1])
