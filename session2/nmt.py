@@ -523,6 +523,8 @@ def build_model(tparams, options):
     logit_ctx = get_layer('ff')[1](tparams, ctxs, options, 
                                     prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+    if options['use_dropout']:
+        logit = dropout_layer(logit, use_noise, trng)
     logit = get_layer('ff')[1](tparams, logit, options, 
                                prefix='ff_logit', activ='linear')
     logit_shp = logit.shape
