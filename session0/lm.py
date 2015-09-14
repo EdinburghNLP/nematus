@@ -553,7 +553,7 @@ def train(dim_word=100, # word vector dimensionality
     # reload options
     if reload_ and os.path.exists(saveto):
         with open('%s.pkl'%saveto, 'rb') as f:
-            models_options = pkl.load(f)
+            model_options = pkl.load(f)
 
     print 'Loading data'
     train = TextIterator(dataset, 
@@ -635,6 +635,7 @@ def train(dim_word=100, # word vector dimensionality
 
     uidx = 0
     estop = False
+    bad_counter = 0
     for eidx in xrange(max_epochs):
         n_samples = 0
 
