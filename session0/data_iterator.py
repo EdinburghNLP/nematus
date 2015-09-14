@@ -44,7 +44,7 @@ class TextIterator:
                 ss = self.source.readline()
                 if ss == "":
                     raise IOError
-                ss = wordpunct_tokenize(ss.decode('utf-8').strip())
+                ss = ss.strip().split()
                 ss = [self.source_dict[w] if w in self.source_dict else 1 for w in ss]
                 if self.n_words_source > 0:
                     ss = [w if w < self.n_words_source else 1 for w in ss]
