@@ -315,10 +315,12 @@ def build_model(tparams, options):
     emb_shifted = tensor.zeros_like(emb)
     emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
     emb = emb_shifted
+    opt_ret['emb'] = emb
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
                                             prefix='encoder',
                                             mask=x_mask)
     proj_h = proj[0]
+    opt_ret['proj_h'] = proj_h
 
     # compute word probabilities
     logit_lstm = get_layer('ff')[1](tparams, proj_h, options, 
@@ -335,6 +337,7 @@ def build_model(tparams, options):
     x_flat_idx = tensor.arange(x_flat.shape[0]) * options['n_words'] + x_flat
     cost = -tensor.log(probs.flatten()[x_flat_idx])
     cost = cost.reshape([x.shape[0],x.shape[1]])
+    opt_ret['cost_per_sample'] = cost
     cost = (cost * x_mask).sum(0)
 
     return trng, use_noise, x, x_mask, opt_ret, cost
