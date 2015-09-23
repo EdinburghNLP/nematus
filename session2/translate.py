@@ -10,7 +10,7 @@ from nmt import build_sampler, gen_sample, \
 
 from multiprocessing import Process, Queue
 
-def translate_model(queue, rqueue, pid, model, options, k, normalize):
+def translate_model(queue, rqueue, pid, model, options, k, normalize, minlen):
 
     import theano
     from theano import tensor
@@ -28,7 +28,8 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
     def _translate(seq):
         sample, score = gen_sample(tparams, f_init, f_next, numpy.array(seq).reshape([len(seq),1]), options,
-                                   trng=trng, k=k, maxlen=200, stochastic=False, argmax=False)
+                                   trng=trng, k=k, maxlen=200, minlen=minlen * len(seq),
+                                   stochastic=False, argmax=False)
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
@@ -48,7 +49,7 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
     return 
 
-def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normalize=False, n_process=5, chr_level=False):
+def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normalize=False, n_process=5, chr_level=False, minlen=0.):
 
     # load model model_options
     with open('%s.pkl'%model, 'rb') as f:
@@ -74,7 +75,7 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normali
     processes = [None] * n_process
     for midx in xrange(n_process):
         processes[midx] = Process(target=translate_model, 
-                                  args=(queue,rqueue,midx,model,options,k,normalize,))
+                                  args=(queue,rqueue,midx,model,options,k,normalize,minlen))
         processes[midx].start()
 
     def _seqs2words(caps):
@@ -130,6 +131,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', type=int, default=5)
     parser.add_argument('-n', action="store_true", default=False)
     parser.add_argument('-c', action="store_true", default=False)
+    parser.add_argument('-r', type=float, default=0.)
     parser.add_argument('model', type=str)
     parser.add_argument('dictionary', type=str)
     parser.add_argument('dictionary_target', type=str)
@@ -139,4 +141,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.model, args.dictionary, args.dictionary_target, args.source, args.saveto, 
-         k=args.k, normalize=args.n, n_process=args.p, chr_level=args.c)
+         k=args.k, normalize=args.n, n_process=args.p, chr_level=args.c,
+         minlen=args.r)
