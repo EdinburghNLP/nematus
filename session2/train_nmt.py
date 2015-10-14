@@ -33,13 +33,13 @@ def main(job_id, params):
 
 if __name__ == '__main__':
     main(0, {
-        'model': ['/ichec/home/users/%s/models/model_session2.npz'],
+        'model': ['/ichec/home/users/%s/models/model_session2.npz'%os.environ['USER']],
         'dim_word': [500],
         'dim': [1024],
         'n-words': [30000], 
         'optimizer': ['adadelta'],
         'decay-c': [0.], 
-        'clip-c': [10.], 
+        'clip-c': [1.], 
         'use-dropout': [False],
         'learning-rate': [0.0001],
         'reload': [False]})
