@@ -5,7 +5,7 @@
 #PBS -A course
 #PBS -q ShortQ
 
-export THEANO_FLAGS=device=gpu,floatX=float32
+export THEANO_FLAGS=device=cpu,floatX=float32
 
 cd $PBS_O_WORKDIR
 python ./translate.py -n -p 20 \
