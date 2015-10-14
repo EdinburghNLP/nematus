@@ -1,7 +1,13 @@
 import numpy
 import cPickle as pkl
+import gzip
 
 from nltk.tokenize import wordpunct_tokenize
+
+def fopen(filename, mode='r'):
+    if filename.endswith('.gz'):
+        return gzip.open(filename, mode)
+    return open(filename, mode)
 
 class TextIterator:
     def __init__(self, source, target, 
@@ -10,8 +16,8 @@ class TextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1):
-        self.source = open(source, 'r')
-        self.target = open(target, 'r')
+        self.source = fopen(source, 'r')
+        self.target = fopen(target, 'r')
         with open(source_dict, 'rb') as f:
             self.source_dict = pkl.load(f)
         with open(target_dict, 'rb') as f:
