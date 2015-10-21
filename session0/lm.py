@@ -88,6 +88,7 @@ def get_layer(name):
 
 
 # orthogonal initialization for weights
+# see Saxe et al. ICLR'14
 def ortho_weight(ndim):
     W = numpy.random.randn(ndim, ndim)
     u, s, v = numpy.linalg.svd(W)
