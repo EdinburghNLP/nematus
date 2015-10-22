@@ -1,25 +1,26 @@
+'''
+Translates a source file using a translation model.
+'''
 import argparse
 
 import numpy
 import cPickle as pkl
 
-from nmt import build_sampler, gen_sample, \
-                load_params, \
-                init_params, \
-                init_tparams
+from nmt import (build_sampler, gen_sample, load_params,
+                 init_params, init_tparams)
 
 from multiprocessing import Process, Queue
 
+
 def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
-    import theano
-    from theano import tensor
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-
     trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.), name='use_noise')
 
+    # allocate model parameters
     params = init_params(options)
+
+    # load model parameters and set theano shared variables
     params = load_params(model, params)
     tparams = init_tparams(params)
 
@@ -27,9 +28,13 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
     f_init, f_next = build_sampler(tparams, options, trng)
 
     def _translate(seq):
-        sample, score = gen_sample(tparams, f_init, f_next, numpy.array(seq).reshape([len(seq),1]), options,
-                                   trng=trng, k=k, maxlen=200, 
+        # sample given an input sequence and obtain scores
+        sample, score = gen_sample(tparams, f_init, f_next,
+                                   numpy.array(seq).reshape([len(seq), 1]),
+                                   options, trng=trng, k=k, maxlen=200,
                                    stochastic=False, argmax=False)
+
+        # normalize scores according to sequence lengths
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
@@ -38,7 +43,7 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
     while True:
         req = queue.get()
-        if req == None:
+        if req is None:
             break
 
         idx, x = req[0], req[1]
@@ -47,14 +52,17 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
         rqueue.put((idx, seq))
 
-    return 
+    return
 
-def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normalize=False, n_process=5, chr_level=False):
+
+def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
+         normalize=False, n_process=5, chr_level=False):
 
     # load model model_options
-    with open('%s.pkl'%model, 'rb') as f:
+    with open('%s.pkl' % model, 'rb') as f:
         options = pkl.load(f)
 
+    # load source dictionary and invert
     with open(dictionary, 'rb') as f:
         word_dict = pkl.load(f)
     word_idict = dict()
@@ -62,6 +70,8 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normali
         word_idict[vv] = kk
     word_idict[0] = '<eos>'
     word_idict[1] = 'UNK'
+
+    # load target dictionary and invert
     with open(dictionary_target, 'rb') as f:
         word_dict_trg = pkl.load(f)
     word_idict_trg = dict()
@@ -70,14 +80,17 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normali
     word_idict_trg[0] = '<eos>'
     word_idict_trg[1] = 'UNK'
 
+    # create input and output queues for processes
     queue = Queue()
     rqueue = Queue()
     processes = [None] * n_process
     for midx in xrange(n_process):
-        processes[midx] = Process(target=translate_model, 
-                                  args=(queue,rqueue,midx,model,options,k,normalize))
+        processes[midx] = Process(
+            target=translate_model,
+            args=(queue, rqueue, midx, model, options, k, normalize))
         processes[midx].start()
 
+    # utility function
     def _seqs2words(caps):
         capsw = []
         for cc in caps:
@@ -115,14 +128,13 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5, normali
                 print 'Sample ', (idx+1), '/', n_samples, ' Done'
         return trans
 
-    print 'Translating ',source_file,'...'
+    print 'Translating ', source_file, '...'
     n_samples = _send_jobs(source_file)
     trans = _seqs2words(_retrieve_jobs(n_samples))
     _finish_processes()
     with open(saveto, 'w') as f:
         print >>f, '\n'.join(trans)
     print 'Done'
-
 
 
 if __name__ == "__main__":
@@ -139,5 +151,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.model, args.dictionary, args.dictionary_target, args.source, args.saveto, 
-         k=args.k, normalize=args.n, n_process=args.p, chr_level=args.c)
+    main(args.model, args.dictionary, args.dictionary_target, args.source,
+         args.saveto, k=args.k, normalize=args.n, n_process=args.p,
+         chr_level=args.c)
