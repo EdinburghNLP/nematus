@@ -621,6 +621,7 @@ def train(dim_word=100,  # word vector dimensionality
           encoder='gru',
           patience=10,  # early stopping patience
           max_epochs=5000,
+          finish_after=10000000,  # finish after this many updates
           dispFreq=100,
           decay_c=0.,  # L2 weight decay penalty
           lrate=0.01,
@@ -770,7 +771,7 @@ def train(dim_word=100,  # word vector dimensionality
             # check for bad numbers
             if numpy.isnan(cost) or numpy.isinf(cost):
                 print 'NaN detected'
-                return 1., 1., 1.
+                return 1.
 
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
@@ -829,6 +830,12 @@ def train(dim_word=100,  # word vector dimensionality
                     ipdb.set_trace()
 
                 print 'Valid ', valid_err
+
+            # finish after this many updates
+            if uidx >= finish_after:
+                print 'Finishing after %d iterations!' % uidx
+                estop = True
+                break
 
         print 'Seen %d samples' % n_samples
 
