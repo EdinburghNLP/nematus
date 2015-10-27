@@ -12,7 +12,7 @@ from nmt import (build_sampler, gen_sample, load_params,
 from multiprocessing import Process, Queue
 
 
-def translate_model(queue, rqueue, pid, model, options, k, normalize):
+def translate_model(queue, rqueue, pid, model, options, k, normalize, n_best):
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(1234)
@@ -38,8 +38,11 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
-        sidx = numpy.argmin(score)
-        return sample[sidx]
+        if n_best > 1:
+            sidx = numpy.argsort(score)[:n_best]
+        else:
+            sidx = numpy.argmin(score)
+        return numpy.array(sample)[sidx], numpy.array(score)[sidx]
 
     while True:
         req = queue.get()
@@ -48,15 +51,15 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize):
 
         idx, x = req[0], req[1]
         print pid, '-', idx
-        seq = _translate(x)
+        seq, scores = _translate(x)
 
-        rqueue.put((idx, seq))
+        rqueue.put((idx, seq, scores))
 
     return
 
 
 def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
-         normalize=False, n_process=5, chr_level=False):
+         normalize=False, n_process=5, chr_level=False, n_best=1):
 
     # load model model_options
     with open('%s.pkl' % model, 'rb') as f:
@@ -87,7 +90,7 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, model, options, k, normalize))
+            args=(queue, rqueue, midx, model, options, k, normalize, n_best))
         processes[midx].start()
 
     # utility function
@@ -121,17 +124,33 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
 
     def _retrieve_jobs(n_samples):
         trans = [None] * n_samples
+        scores = [None] * n_samples
         for idx in xrange(n_samples):
             resp = rqueue.get()
             trans[resp[0]] = resp[1]
+            scores[resp[0]] = resp[2]
             if numpy.mod(idx, 10) == 0:
                 print 'Sample ', (idx+1), '/', n_samples, ' Done'
-        return trans
+        return trans, scores
 
     print 'Translating ', source_file, '...'
     n_samples = _send_jobs(source_file)
-    trans = _seqs2words(_retrieve_jobs(n_samples))
+    trans, scores = _retrieve_jobs(n_samples)
     _finish_processes()
+
+    if n_best == 1:
+        trans = _seqs2words(trans)
+    else:
+        n_best_trans = []
+        for idx, (n_best_tr, score_) in enumerate(zip(trans, scores)):
+            sentences = _seqs2words(n_best_tr)
+            for ids, trans_ in enumerate(sentences):
+                n_best_trans.append(
+                    '|||'.join(
+                        ['{}'.format(idx), trans_,
+                         '{}'.format(score_[ids])]))
+        trans = n_best_trans
+
     with open(saveto, 'w') as f:
         print >>f, '\n'.join(trans)
     print 'Done'
@@ -139,10 +158,13 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-k', type=int, default=5)
-    parser.add_argument('-p', type=int, default=5)
-    parser.add_argument('-n', action="store_true", default=False)
-    parser.add_argument('-c', action="store_true", default=False)
+    parser.add_argument('-k', type=int, default=5, help="Beam size")
+    parser.add_argument('-p', type=int, default=5, help="Number of processes")
+    parser.add_argument('-n', action="store_true", default=False,
+                        help="Normalize wrt sequence length")
+    parser.add_argument('-c', action="store_true", default=False,
+                        help="Character level")
+    parser.add_argument('-b', type=int, default=1, help="Output n-best list")
     parser.add_argument('model', type=str)
     parser.add_argument('dictionary', type=str)
     parser.add_argument('dictionary_target', type=str)
@@ -153,4 +175,4 @@ if __name__ == "__main__":
 
     main(args.model, args.dictionary, args.dictionary_target, args.source,
          args.saveto, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c)
+         chr_level=args.c, n_best=args.b)

@@ -614,9 +614,7 @@ def build_model(tparams, options):
     logit_ctx = get_layer('ff')[1](tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-    if options['use_dropout']:
-        logit = dropout_layer(logit, use_noise, trng)
-    logit = get_layer('ff')[1](tparams, logit, options, 
+    logit = get_layer('ff')[1](tparams, logit, options,
                                prefix='ff_logit', activ='linear')
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
@@ -977,8 +975,8 @@ def train(dim_word=100,  # word vector dimensionality
           valid_batch_size=16,
           saveto='model.npz',
           validFreq=1000,
-          saveFreq=1000,   # save the parameters after every saveFreq updates
-          sampleFreq=100,   # generate some samples after every sampleFreq
+          saveFreq=1000,  # save the parameters after every saveFreq updates
+          sampleFreq=100,  # generate some samples after every sampleFreq
           datasets=[
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],

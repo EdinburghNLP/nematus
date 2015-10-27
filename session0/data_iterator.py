@@ -1,13 +1,11 @@
-import numpy
 import cPickle as pkl
 import gzip
 
-from nltk.tokenize import wordpunct_tokenize
 
 class TextIterator:
     def __init__(self, source,
                  source_dict,
-                 batch_size=128, 
+                 batch_size=128,
                  maxlen=100,
                  n_words_source=-1):
         if source.endswith('.gz'):
@@ -37,15 +35,17 @@ class TextIterator:
             raise StopIteration
 
         source = []
-        ii = 0
 
         try:
+
+            # actual work here
             while True:
                 ss = self.source.readline()
                 if ss == "":
                     raise IOError
                 ss = ss.strip().split()
-                ss = [self.source_dict[w] if w in self.source_dict else 1 for w in ss]
+                ss = [self.source_dict[w] if w in self.source_dict else 1
+                      for w in ss]
                 if self.n_words_source > 0:
                     ss = [w if w < self.n_words_source else 1 for w in ss]
 
@@ -65,7 +65,3 @@ class TextIterator:
             raise StopIteration
 
         return source
-
-
-
-
