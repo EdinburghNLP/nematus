@@ -1,3 +1,5 @@
+import numpy
+
 import cPickle as pkl
 import gzip
 
@@ -29,6 +31,10 @@ class TextIterator:
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
 
+        self.source_buffer = []
+        self.target_buffer = []
+        self.k = batch_size * 20
+
         self.end_of_data = False
 
     def __iter__(self):
@@ -47,26 +53,53 @@ class TextIterator:
         source = []
         target = []
 
+        # fill buffer, if it's empty
+        assert len(self.source_buffer) == len(self.target_buffer), 'Buffer size mismatch!'
+
+        if len(self.source_buffer) == 0:
+            for k_ in xrange(self.k):
+                ss = self.source.readline()
+                if ss == "":
+                    break
+                tt = self.target.readline()
+                if tt == "":
+                    break
+
+                self.source_buffer.append(ss.strip().split())
+                self.target_buffer.append(tt.strip().split())
+
+            # sort by target buffer
+            tlen = numpy.array([len(t) for t in self.target_buffer])
+            tidx = tlen.argsort()
+
+            _sbuf = [self.source_buffer[i] for i in tidx]
+            _tbuf = [self.target_buffer[i] for i in tidx]
+
+            self.source_buffer = _sbuf
+            self.target_buffer = _tbuf
+
+        if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
+            self.end_of_data = False
+            self.reset()
+            raise StopIteration
+
         try:
 
             # actual work here
             while True:
 
                 # read from source file and map to word index
-                ss = self.source.readline()
-                if ss == "":
-                    raise IOError
-                ss = ss.strip().split()
+                try:
+                    ss = self.source_buffer.pop()
+                except IndexError:
+                    break
                 ss = [self.source_dict[w] if w in self.source_dict else 1
                       for w in ss]
                 if self.n_words_source > 0:
                     ss = [w if w < self.n_words_source else 1 for w in ss]
 
                 # read from source file and map to word index
-                tt = self.target.readline()
-                if tt == "":
-                    raise IOError
-                tt = tt.strip().split()
+                tt = self.target_buffer.pop()
                 tt = [self.target_dict[w] if w in self.target_dict else 1
                       for w in tt]
                 if self.n_words_target > 0:
