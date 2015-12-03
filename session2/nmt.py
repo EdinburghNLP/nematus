@@ -250,39 +250,6 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
     return params
 
 
-def param_init_gru_nonlin(options, params, prefix='gru',
-                          nin=None, dim=None, hiero=False):
-    if nin is None:
-        nin = options['dim_proj']
-    if dim is None:
-        dim = options['dim_proj']
-    if not hiero:
-        W = numpy.concatenate([norm_weight(nin, dim),
-                               norm_weight(nin, dim)], axis=1)
-        params[_p(prefix, 'W')] = W
-        params[_p(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
-    U = numpy.concatenate([ortho_weight(dim),
-                           ortho_weight(dim)], axis=1)
-    params[_p(prefix, 'U')] = U
-
-    Wx = norm_weight(nin, dim)
-    params[_p(prefix, 'Wx')] = Wx
-    Ux = ortho_weight(dim)
-    params[_p(prefix, 'Ux')] = Ux
-    params[_p(prefix, 'bx')] = numpy.zeros((dim,)).astype('float32')
-
-    U_nl = numpy.concatenate([ortho_weight(dim),
-                              ortho_weight(dim)], axis=1)
-    params[_p(prefix, 'U_nl')] = U_nl
-    params[_p(prefix, 'b_nl')] = numpy.zeros((2 * dim,)).astype('float32')
-
-    Ux_nl = ortho_weight(dim)
-    params[_p(prefix, 'Ux_nl')] = Ux_nl
-    params[_p(prefix, 'bx_nl')] = numpy.zeros((dim,)).astype('float32')
-
-    return params
-
-
 def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
               **kwargs):
     nsteps = state_below.shape[0]
@@ -355,15 +322,42 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
-                        nin=None, dim=None, dimctx=None):
+                        nin=None, dim=None, dimctx=None,
+                        nin_nonlin=None, dim_nonlin=None,
+                        hiero_nonlin=False):
     if nin is None:
         nin = options['dim']
     if dim is None:
         dim = options['dim']
     if dimctx is None:
         dimctx = options['dim']
+    if nin_nonlin is None:
+        nin_nonlin = nin
+    if dim_nonlin is None:
+        dim_nonlin = dim
+    if not hiero_nonlin:
+        W = numpy.concatenate([norm_weight(nin, dim),
+                               norm_weight(nin, dim)], axis=1)
+        params[_p(prefix, 'W')] = W
+        params[_p(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
+    U = numpy.concatenate([ortho_weight(dim_nonlin),
+                           ortho_weight(dim_nonlin)], axis=1)
+    params[_p(prefix, 'U')] = U
 
-    params = param_init_gru_nonlin(options, params, prefix, nin=nin, dim=dim)
+    Wx = norm_weight(nin_nonlin, dim_nonlin)
+    params[_p(prefix, 'Wx')] = Wx
+    Ux = ortho_weight(dim_nonlin)
+    params[_p(prefix, 'Ux')] = Ux
+    params[_p(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
+
+    U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
+                              ortho_weight(dim_nonlin)], axis=1)
+    params[_p(prefix, 'U_nl')] = U_nl
+    params[_p(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
+
+    Ux_nl = ortho_weight(dim_nonlin)
+    params[_p(prefix, 'Ux_nl')] = Ux_nl
+    params[_p(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
 
     # context to LSTM
     Wc = norm_weight(dimctx, dim*2)
