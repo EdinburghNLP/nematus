@@ -323,8 +323,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
-                        nin_nonlin=None, dim_nonlin=None,
-                        hiero_nonlin=False):
+                        nin_nonlin=None, dim_nonlin=None):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -335,11 +334,11 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
         nin_nonlin = nin
     if dim_nonlin is None:
         dim_nonlin = dim
-    if not hiero_nonlin:
-        W = numpy.concatenate([norm_weight(nin, dim),
-                               norm_weight(nin, dim)], axis=1)
-        params[_p(prefix, 'W')] = W
-        params[_p(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
+
+    W = numpy.concatenate([norm_weight(nin, dim),
+                           norm_weight(nin, dim)], axis=1)
+    params[_p(prefix, 'W')] = W
+    params[_p(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
     U = numpy.concatenate([ortho_weight(dim_nonlin),
                            ortho_weight(dim_nonlin)], axis=1)
     params[_p(prefix, 'U')] = U
