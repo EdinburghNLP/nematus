@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# source language
+# source language (example: fr)
 S=$1
-# target language
+# target language (example: en)
 T=$2
 
 # path to dl4mt/data
 P1=$3
 
-# path to subword
+# path to subword NMT scripts (can be downloaded from https://github.com/rsennrich/subword-nmt)
 P2=$4
 
 # merge all parallel corpora
