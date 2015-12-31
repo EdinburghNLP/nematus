@@ -110,7 +110,7 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
                 else:
                     words = line.strip().split()
                 x = map(lambda w: word_dict[w] if w in word_dict else 1, words)
-                x = map(lambda ii: ii if ii < options['n_words'] else 1, x)
+                x = map(lambda ii: ii if ii < options['n_words_src'] else 1, x)
                 x += [0]
                 queue.put((idx, x))
         return idx+1
