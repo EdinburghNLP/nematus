@@ -14,21 +14,22 @@ def main(job_id, params):
                                         decay_c=params['decay-c'][0],
                                         clip_c=params['clip-c'][0],
                                         lrate=params['learning-rate'][0],
-                                        optimizer=params['optimizer'][0], 
+                                        optimizer=params['optimizer'][0],
                                         maxlen=50,
                                         batch_size=32,
                                         valid_batch_size=32,
-					datasets=['/ichec/home/users/%s/data/all.en.concat.shuf.gz'%os.environ['USER'], 
+					datasets=['/ichec/home/users/%s/data/all.en.concat.shuf.gz'%os.environ['USER'],
 					'/ichec/home/users/%s/data/all.fr.concat.shuf.gz'%os.environ['USER']],
-					valid_datasets=['/ichec/home/users/%s/data/newstest2011.en.tok'%os.environ['USER'], 
+					valid_datasets=['/ichec/home/users/%s/data/newstest2011.en.tok'%os.environ['USER'],
 					'/ichec/home/users/%s/data/newstest2011.fr.tok'%os.environ['USER']],
-					dictionaries=['/ichec/home/users/%s/data/all.en.concat.gz.pkl'%os.environ['USER'], 
+					dictionaries=['/ichec/home/users/%s/data/all.en.concat.gz.pkl'%os.environ['USER'],
 					'/ichec/home/users/%s/data/all.fr.concat.gz.pkl'%os.environ['USER']],
                                         validFreq=5000,
                                         dispFreq=10,
                                         saveFreq=5000,
                                         sampleFreq=1000,
-                                        use_dropout=params['use-dropout'][0])
+                                        use_dropout=params['use-dropout'][0],
+                                        overwrite=False)
     return validerr
 
 if __name__ == '__main__':
@@ -36,10 +37,10 @@ if __name__ == '__main__':
         'model': ['/ichec/home/users/%s/models/model_session2_all.npz'%os.environ['USER']],
         'dim_word': [500],
         'dim': [1024],
-        'n-words': [30000], 
+        'n-words': [30000],
         'optimizer': ['adadelta'],
-        'decay-c': [0.], 
-        'clip-c': [1.], 
+        'decay-c': [0.],
+        'clip-c': [1.],
         'use-dropout': [False],
         'learning-rate': [0.0001],
         'reload': [False]})

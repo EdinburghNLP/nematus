@@ -1,6 +1,9 @@
 import numpy
 import os
 
+import numpy
+import os
+
 from nmt import train
 
 def main(job_id, params):
@@ -14,7 +17,7 @@ def main(job_id, params):
                      decay_c=params['decay-c'][0],
                      clip_c=params['clip-c'][0],
                      lrate=params['learning-rate'][0],
-                     optimizer=params['optimizer'][0], 
+                     optimizer=params['optimizer'][0],
                      patience=1000,
                      maxlen=50,
                      batch_size=32,
@@ -23,13 +26,14 @@ def main(job_id, params):
                      dispFreq=10,
                      saveFreq=100,
                      sampleFreq=100,
-                     datasets=['../data/hal/train/tok/en', 
+                     datasets=['../data/hal/train/tok/en',
                                '../data/hal/train/tok/fr'],
                      valid_datasets=['../data/hal/dev/tok/en',
                                      '../data/hal/dev/tok/fr'],
-                     dictionaries=['../data/hal/train/tok/en.pkl', 
+                     dictionaries=['../data/hal/train/tok/en.pkl',
                                    '../data/hal/train/tok/fr.pkl'],
-                     use_dropout=params['use-dropout'][0])
+                     use_dropout=params['use-dropout'][0],
+                     overwrite=False)
     return validerr
 
 if __name__ == '__main__':
@@ -37,10 +41,10 @@ if __name__ == '__main__':
         'model': ['model_hal.npz'],
         'dim_word': [512],
         'dim': [1024],
-        'n-words': [30000], 
+        'n-words': [30000],
         'optimizer': ['adadelta'],
-        'decay-c': [0.], 
-        'clip-c': [1.], 
+        'decay-c': [0.],
+        'clip-c': [1.],
         'use-dropout': [False],
         'learning-rate': [0.0001],
         'reload': [True]})
