@@ -29,7 +29,8 @@ def main(job_id, params):
                                         dispFreq=1,
                                         saveFreq=100,
                                         sampleFreq=50,
-                                        use_dropout=params['use-dropout'][0])
+                                        use_dropout=params['use-dropout'][0],
+                                        overwrite=False)
     return validerr
 
 if __name__ == '__main__':
