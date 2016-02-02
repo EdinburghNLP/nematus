@@ -785,7 +785,7 @@ def gen_sample(tparams, f_init, f_next, x, options, trng=None, k=1, maxlen=30,
         else:
             cand_scores = hyp_scores[:, None] - numpy.log(next_p)
             cand_flat = cand_scores.flatten()
-            ranks_flat = cand_flat.argsort()[:(k-dead_k)]
+            ranks_flat = cand_flat.argpartition(k-dead_k-1)[:(k-dead_k)]
 
             voc_size = next_p.shape[1]
             trans_indices = ranks_flat / voc_size
