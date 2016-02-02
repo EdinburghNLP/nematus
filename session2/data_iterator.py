@@ -3,6 +3,7 @@ import numpy
 import cPickle as pkl
 import gzip
 
+import shuffle
 
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
@@ -17,7 +18,8 @@ class TextIterator:
                  batch_size=128,
                  maxlen=100,
                  n_words_source=-1,
-                 n_words_target=-1):
+                 n_words_target=-1,
+                 shuffle=False):
         self.source = fopen(source, 'r')
         self.target = fopen(target, 'r')
         with open(source_dict, 'rb') as f:
@@ -31,6 +33,8 @@ class TextIterator:
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
 
+        self.shuffle = shuffle
+
         self.source_buffer = []
         self.target_buffer = []
         self.k = batch_size * 20
@@ -41,6 +45,8 @@ class TextIterator:
         return self
 
     def reset(self):
+        if self.shuffle:
+            shuffle.main([self.source.name.replace('.shuf',''), self.target.name.replace('.shuf','')])
         self.source.seek(0)
         self.target.seek(0)
 

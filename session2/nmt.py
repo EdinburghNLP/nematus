@@ -1019,7 +1019,8 @@ def train(dim_word=100,  # word vector dimensionality
           use_dropout=False,
           reload_=False,
           overwrite=False,
-          external_validation_script=None):
+          external_validation_script=None,
+          shuffle_each_epoch=True):
 
     # Model options
     model_options = locals().copy()
@@ -1045,7 +1046,8 @@ def train(dim_word=100,  # word vector dimensionality
                          dictionaries[0], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
-                         maxlen=maxlen)
+                         maxlen=maxlen,
+                         shuffle=shuffle_each_epoch)
     valid = TextIterator(valid_datasets[0], valid_datasets[1],
                          dictionaries[0], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
