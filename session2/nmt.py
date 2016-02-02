@@ -987,7 +987,6 @@ def sgd(lr, tparams, grads, x, mask, y, cost):
 
     return f_grad_shared, f_update
 
-
 def train(dim_word=100,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           encoder='gru',
@@ -1022,7 +1021,8 @@ def train(dim_word=100,  # word vector dimensionality
           reload_=False,
           overwrite=False,
           external_validation_script=None,
-          shuffle_each_epoch=True):
+          shuffle_each_epoch=True,
+          finetune=False):
 
     # Model options
     model_options = locals().copy()
@@ -1104,8 +1104,14 @@ def train(dim_word=100,  # word vector dimensionality
     f_cost = theano.function(inps, cost, profile=profile)
     print 'Done'
 
+    # allow finetuning with fixed embeddings
+    if finetune:
+        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key not in ['Wemb', 'Wemb_dec']])
+    else:
+        updated_params = tparams
+
     print 'Computing gradient...',
-    grads = tensor.grad(cost, wrt=itemlist(tparams))
+    grads = tensor.grad(cost, wrt=itemlist(updated_params))
     print 'Done'
 
     # apply gradient clipping here
@@ -1122,8 +1128,9 @@ def train(dim_word=100,  # word vector dimensionality
 
     # compile the optimizer, the actual computational graph is compiled here
     lr = tensor.scalar(name='lr')
+
     print 'Building optimizers...',
-    f_grad_shared, f_update = eval(optimizer)(lr, tparams, grads, inps, cost)
+    f_grad_shared, f_update = eval(optimizer)(lr, updated_params, grads, inps, cost)
     print 'Done'
 
     print 'Optimization'
