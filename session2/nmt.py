@@ -15,6 +15,8 @@ import warnings
 import sys
 import time
 
+from subprocess import Popen
+
 from collections import OrderedDict
 
 from data_iterator import TextIterator
@@ -1016,7 +1018,8 @@ def train(dim_word=100,  # word vector dimensionality
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
           reload_=False,
-          overwrite=False):
+          overwrite=False,
+          external_validation_script=None):
 
     # Model options
     model_options = locals().copy()
@@ -1266,6 +1269,15 @@ def train(dim_word=100,  # word vector dimensionality
                     ipdb.set_trace()
 
                 print 'Valid ', valid_err
+
+                if external_validation_script:
+                    print "Calling external validation script"
+                    print 'Saving  model...',
+                    params = unzip(tparams)
+                    numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
+                    pkl.dump(model_options, open('%s.dev.npz.pkl' % saveto, 'wb'))
+                    print 'Done'
+                    p = Popen([external_validation_script])
 
             # finish after this many updates
             if uidx >= finish_after:
