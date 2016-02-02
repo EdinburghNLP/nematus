@@ -6,13 +6,13 @@ import argparse
 import numpy
 import cPickle as pkl
 
-from nmt import (build_sampler, gen_sample, load_params,
-                 init_params, init_tparams)
-
 from multiprocessing import Process, Queue
 
 
 def translate_model(queue, rqueue, pid, model, options, k, normalize):
+
+    from nmt import (build_sampler, gen_sample, load_params,
+                 init_params, init_tparams)
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(1234)
