@@ -92,16 +92,13 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
         processes[midx].start()
 
     # utility function
-    def _seqs2words(caps):
-        capsw = []
-        for cc in caps:
-            ww = []
-            for w in cc:
-                if w == 0:
-                    break
-                ww.append(word_idict_trg[w])
-            capsw.append(' '.join(ww))
-        return capsw
+    def _seqs2words(cc):
+        ww = []
+        for w in cc:
+            if w == 0:
+                break
+            ww.append(word_idict_trg[w])
+        return ' '.join(ww)
 
     def _send_jobs(fname):
         with open(fname, 'r') as f:
@@ -122,19 +119,23 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
 
     def _retrieve_jobs(n_samples):
         trans = [None] * n_samples
+        out_idx = 0
         for idx in xrange(n_samples):
             resp = rqueue.get()
             trans[resp[0]] = resp[1]
             if verbose and numpy.mod(idx, 10) == 0:
                 print 'Sample ', (idx+1), '/', n_samples, ' Done'
-        return trans
+            while out_idx < n_samples and trans[out_idx] != None:
+                yield trans[out_idx]
+                out_idx += 1
 
     print 'Translating ', source_file, '...'
     n_samples = _send_jobs(source_file)
-    trans = _seqs2words(_retrieve_jobs(n_samples))
     _finish_processes()
     with open(saveto, 'w') as f:
-        print >>f, '\n'.join(trans)
+        for trans in _retrieve_jobs(n_samples):
+            print >>f, _seqs2words(trans)
+
     print 'Done'
 
 
