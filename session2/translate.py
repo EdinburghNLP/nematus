@@ -1,6 +1,7 @@
 '''
 Translates a source file using a translation model.
 '''
+import sys
 import argparse
 
 import numpy
@@ -48,7 +49,7 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize, verbose):
 
         idx, x = req[0], req[1]
         if verbose:
-            print pid, '-', idx
+            sys.stderr.write('{0} - {1}\n'.format(pid,idx))
         seq = _translate(x)
 
         rqueue.put((idx, seq))
@@ -56,12 +57,14 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize, verbose):
     return
 
 
-def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
+def main(model, source_file, saveto, k=5,
          normalize=False, n_process=5, chr_level=False, verbose=False):
 
     # load model model_options
     with open('%s.pkl' % model, 'rb') as f:
         options = pkl.load(f)
+
+    dictionary, dictionary_target = options['dictionaries']
 
     # load source dictionary and invert
     with open(dictionary, 'rb') as f:
@@ -100,17 +103,16 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
             ww.append(word_idict_trg[w])
         return ' '.join(ww)
 
-    def _send_jobs(fname):
-        with open(fname, 'r') as f:
-            for idx, line in enumerate(f):
-                if chr_level:
-                    words = list(line.decode('utf-8').strip())
-                else:
-                    words = line.strip().split()
-                x = map(lambda w: word_dict[w] if w in word_dict else 1, words)
-                x = map(lambda ii: ii if ii < options['n_words_src'] else 1, x)
-                x += [0]
-                queue.put((idx, x))
+    def _send_jobs(f):
+        for idx, line in enumerate(f):
+            if chr_level:
+                words = list(line.decode('utf-8').strip())
+            else:
+                words = line.strip().split()
+            x = map(lambda w: word_dict[w] if w in word_dict else 1, words)
+            x = map(lambda ii: ii if ii < options['n_words_src'] else 1, x)
+            x += [0]
+            queue.put((idx, x))
         return idx+1
 
     def _finish_processes():
@@ -124,36 +126,40 @@ def main(model, dictionary, dictionary_target, source_file, saveto, k=5,
             resp = rqueue.get()
             trans[resp[0]] = resp[1]
             if verbose and numpy.mod(idx, 10) == 0:
-                print 'Sample ', (idx+1), '/', n_samples, ' Done'
+                sys.stderr.write('Sample {0} / {1} Done\n'.format((idx+1), n_samples))
             while out_idx < n_samples and trans[out_idx] != None:
                 yield trans[out_idx]
                 out_idx += 1
 
-    print 'Translating ', source_file, '...'
+    sys.stderr.write('Translating {0} ...\n'.format(source_file.name))
     n_samples = _send_jobs(source_file)
     _finish_processes()
-    with open(saveto, 'w') as f:
-        for trans in _retrieve_jobs(n_samples):
-            print >>f, _seqs2words(trans)
+    for trans in _retrieve_jobs(n_samples):
+        saveto.write(_seqs2words(trans) + '\n')
 
-    print 'Done'
+    sys.stderr.write('Done\n')
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-k', type=int, default=5)
-    parser.add_argument('-p', type=int, default=5)
-    parser.add_argument('-n', action="store_true", default=False)
-    parser.add_argument('-c', action="store_true", default=False)
-    parser.add_argument('-v', action="store_true", default=False)
-    parser.add_argument('model', type=str)
-    parser.add_argument('dictionary', type=str)
-    parser.add_argument('dictionary_target', type=str)
-    parser.add_argument('source', type=str)
-    parser.add_argument('saveto', type=str)
+    parser.add_argument('-k', type=int, default=5,
+                        help="Beam size (default: %(default)s))")
+    parser.add_argument('-p', type=int, default=5,
+                        help="Number of processes (default: %(default)s))")
+    parser.add_argument('-n', action="store_true",
+                        help="Normalize scores by sentence length")
+    parser.add_argument('-c', action="store_true", help="Character-level")
+    parser.add_argument('-v', action="store_true", help="verbose mode.")
+    parser.add_argument('--model', '-m', type=str, required=True)
+    parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+                        default=sys.stdin, metavar='PATH',
+                        help="Input file (default: standard input)")
+    parser.add_argument('--output', '-o', type=argparse.FileType('w'),
+                        default=sys.stdout, metavar='PATH',
+                        help="Output file (default: standard output)")
 
     args = parser.parse_args()
 
-    main(args.model, args.dictionary, args.dictionary_target, args.source,
-         args.saveto, k=args.k, normalize=args.n, n_process=args.p,
+    main(args.model, args.input,
+         args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v)
