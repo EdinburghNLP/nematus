@@ -10,7 +10,7 @@ import cPickle as pkl
 from multiprocessing import Process, Queue
 
 
-def translate_model(queue, rqueue, pid, model, options, k, normalize, verbose):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -18,21 +18,29 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize, verbose):
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     trng = RandomStreams(1234)
 
-    # allocate model parameters
-    params = init_params(options)
+    fs_init = []
+    fs_next = []
 
-    # load model parameters and set theano shared variables
-    params = load_params(model, params)
-    tparams = init_tparams(params)
+    for model, option in zip(models, options):
 
-    # word index
-    f_init, f_next = build_sampler(tparams, options, trng)
+        # allocate model parameters
+        params = init_params(option)
+
+        # load model parameters and set theano shared variables
+        params = load_params(model, params)
+        tparams = init_tparams(params)
+
+        # word index
+        f_init, f_next = build_sampler(tparams, option, trng)
+
+        fs_init.append(f_init)
+        fs_next.append(f_next)
 
     def _translate(seq):
         # sample given an input sequence and obtain scores
-        sample, score = gen_sample(tparams, f_init, f_next,
+        sample, score = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
-                                   options, trng=trng, k=k, maxlen=200,
+                                   trng=trng, k=k, maxlen=200,
                                    stochastic=False, argmax=False)
 
         # normalize scores according to sequence lengths
@@ -57,14 +65,16 @@ def translate_model(queue, rqueue, pid, model, options, k, normalize, verbose):
     return
 
 
-def main(model, source_file, saveto, k=5,
+def main(models, source_file, saveto, k=5,
          normalize=False, n_process=5, chr_level=False, verbose=False):
 
     # load model model_options
-    with open('%s.pkl' % model, 'rb') as f:
-        options = pkl.load(f)
+    options = []
+    for model in args.models:
+        with open('%s.pkl' % model, 'rb') as f:
+            options.append(pkl.load(f))
 
-    dictionary, dictionary_target = options['dictionaries']
+    dictionary, dictionary_target = options[0]['dictionaries']
 
     # load source dictionary and invert
     with open(dictionary, 'rb') as f:
@@ -91,7 +101,7 @@ def main(model, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, model, options, k, normalize, verbose))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose))
         processes[midx].start()
 
     # utility function
@@ -110,7 +120,7 @@ def main(model, source_file, saveto, k=5,
             else:
                 words = line.strip().split()
             x = map(lambda w: word_dict[w] if w in word_dict else 1, words)
-            x = map(lambda ii: ii if ii < options['n_words_src'] else 1, x)
+            x = map(lambda ii: ii if ii < options[0]['n_words_src'] else 1, x)
             x += [0]
             queue.put((idx, x))
         return idx+1
@@ -150,7 +160,7 @@ if __name__ == "__main__":
                         help="Normalize scores by sentence length")
     parser.add_argument('-c', action="store_true", help="Character-level")
     parser.add_argument('-v', action="store_true", help="verbose mode.")
-    parser.add_argument('--model', '-m', type=str, required=True)
+    parser.add_argument('--models', '-m', type=str, nargs = '+', required=True)
     parser.add_argument('--input', '-i', type=argparse.FileType('r'),
                         default=sys.stdin, metavar='PATH',
                         help="Input file (default: standard input)")
@@ -160,6 +170,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.model, args.input,
+    main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v)
