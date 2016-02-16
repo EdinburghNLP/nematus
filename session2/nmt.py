@@ -667,6 +667,7 @@ def build_sampler(tparams, options, trng):
     xr = x[::-1]
     n_timesteps = x.shape[0]
     n_samples = x.shape[1]
+    use_noise = theano.shared(numpy.float32(0.))
 
     # word embedding (source), forward and backward
     emb = tparams['Wemb'][x.flatten()]
@@ -723,7 +724,7 @@ def build_sampler(tparams, options, trng):
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
     if options['use_dropout']:
-        logit = dropout_layer(logit, False, trng)
+        logit = dropout_layer(logit, use_noise, trng)
     logit = get_layer('ff')[1](tparams, logit, options,
                                prefix='ff_logit', activ='linear')
 
