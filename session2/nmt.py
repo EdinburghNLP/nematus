@@ -53,6 +53,15 @@ def dropout_layer(state_before, use_noise, trng):
     return proj
 
 
+# dropout that will be re-used at different time steps
+def shared_dropout_layer(shape, use_noise, trng, value):
+    proj = tensor.switch(
+        use_noise,
+        trng.binomial(shape, p=value, n=1,
+                                     dtype='float32'),
+        theano.shared(numpy.float32(value)))
+    return proj
+
 # make prefix-appended name
 def _p(pp, name):
     return '%s_%s' % (pp, name)
@@ -253,6 +262,8 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 
 
 def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
+              emb_dropout=None,
+              rec_dropout=None,
               **kwargs):
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
@@ -273,16 +284,17 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 
     # state_below is the input word embeddings
     # input to the gates, concatenated
-    state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) + \
+    state_below_ = tensor.dot(state_below*emb_dropout[0], tparams[_p(prefix, 'W')]) + \
         tparams[_p(prefix, 'b')]
     # input to compute the hidden state proposal
-    state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) + \
+    state_belowx = tensor.dot(state_below*emb_dropout[1], tparams[_p(prefix, 'Wx')]) + \
         tparams[_p(prefix, 'bx')]
 
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
-    def _step_slice(m_, x_, xx_, h_, U, Ux):
-        preact = tensor.dot(h_, U)
+    def _step_slice(m_, x_, xx_, h_, U, Ux, rec_dropout):
+
+        preact = tensor.dot(h_*rec_dropout[0], U)
         preact += x_
 
         # reset and update gates
@@ -290,7 +302,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
         u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
 
         # compute the hidden state proposal
-        preactx = tensor.dot(h_, Ux)
+        preactx = tensor.dot(h_*rec_dropout[1], Ux)
         preactx = preactx * r
         preactx = preactx + xx_
 
@@ -308,7 +320,8 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     init_states = [tensor.alloc(0., n_samples, dim)]
     _step = _step_slice
     shared_vars = [tparams[_p(prefix, 'U')],
-                   tparams[_p(prefix, 'Ux')]]
+                   tparams[_p(prefix, 'Ux')],
+                   rec_dropout]
 
     rval, updates = theano.scan(_step,
                                 sequences=seqs,
@@ -391,7 +404,8 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
 def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_memory=None, init_state=None,
-                   context_mask=None,
+                   context_mask=None, emb_dropout=None,
+                   rec_dropout=None, ctx_dropout=None,
                    **kwargs):
 
     assert context, 'Context must be provided'
@@ -418,7 +432,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
     # projected context
     assert context.ndim == 3, \
         'Context must be 3-d: #annotation x #sample x dim'
-    pctx_ = tensor.dot(context, tparams[_p(prefix, 'Wc_att')]) +\
+    pctx_ = tensor.dot(context*ctx_dropout[0], tparams[_p(prefix, 'Wc_att')]) +\
         tparams[_p(prefix, 'b_att')]
 
     def _slice(_x, n, dim):
@@ -427,22 +441,23 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         return _x[:, n*dim:(n+1)*dim]
 
     # projected x
-    state_belowx = tensor.dot(state_below, tparams[_p(prefix, 'Wx')]) +\
+    state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[_p(prefix, 'Wx')]) +\
         tparams[_p(prefix, 'bx')]
-    state_below_ = tensor.dot(state_below, tparams[_p(prefix, 'W')]) +\
+    state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[_p(prefix, 'W')]) +\
         tparams[_p(prefix, 'b')]
 
-    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_,
+    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
                     U_nl, Ux_nl, b_nl, bx_nl):
-        preact1 = tensor.dot(h_, U)
+
+        preact1 = tensor.dot(h_*rec_dropout[0], U)
         preact1 += x_
         preact1 = tensor.nnet.sigmoid(preact1)
 
         r1 = _slice(preact1, 0, dim)
         u1 = _slice(preact1, 1, dim)
 
-        preactx1 = tensor.dot(h_, Ux)
+        preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
         preactx1 *= r1
         preactx1 += xx_
 
@@ -452,11 +467,11 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
         # attention
-        pstate_ = tensor.dot(h1, W_comb_att)
+        pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
         pctx__ = pctx_ + pstate_[None, :, :]
         #pctx__ += xc_
         pctx__ = tensor.tanh(pctx__)
-        alpha = tensor.dot(pctx__, U_att)+c_tt
+        alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
         alpha = tensor.exp(alpha)
         if context_mask:
@@ -464,16 +479,16 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         alpha = alpha / alpha.sum(0, keepdims=True)
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
-        preact2 = tensor.dot(h1, U_nl)+b_nl
-        preact2 += tensor.dot(ctx_, Wc)
+        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
+        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
         preact2 = tensor.nnet.sigmoid(preact2)
 
         r2 = _slice(preact2, 0, dim)
         u2 = _slice(preact2, 1, dim)
 
-        preactx2 = tensor.dot(h1, Ux_nl)+bx_nl
+        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
         preactx2 *= r2
-        preactx2 += tensor.dot(ctx_, Wcx)
+        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
 
         h2 = tensor.tanh(preactx2)
 
@@ -499,7 +514,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    tparams[_p(prefix, 'bx_nl')]]
 
     if one_step:
-        rval = _step(*(seqs + [init_state, None, None, pctx_, context] +
+        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
                        shared_vars))
     else:
         rval, updates = theano.scan(_step,
@@ -509,7 +524,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                                                                context.shape[2]),
                                                   tensor.alloc(0., n_samples,
                                                                context.shape[0])],
-                                    non_sequences=[pctx_, context]+shared_vars,
+                                    non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=_p(prefix, '_layers'),
                                     n_steps=nsteps,
                                     profile=profile,
@@ -571,9 +586,13 @@ def build_model(tparams, options):
 
     # description string: #words x #samples
     x = tensor.matrix('x', dtype='int64')
+    x.tag.test_value = (numpy.random.rand(5, 10)*100).astype('int64')
     x_mask = tensor.matrix('x_mask', dtype='float32')
+    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
     y = tensor.matrix('y', dtype='int64')
+    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
     y_mask = tensor.matrix('y_mask', dtype='float32')
+    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
     # for the backward rnn, we just need to invert x and x_mask
     xr = x[::-1]
@@ -583,18 +602,44 @@ def build_model(tparams, options):
     n_timesteps_trg = y.shape[0]
     n_samples = x.shape[1]
 
+    if options['use_dropout']:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+        rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+        emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+        emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+    else:
+        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+
     # word embedding for forward rnn (source)
     emb = tparams['Wemb'][x.flatten()]
     emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
+
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
                                             prefix='encoder',
-                                            mask=x_mask)
+                                            mask=x_mask,
+                                            emb_dropout=emb_dropout, 
+                                            rec_dropout=rec_dropout)
+
     # word embedding for backward rnn (source)
     embr = tparams['Wemb'][xr.flatten()]
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
+
     projr = get_layer(options['encoder'])[1](tparams, embr, options,
                                              prefix='encoder_r',
-                                             mask=xr_mask)
+                                             mask=xr_mask,
+                                             emb_dropout=emb_dropout_r,
+                                             rec_dropout=rec_dropout_r)
 
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -604,6 +649,9 @@ def build_model(tparams, options):
 
     # or you can use the last state of forward + backward encoder rnns
     # ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
+
+    if options['use_dropout']:
+        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
 
     # initial decoder state
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
@@ -615,6 +663,7 @@ def build_model(tparams, options):
     # not condition on the last output.
     emb = tparams['Wemb_dec'][y.flatten()]
     emb = emb.reshape([n_timesteps_trg, n_samples, options['dim_word']])
+
     emb_shifted = tensor.zeros_like(emb)
     emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
     emb = emb_shifted
@@ -625,12 +674,20 @@ def build_model(tparams, options):
                                             mask=y_mask, context=ctx,
                                             context_mask=x_mask,
                                             one_step=False,
-                                            init_state=init_state)
+                                            init_state=init_state,
+                                            emb_dropout=emb_dropout_d,
+                                            ctx_dropout=ctx_dropout_d,
+                                            rec_dropout=rec_dropout_d)
     # hidden states of the decoder gru
     proj_h = proj[0]
 
     # weighted averages of context, generated by attention module
     ctxs = proj[1]
+
+    if options['use_dropout']:
+        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
 
     # weights (alignment matrix)
     opt_ret['dec_alphas'] = proj[2]
@@ -643,8 +700,10 @@ def build_model(tparams, options):
     logit_ctx = get_layer('ff')[1](tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
     if options['use_dropout']:
-        logit = dropout_layer(logit, use_noise, trng)
+        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden)
+
     logit = get_layer('ff')[1](tparams, logit, options,
                                prefix='ff_logit', activ='linear')
     logit_shp = logit.shape
@@ -662,12 +721,11 @@ def build_model(tparams, options):
 
 
 # build a sampler
-def build_sampler(tparams, options, trng):
+def build_sampler(tparams, options, use_noise, trng):
     x = tensor.matrix('x', dtype='int64')
     xr = x[::-1]
     n_timesteps = x.shape[0]
     n_samples = x.shape[1]
-    use_noise = theano.shared(numpy.float32(0.))
 
     # word embedding (source), forward and backward
     emb = tparams['Wemb'][x.flatten()]
@@ -675,11 +733,30 @@ def build_sampler(tparams, options, trng):
     embr = tparams['Wemb'][xr.flatten()]
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
 
+    if options['use_dropout']:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+        rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+        rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
+        emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
+    else:
+        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+
     # encoder
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
-                                            prefix='encoder')
+                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout)
     projr = get_layer(options['encoder'])[1](tparams, embr, options,
-                                             prefix='encoder_r')
+                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r)
 
     # concatenate forward and backward rnn hidden states
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -687,6 +764,10 @@ def build_sampler(tparams, options, trng):
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
     # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
+
+    if options['use_dropout']:
+        ctx_mean *= retain_probability_hidden
+
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
@@ -709,22 +790,34 @@ def build_sampler(tparams, options, trng):
                                             prefix='decoder',
                                             mask=None, context=ctx,
                                             one_step=True,
-                                            init_state=init_state)
+                                            init_state=init_state,
+                                            emb_dropout=emb_dropout_d,
+                                            ctx_dropout=ctx_dropout_d,
+                                            rec_dropout=rec_dropout_d)
     # get the next hidden state
     next_state = proj[0]
 
     # get the weighted averages of context for this target word y
     ctxs = proj[1]
 
-    logit_lstm = get_layer('ff')[1](tparams, next_state, options,
+    if options['use_dropout']:
+        next_state_up = next_state * retain_probability_hidden
+        emb *= retain_probability_emb
+        ctxs *= retain_probability_hidden
+    else:
+        next_state_up = next_state
+
+    logit_lstm = get_layer('ff')[1](tparams, next_state_up, options,
                                     prefix='ff_logit_lstm', activ='linear')
     logit_prev = get_layer('ff')[1](tparams, emb, options,
                                     prefix='ff_logit_prev', activ='linear')
     logit_ctx = get_layer('ff')[1](tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
     if options['use_dropout']:
-        logit = dropout_layer(logit, use_noise, trng)
+        logit *= retain_probability_hidden
+
     logit = get_layer('ff')[1](tparams, logit, options,
                                prefix='ff_logit', activ='linear')
 
@@ -1028,6 +1121,8 @@ def train(dim_word=100,  # word vector dimensionality
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok.pkl',
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
+          dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
+          dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
           reload_=False,
           overwrite=False,
           external_validation_script=None,
@@ -1083,7 +1178,7 @@ def train(dim_word=100,  # word vector dimensionality
     inps = [x, x_mask, y, y_mask]
 
     print 'Building sampler'
-    f_init, f_next = build_sampler(tparams, model_options, trng)
+    f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
 
     # before any regularizer
     print 'Building f_log_probs...',

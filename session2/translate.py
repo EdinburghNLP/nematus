@@ -16,7 +16,9 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
                  init_params, init_tparams)
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+    from theano import shared
     trng = RandomStreams(1234)
+    use_noise = shared(numpy.float32(0.))
 
     fs_init = []
     fs_next = []
@@ -31,7 +33,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
         tparams = init_tparams(params)
 
         # word index
-        f_init, f_next = build_sampler(tparams, option, trng)
+        f_init, f_next = build_sampler(tparams, option, use_noise, trng)
 
         fs_init.append(f_init)
         fs_next.append(f_next)
