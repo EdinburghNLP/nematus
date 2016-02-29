@@ -19,7 +19,8 @@ class TextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
-                 shuffle=False):
+                 shuffle=False,
+                 sort_by_length=True):
         self.source = fopen(source, 'r')
         self.target = fopen(target, 'r')
         with open(source_dict, 'rb') as f:
@@ -34,6 +35,7 @@ class TextIterator:
         self.n_words_target = n_words_target
 
         self.shuffle = shuffle
+        self.sort_by_length = sort_by_length
 
         self.source_buffer = []
         self.target_buffer = []
@@ -75,14 +77,19 @@ class TextIterator:
                 self.target_buffer.append(tt.strip().split())
 
             # sort by target buffer
-            tlen = numpy.array([len(t) for t in self.target_buffer])
-            tidx = tlen.argsort()
+            if self.sort_by_length:
+                tlen = numpy.array([len(t) for t in self.target_buffer])
+                tidx = tlen.argsort()
 
-            _sbuf = [self.source_buffer[i] for i in tidx]
-            _tbuf = [self.target_buffer[i] for i in tidx]
+                _sbuf = [self.source_buffer[i] for i in tidx]
+                _tbuf = [self.target_buffer[i] for i in tidx]
 
-            self.source_buffer = _sbuf
-            self.target_buffer = _tbuf
+                self.source_buffer = _sbuf
+                self.target_buffer = _tbuf
+
+            else:
+                self.source_buffer.reverse()
+                self.target_buffer.reverse()
 
         if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
             self.end_of_data = False
