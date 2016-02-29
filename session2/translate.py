@@ -10,7 +10,7 @@ import cPickle as pkl
 from multiprocessing import Process, Queue
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -49,8 +49,11 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
-        sidx = numpy.argmin(score)
-        return sample[sidx]
+        if nbest:
+            return sample, score
+        else:
+            sidx = numpy.argmin(score)
+            return sample[sidx]
 
     while True:
         req = queue.get()
@@ -68,13 +71,19 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose):
 
 
 def main(models, source_file, saveto, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False):
 
     # load model model_options
     options = []
     for model in args.models:
         with open('%s.pkl' % model, 'rb') as f:
             options.append(pkl.load(f))
+
+            #hacks for using old models with missing options
+            if not 'dropout_embedding' in options[-1]:
+                options[-1]['dropout_embedding'] = 0
+            if not 'dropout_hidden' in options[-1]:
+                options[-1]['dropout_hidden'] = 0
 
     dictionary, dictionary_target = options[0]['dictionaries']
 
@@ -103,7 +112,7 @@ def main(models, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest))
         processes[midx].start()
 
     # utility function
@@ -146,8 +155,14 @@ def main(models, source_file, saveto, k=5,
     sys.stderr.write('Translating {0} ...\n'.format(source_file.name))
     n_samples = _send_jobs(source_file)
     _finish_processes()
-    for trans in _retrieve_jobs(n_samples):
-        saveto.write(_seqs2words(trans) + '\n')
+    for i, trans in enumerate(_retrieve_jobs(n_samples)):
+        if nbest:
+            samples, scores = trans
+            order = numpy.argsort(scores)
+            for j in order:
+                saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
+        else:
+            saveto.write(_seqs2words(trans) + '\n')
 
     sys.stderr.write('Done\n')
 
@@ -169,9 +184,11 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
+    parser.add_argument('--n-best', action="store_true",
+                        help="Write n-best list (of size k)")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c, verbose=args.v)
+         chr_level=args.c, verbose=args.v, nbest=args.n_best)
