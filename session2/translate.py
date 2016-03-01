@@ -84,6 +84,10 @@ def main(models, source_file, saveto, k=5,
                 options[-1]['dropout_embedding'] = 0
             if not 'dropout_hidden' in options[-1]:
                 options[-1]['dropout_hidden'] = 0
+            if not 'dropout_source' in options[-1]:
+                options[-1]['dropout_source'] = 0
+            if not 'dropout_target' in options[-1]:
+                options[-1]['dropout_target'] = 0
 
     dictionary, dictionary_target = options[0]['dictionaries']
 

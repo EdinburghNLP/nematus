@@ -605,6 +605,8 @@ def build_model(tparams, options):
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_source = 1-options['dropout_source']
+        retain_probability_target = 1-options['dropout_target']
         rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
         rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
         rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
@@ -612,6 +614,10 @@ def build_model(tparams, options):
         emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
         emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
         ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source)
+        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target)
+        source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
+        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
@@ -624,6 +630,8 @@ def build_model(tparams, options):
     # word embedding for forward rnn (source)
     emb = tparams['Wemb'][x.flatten()]
     emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
+    if options['use_dropout']:
+        emb *= source_dropout
 
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
                                             prefix='encoder',
@@ -634,6 +642,8 @@ def build_model(tparams, options):
     # word embedding for backward rnn (source)
     embr = tparams['Wemb'][xr.flatten()]
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
+    if options['use_dropout']:
+        embr *= source_dropout[::-1]
 
     projr = get_layer(options['encoder'])[1](tparams, embr, options,
                                              prefix='encoder_r',
@@ -667,6 +677,9 @@ def build_model(tparams, options):
     emb_shifted = tensor.zeros_like(emb)
     emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
     emb = emb_shifted
+
+    if options['use_dropout']:
+        emb *= target_dropout
 
     # decoder - pass through the decoder conditional gru with attention
     proj = get_layer(options['decoder'])[1](tparams, emb, options,
@@ -736,6 +749,8 @@ def build_sampler(tparams, options, use_noise, trng):
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_source = 1-options['dropout_source']
+        retain_probability_target = 1-options['dropout_target']
         rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
@@ -743,6 +758,10 @@ def build_sampler(tparams, options, use_noise, trng):
         emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
+        source_dropout = theano.shared(numpy.float32(retain_probability_source))
+        target_dropout = theano.shared(numpy.float32(retain_probability_target))
+        emb *= source_dropout
+        embr *= source_dropout
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
@@ -784,6 +803,9 @@ def build_sampler(tparams, options, use_noise, trng):
     emb = tensor.switch(y[:, None] < 0,
                         tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
                         tparams['Wemb_dec'][y])
+
+    if options['use_dropout']:
+        emb *= target_dropout
 
     # apply one step of conditional gru with attention
     proj = get_layer(options['decoder'])[1](tparams, emb, options,
@@ -1129,6 +1151,8 @@ def train(dim_word=100,  # word vector dimensionality
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
           dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
+          dropout_source=0, # dropout source words (0: no dropout)
+          dropout_target=0, # dropout target words (0: no dropout)
           reload_=False,
           overwrite=False,
           external_validation_script=None,
