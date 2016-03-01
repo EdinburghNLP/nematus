@@ -6,6 +6,7 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import cPickle as pkl
+import json
 import ipdb
 import numpy
 import copy
@@ -1167,7 +1168,11 @@ def train(dim_word=100,  # word vector dimensionality
     worddicts_r = [None] * len(dictionaries)
     for ii, dd in enumerate(dictionaries):
         with open(dd, 'rb') as f:
-            worddicts[ii] = pkl.load(f)
+            try:
+                worddicts[ii] = json.load(f)
+            except:
+                f.seek(0)
+                worddicts[ii] = pkl.load(f)
         worddicts_r[ii] = dict()
         for kk, vv in worddicts[ii].iteritems():
             worddicts_r[ii][vv] = kk
@@ -1175,8 +1180,12 @@ def train(dim_word=100,  # word vector dimensionality
     # reload options
     if reload_ and os.path.exists(saveto):
         print 'Reloading model options'
-        with open('%s.pkl' % saveto, 'rb') as f:
-            models_options = pkl.load(f)
+        try:
+            with open('%s.json' % saveto, 'rb') as f:
+                model_options = json.load(f)
+        except:
+            with open('%s.pkl' % saveto, 'rb') as f:
+                model_options = pkl.load(f)
 
     print 'Loading data'
     train = TextIterator(datasets[0], datasets[1],
@@ -1335,7 +1344,7 @@ def train(dim_word=100,  # word vector dimensionality
                 else:
                     params = unzip(tparams)
                 numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
-                pkl.dump(model_options, open('%s.pkl' % saveto, 'wb'))
+                json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
                 print 'Done'
 
                 # save with uidx
@@ -1421,7 +1430,7 @@ def train(dim_word=100,  # word vector dimensionality
                     print 'Saving  model...',
                     params = unzip(tparams)
                     numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
-                    pkl.dump(model_options, open('%s.dev.npz.pkl' % saveto, 'wb'))
+                    json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
                     p = Popen([external_validation_script])
 

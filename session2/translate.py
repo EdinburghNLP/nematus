@@ -5,6 +5,7 @@ import sys
 import argparse
 
 import numpy
+import json
 import cPickle as pkl
 
 from multiprocessing import Process, Queue
@@ -76,24 +77,32 @@ def main(models, source_file, saveto, k=5,
     # load model model_options
     options = []
     for model in args.models:
-        with open('%s.pkl' % model, 'rb') as f:
-            options.append(pkl.load(f))
+        try:
+            with open('%s.json' % model, 'rb') as f:
+                options.append(json.load(f))
+        except:
+            with open('%s.pkl' % model, 'rb') as f:
+                options.append(pkl.load(f))
 
-            #hacks for using old models with missing options
-            if not 'dropout_embedding' in options[-1]:
-                options[-1]['dropout_embedding'] = 0
-            if not 'dropout_hidden' in options[-1]:
-                options[-1]['dropout_hidden'] = 0
-            if not 'dropout_source' in options[-1]:
-                options[-1]['dropout_source'] = 0
-            if not 'dropout_target' in options[-1]:
-                options[-1]['dropout_target'] = 0
+        #hacks for using old models with missing options
+        if not 'dropout_embedding' in options[-1]:
+            options[-1]['dropout_embedding'] = 0
+        if not 'dropout_hidden' in options[-1]:
+            options[-1]['dropout_hidden'] = 0
+        if not 'dropout_source' in options[-1]:
+            options[-1]['dropout_source'] = 0
+        if not 'dropout_target' in options[-1]:
+            options[-1]['dropout_target'] = 0
 
     dictionary, dictionary_target = options[0]['dictionaries']
 
     # load source dictionary and invert
-    with open(dictionary, 'rb') as f:
-        word_dict = pkl.load(f)
+    try:
+        with open(dictionary, 'rb') as f:
+            word_dict = json.load(f)
+    except:
+        with open(dictionary, 'rb') as f:
+            word_dict = pkl.load(f)
     word_idict = dict()
     for kk, vv in word_dict.iteritems():
         word_idict[vv] = kk
@@ -101,8 +110,12 @@ def main(models, source_file, saveto, k=5,
     word_idict[1] = 'UNK'
 
     # load target dictionary and invert
-    with open(dictionary_target, 'rb') as f:
-        word_dict_trg = pkl.load(f)
+    try:
+        with open(dictionary_target, 'rb') as f:
+            word_dict_trg = json.load(f)
+    except:
+        with open(dictionary_target, 'rb') as f:
+            word_dict_trg = pkl.load(f)
     word_idict_trg = dict()
     for kk, vv in word_dict_trg.iteritems():
         word_idict_trg[vv] = kk

@@ -1,5 +1,6 @@
 import numpy
 
+import json
 import cPickle as pkl
 import gzip
 
@@ -23,10 +24,18 @@ class TextIterator:
                  sort_by_length=True):
         self.source = fopen(source, 'r')
         self.target = fopen(target, 'r')
-        with open(source_dict, 'rb') as f:
-            self.source_dict = pkl.load(f)
-        with open(target_dict, 'rb') as f:
-            self.target_dict = pkl.load(f)
+        try:
+            with open(source_dict, 'rb') as f:
+                self.source_dict = json.load(f)
+        except:
+            with open(source_dict, 'rb') as f:
+                self.source_dict = pkl.load(f)
+        try:
+            with open(target_dict, 'rb') as f:
+                self.target_dict = json.load(f)
+        except:
+            with open(target_dict, 'rb') as f:
+                self.target_dict = pkl.load(f)
 
         self.batch_size = batch_size
         self.maxlen = maxlen

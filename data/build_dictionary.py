@@ -1,5 +1,5 @@
 import numpy
-import cPickle as pkl
+import json
 
 import sys
 import fileinput
@@ -29,8 +29,8 @@ def main():
         for ii, ww in enumerate(sorted_words):
             worddict[ww] = ii+2
 
-        with open('%s.pkl'%filename, 'wb') as f:
-            pkl.dump(worddict, f)
+        with open('%s.json'%filename, 'wb') as f:
+            json.dump(worddict, f, indent=2)
 
         print 'Done'
 
