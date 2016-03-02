@@ -20,10 +20,15 @@ class TextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
-                 shuffle=False,
+                 shuffle_each_epoch=False,
                  sort_by_length=True):
-        self.source = fopen(source, 'r')
-        self.target = fopen(target, 'r')
+        if shuffle_each_epoch:
+            shuffle.main([source, target])
+            self.source = fopen(source+'.shuf', 'r')
+            self.target = fopen(target+'.shuf', 'r')
+        else:
+            self.source = fopen(source, 'r')
+            self.target = fopen(target, 'r')
         try:
             with open(source_dict, 'rb') as f:
                 self.source_dict = json.load(f)
@@ -43,7 +48,7 @@ class TextIterator:
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
 
-        self.shuffle = shuffle
+        self.shuffle = shuffle_each_epoch
         self.sort_by_length = sort_by_length
 
         self.source_buffer = []
@@ -58,8 +63,11 @@ class TextIterator:
     def reset(self):
         if self.shuffle:
             shuffle.main([self.source.name.replace('.shuf',''), self.target.name.replace('.shuf','')])
-        self.source.seek(0)
-        self.target.seek(0)
+            self.source = fopen(self.source.name, 'r')
+            self.target = fopen(self.target.name, 'r')
+        else:
+            self.source.seek(0)
+            self.target.seek(0)
 
     def next(self):
         if self.end_of_data:
