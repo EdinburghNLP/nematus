@@ -1,10 +1,9 @@
 import numpy
 
-import json
-import cPickle as pkl
 import gzip
 
 import shuffle
+from util import load_dict
 
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
@@ -29,18 +28,8 @@ class TextIterator:
         else:
             self.source = fopen(source, 'r')
             self.target = fopen(target, 'r')
-        try:
-            with open(source_dict, 'rb') as f:
-                self.source_dict = json.load(f)
-        except:
-            with open(source_dict, 'rb') as f:
-                self.source_dict = pkl.load(f)
-        try:
-            with open(target_dict, 'rb') as f:
-                self.target_dict = json.load(f)
-        except:
-            with open(target_dict, 'rb') as f:
-                self.target_dict = pkl.load(f)
+        self.source_dict = load_dict(source_dict)
+        self.target_dict = load_dict(target_dict)
 
         self.batch_size = batch_size
         self.maxlen = maxlen

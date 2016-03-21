@@ -30,7 +30,7 @@ def main():
             worddict[ww] = ii+2
 
         with open('%s.json'%filename, 'wb') as f:
-            json.dump(worddict, f, indent=2)
+            json.dump(worddict, f, indent=2, ensure_ascii=False)
 
         print 'Done'
 

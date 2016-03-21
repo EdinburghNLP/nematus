@@ -9,6 +9,7 @@ import json
 import cPickle as pkl
 
 from multiprocessing import Process, Queue
+from util import load_dict
 
 
 def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest):
@@ -97,12 +98,7 @@ def main(models, source_file, saveto, k=5,
     dictionary, dictionary_target = options[0]['dictionaries']
 
     # load source dictionary and invert
-    try:
-        with open(dictionary, 'rb') as f:
-            word_dict = json.load(f)
-    except:
-        with open(dictionary, 'rb') as f:
-            word_dict = pkl.load(f)
+    word_dict = load_dict(dictionary)
     word_idict = dict()
     for kk, vv in word_dict.iteritems():
         word_idict[vv] = kk
@@ -110,12 +106,7 @@ def main(models, source_file, saveto, k=5,
     word_idict[1] = 'UNK'
 
     # load target dictionary and invert
-    try:
-        with open(dictionary_target, 'rb') as f:
-            word_dict_trg = json.load(f)
-    except:
-        with open(dictionary_target, 'rb') as f:
-            word_dict_trg = pkl.load(f)
+    word_dict_trg = load_dict(dictionary_target)
     word_idict_trg = dict()
     for kk, vv in word_dict_trg.iteritems():
         word_idict_trg[vv] = kk

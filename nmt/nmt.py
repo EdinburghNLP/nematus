@@ -21,6 +21,7 @@ from subprocess import Popen
 from collections import OrderedDict
 
 from data_iterator import TextIterator
+from util import load_dict
 
 profile = False
 
@@ -1167,12 +1168,7 @@ def train(dim_word=100,  # word vector dimensionality
     worddicts = [None] * len(dictionaries)
     worddicts_r = [None] * len(dictionaries)
     for ii, dd in enumerate(dictionaries):
-        with open(dd, 'rb') as f:
-            try:
-                worddicts[ii] = json.load(f)
-            except:
-                f.seek(0)
-                worddicts[ii] = pkl.load(f)
+        worddicts[ii] = load_dict(dd)
         worddicts_r[ii] = dict()
         for kk, vv in worddicts[ii].iteritems():
             worddicts_r[ii][vv] = kk
