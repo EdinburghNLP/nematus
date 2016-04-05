@@ -865,7 +865,7 @@ def build_sampler(tparams, options, use_noise, trng):
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
-               stochastic=True, argmax=False):
+               stochastic=True, argmax=False, suppress_unk=False):
 
     # k is the beam size we have
     if k > 1:
@@ -903,6 +903,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             inps = [next_w, ctx, next_state[i]]
             ret = f_next[i](*inps)
             next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+
+            if suppress_unk:
+                next_p[i][:,1] = -numpy.inf
 
         if stochastic:
             if argmax:
@@ -1363,7 +1366,8 @@ def train(dim_word=100,  # word vector dimensionality
                                                trng=trng, k=1,
                                                maxlen=30,
                                                stochastic=stochastic,
-                                               argmax=False)
+                                               argmax=False,
+                                               suppress_unk=False)
                     print 'Source ', jj, ': ',
                     for vv in x[:, jj]:
                         if vv == 0:

@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from util import load_dict
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -45,7 +45,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
         sample, score = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
-                                   stochastic=False, argmax=False)
+                                   stochastic=False, argmax=False, suppress_unk=suppress_unk)
 
         # normalize scores according to sequence lengths
         if normalize:
@@ -73,7 +73,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
 
 def main(models, source_file, saveto, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False):
 
     # load model model_options
     options = []
@@ -120,7 +120,7 @@ def main(models, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk))
         processes[midx].start()
 
     # utility function
@@ -194,9 +194,10 @@ if __name__ == "__main__":
                         help="Output file (default: standard output)")
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
+    parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c, verbose=args.v, nbest=args.n_best)
+         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk)
