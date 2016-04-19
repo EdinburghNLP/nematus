@@ -1,21 +1,65 @@
-# dl4mt-material
-Attention-based encoder-decoder model for machine translatio
+NEMATUS
+-------
 
-This package is based on dl4mt-material by Kyunghyun Cho ( https://github.com/kyunghyuncho/dl4mt-material )
+Attention-based encoder-decoder model for neural machine translation
 
-Our changes include:
+This package is based on the dl4mt-tutorial by Kyunghyun Cho et al. ( https://github.com/nyu-dl/dl4mt-tutorial ).
+It was used to produce top-scoring systems at the WMT 16 shared translation task.
 
- - ensemble decoding
+The changes to Nematus include:
+
+ - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
+ - automatic training set reshuffling between epochs
  - n-best output for decoder
  - performance improvements to decoder
- - rescoring
+ - rescoring support
+ - execute arbitrary validation scripts (for BLEU early stopping)
+ - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
 
 
+INSTALLATION
+------------
 
-## Training
-Change the hard-coded paths to data in `nmt.py` then run
+Nematus requires the following packages:
+
+ - Python >= 2.7
+ - numpy
+ - ipdb
+ - Theano >= 0.7 (and its dependencies).
+
+we recommend executing the following command in a Python virtual environment:
+   pip install numpy numexpr cython tables theano ipdb
+
+the following packages are optional, but *highly* recommended
+
+ - CUDA >= 7  (only GPU training is sufficiently fast)
+ - cuDNN >= 3 (speeds up training substantially)
+
+
+you can run Nematus locally. To install it, execute `python setup.py install`
+
+
+USAGE INSTRUCTIONS
+------------------
+
+Change the hard-coded paths to data in `test/train_nmt.py` then run
 ```
 THEANO_FLAGS=device=gpu,floatX=float32 python train_nmt.py 
 ```
 
+To decode, see the command `test/test.sh`
+
+A sample setup that includes preprocessing is provided at https://github.com/rsennrich/wmt16-scripts/tree/master/sample
+
+
+PUBLICATIONS
+------------
+
+the code is based on the following model:
+
+Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio (2015): Neural Machine Translation by Jointly Learning to Align and Translate, Proceedings of the International Conference on Learning Representations (ICLR).
+
+for the changes specific to Nematus, please consider the following papers:
+
+TBD

@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import numpy
 import json
 

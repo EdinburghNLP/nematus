@@ -4,47 +4,39 @@ import os
 import numpy
 import os
 
-from nmt import train
+from nematus import train
 
-def main(job_id, params):
-    print params
-    validerr = train(saveto=params['model'][0],
-                     reload_=params['reload'][0],
-                     dim_word=params['dim_word'][0],
-                     dim=params['dim'][0],
-                     n_words=params['n-words'][0],
-                     n_words_src=params['n-words'][0],
-                     decay_c=params['decay-c'][0],
-                     clip_c=params['clip-c'][0],
-                     lrate=params['learning-rate'][0],
-                     optimizer=params['optimizer'][0],
-                     patience=1000,
-                     maxlen=50,
-                     batch_size=32,
-                     valid_batch_size=32,
-                     validFreq=100,
-                     dispFreq=10,
-                     saveFreq=100,
-                     sampleFreq=100,
-                     datasets=['../data/hal/train/tok/en',
-                               '../data/hal/train/tok/fr'],
-                     valid_datasets=['../data/hal/dev/tok/en',
-                                     '../data/hal/dev/tok/fr'],
-                     dictionaries=['../data/hal/train/tok/en.pkl',
-                                   '../data/hal/train/tok/fr.pkl'],
-                     use_dropout=params['use-dropout'][0],
-                     overwrite=False)
-    return validerr
+SRC = 'fr'
+TRG = 'en'
 
 if __name__ == '__main__':
-    main(0, {
-        'model': ['model_hal.npz'],
-        'dim_word': [512],
-        'dim': [1024],
-        'n-words': [30000],
-        'optimizer': ['adadelta'],
-        'decay-c': [0.],
-        'clip-c': [1.],
-        'use-dropout': [False],
-        'learning-rate': [0.0001],
-        'reload': [True]})
+    train(saveto='model.npz',
+        reload_=True,
+        dim_word=500,
+        dim=1024,
+        n_words_src=50000,
+        n_words=50000,
+        decay_c=0.,
+        clip_c=1.,
+        lrate=0.0001,
+        optimizer='adadelta',
+        maxlen=50,
+        batch_size=50,
+        valid_batch_size=50,
+        datasets=['europarl-v7.' + SRC + '-' + TRG + '.' + SRC + '.tok.bpe',
+                  'europarl-v7.' + SRC + '-' + TRG + '.' + TRG + '.tok.bpe'],
+        valid_datasets=['newstest2011.' + SRC + 'tok.bpe',
+                        'newstest2011.' + TRG + 'tok.bpe',
+        dictionaries=['europarl-v7.' + SRC + '-' + TRG + '.' + SRC + '.tok.bpe.json',
+                      'europarl-v7.' + SRC + '-' + TRG + '.' + TRG + '.tok.bpe.json'],
+        validFreq=10000,
+        dispFreq=1000,
+        saveFreq=30000,
+        sampleFreq=10000,
+        use_dropout=False,
+        dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
+        dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
+        dropout_source=0.1, # dropout source words (0: no dropout)
+        dropout_target=0.1, # dropout target words (0: no dropout)
+        overwrite=False,
+        external_validation_script=WDIR + './validate.sh')

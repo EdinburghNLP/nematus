@@ -110,7 +110,7 @@ def main(models, source_file, nbest_file, saveto, b=80,
     word_idict[1] = 'UNK'
 
     # load target dictionary and invert
-     word_dict_trg = load_dict(dictionary_target)
+    word_dict_trg = load_dict(dictionary_target)
     word_idict_trg = dict()
     for kk, vv in word_dict_trg.iteritems():
         word_idict_trg[vv] = kk

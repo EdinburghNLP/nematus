@@ -1,3 +1,3 @@
-from nmt import *
+from nematus import *
 import rescore
 import translate
