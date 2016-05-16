@@ -792,10 +792,10 @@ def build_sampler(tparams, options, use_noise, trng):
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    print 'Building f_init...',
+    print >>sys.stderr, 'Building f_init...',
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -853,11 +853,11 @@ def build_sampler(tparams, options, use_noise, trng):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print 'Building f_next..',
+    print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     return f_init, f_next
 
