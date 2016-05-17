@@ -823,6 +823,10 @@ def build_sampler(tparams, options, use_noise, trng):
 
     # get the weighted averages of context for this target word y
     ctxs = proj[1]
+    
+    # TODO (maria) get the attention model weights proj[3]
+    # alignment matrix (attention model)
+    dec_alphas = proj[2]
 
     if options['use_dropout']:
         next_state_up = next_state * retain_probability_hidden
@@ -855,7 +859,7 @@ def build_sampler(tparams, options, use_noise, trng):
     # sampled word for the next target, next hidden state to be used
     print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, next_state]
+    outs = [next_probs, next_sample, next_state, dec_alphas]
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
     print >>sys.stderr, 'Done'
 
@@ -890,6 +894,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     next_state = [None]*num_models
     ctx0 = [None]*num_models
     next_p = [None]*num_models
+    dec_alphas = [None]*num_models
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
@@ -897,12 +902,16 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         ctx0[i] = ret[1]
     next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
 
+    # x is a sequence of word ids followed by 0, eos id
+    print len(x)
     for ii in xrange(maxlen):
         for i in xrange(num_models):
             ctx = numpy.tile(ctx0[i], [live_k, 1])
             inps = [next_w, ctx, next_state[i]]
             ret = f_next[i](*inps)
-            next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+            next_p[i], next_w_tmp, next_state[i], dec_alphas[i] = ret[0], ret[1], ret[2], ret[3]
+            print "\n\n",i, ii, ret[3].shape, "\n"
+            print ret[3]
 
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
@@ -922,6 +931,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             ranks_flat = cand_flat.argpartition(k-dead_k-1)[:(k-dead_k)]
 
             voc_size = next_p[0].shape[1]
+            # index of each k-best hypothesis
             trans_indices = ranks_flat / voc_size
             word_indices = ranks_flat % voc_size
             costs = cand_flat[ranks_flat]
@@ -941,6 +951,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             hyp_scores = []
             hyp_states = []
 
+            # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
                 if new_hyp_samples[idx][-1] == 0:
                     sample.append(new_hyp_samples[idx])
