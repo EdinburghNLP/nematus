@@ -42,7 +42,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
     def _translate(seq):
         # sample given an input sequence and obtain scores
-        sample, score = gen_sample(fs_init, fs_next,
+        sample, score, alignment = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
                                    stochastic=False, argmax=False, suppress_unk=suppress_unk)
@@ -52,10 +52,10 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
         if nbest:
-            return sample, score
+            return sample, score, alignment
         else:
             sidx = numpy.argmin(score)
-            return sample[sidx]
+            return sample[sidx], alignment[sidx]
 
     while True:
         req = queue.get()
@@ -71,8 +71,24 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
     return
 
+# prints alignment weights for a hypothesis
+# dimension (target_words+1 * source_words+1)
+def print_matrix(hyp, file):
+  # each target word has corresponding alignment weights
+  for target_word_alignment in hyp:
+    # each source hidden state has a corresponding weight
+    for w in target_word_alignment:
+      print >>file, w,
+    print >> file, ""
+  print >> file, ""
 
-def main(models, source_file, saveto, k=5,
+def print_matrices(mm, file):
+  for hyp in mm:
+    print_matrix(hyp, file)
+    print >>file, "\n"
+
+
+def main(models, source_file, saveto, save_alignment, k=5,
          normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False):
 
     # load model model_options
@@ -133,6 +149,7 @@ def main(models, source_file, saveto, k=5,
         return ' '.join(ww)
 
     def _send_jobs(f):
+        source_sentences = []
         for idx, line in enumerate(f):
             if chr_level:
                 words = list(line.decode('utf-8').strip())
@@ -142,7 +159,8 @@ def main(models, source_file, saveto, k=5,
             x = map(lambda ii: ii if ii < options[0]['n_words_src'] else 1, x)
             x += [0]
             queue.put((idx, x))
-        return idx+1
+            source_sentences.append(words)
+        return idx+1, source_sentences
 
     def _finish_processes():
         for midx in xrange(n_process):
@@ -161,16 +179,23 @@ def main(models, source_file, saveto, k=5,
                 out_idx += 1
 
     sys.stderr.write('Translating {0} ...\n'.format(source_file.name))
-    n_samples = _send_jobs(source_file)
+    n_samples, source_sentences = _send_jobs(source_file)
     _finish_processes()
+
     for i, trans in enumerate(_retrieve_jobs(n_samples)):
         if nbest:
-            samples, scores = trans
+            samples, scores, alignment = trans
             order = numpy.argsort(scores)
             for j in order:
                 saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
+                # print alignment matrix for each hypothesis
+                # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
+                save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                    i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
+                print_matrix(alignment[j], save_alignment)
         else:
-            saveto.write(_seqs2words(trans) + '\n')
+            saveto.write(_seqs2words(trans[0]) + '\n')
+            print_matrix(trans[1], save_alignment)
 
     sys.stderr.write('Done\n')
 
@@ -192,6 +217,9 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
+    parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
+                        default=sys.stdout, metavar='PATH',
+                        help="Output file for alignment weights (default: standard output)")
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
@@ -199,5 +227,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.models, args.input,
-         args.output, k=args.k, normalize=args.n, n_process=args.p,
+         args.output, args.output_alignment, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk)

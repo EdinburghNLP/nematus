@@ -865,7 +865,6 @@ def build_sampler(tparams, options, use_noise, trng):
 
     return f_init, f_next
 
-
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
@@ -878,6 +877,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
     sample = []
     sample_score = []
+    alignment = []
     if stochastic:
         sample_score = 0
 
@@ -887,6 +887,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     hyp_samples = [[]] * live_k
     hyp_scores = numpy.zeros(live_k).astype('float32')
     hyp_states = []
+    hyp_alignment = [[] for _ in xrange(live_k)]
 
     # for ensemble decoding, we keep track of states and probability distribution
     # for each model in the ensemble
@@ -903,15 +904,13 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
 
     # x is a sequence of word ids followed by 0, eos id
-    print len(x)
     for ii in xrange(maxlen):
         for i in xrange(num_models):
             ctx = numpy.tile(ctx0[i], [live_k, 1])
             inps = [next_w, ctx, next_state[i]]
             ret = f_next[i](*inps)
+            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
             next_p[i], next_w_tmp, next_state[i], dec_alphas[i] = ret[0], ret[1], ret[2], ret[3]
-            print "\n\n",i, ii, ret[3].shape, "\n"
-            print ret[3]
 
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
@@ -929,6 +928,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
             cand_flat = cand_scores.flatten()
             ranks_flat = cand_flat.argpartition(k-dead_k-1)[:(k-dead_k)]
+            
+            #averaging the attention weights accross models
+            mean_alignment = sum(dec_alphas)/num_models
 
             voc_size = next_p[0].shape[1]
             # index of each k-best hypothesis
@@ -939,30 +941,44 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             new_hyp_samples = []
             new_hyp_scores = numpy.zeros(k-dead_k).astype('float32')
             new_hyp_states = []
+            # holds the history of attention weights for each time step for each of the surviving hypothesis
+            # dimensions (live_k * target_words * source_hidden_units]
+            # at each time step we append the attention weights corresponding to the current target word
+            new_hyp_alignment = [[] for _ in xrange(k-dead_k)]
 
+            # ti -> index of k-best hypothesis
             for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
                 new_hyp_samples.append(hyp_samples[ti]+[wi])
                 new_hyp_scores[idx] = copy.copy(costs[idx])
                 new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                # get history of attention weights for the current hypothesis
+                new_hyp_alignment[idx] = copy.copy(hyp_alignment[ti])
+                # extend the history with current attention weights
+                new_hyp_alignment[idx].append(mean_alignment[ti])
+
 
             # check the finished samples
             new_live_k = 0
             hyp_samples = []
             hyp_scores = []
             hyp_states = []
+            hyp_alignment = []
 
             # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
                 if new_hyp_samples[idx][-1] == 0:
                     sample.append(new_hyp_samples[idx])
                     sample_score.append(new_hyp_scores[idx])
+                    alignment.append(new_hyp_alignment[idx])
                     dead_k += 1
                 else:
                     new_live_k += 1
                     hyp_samples.append(new_hyp_samples[idx])
                     hyp_scores.append(new_hyp_scores[idx])
                     hyp_states.append(new_hyp_states[idx])
+                    hyp_alignment.append(new_hyp_alignment[idx])
             hyp_scores = numpy.array(hyp_scores)
+
             live_k = new_live_k
 
             if new_live_k < 1:
@@ -979,8 +995,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             for idx in xrange(live_k):
                 sample.append(hyp_samples[idx])
                 sample_score.append(hyp_scores[idx])
+                alignment.append(hyp_alignment[idx])
 
-    return sample, sample_score
+    return sample, sample_score, alignment
 
 
 # calculate the log probablities on a given corpus using translation model
