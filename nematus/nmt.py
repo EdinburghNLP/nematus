@@ -170,6 +170,13 @@ def concatenate(tensor_list, axis=0):
 
     return out
 
+# return name of word embedding for factor i
+# special handling of factor 0 for backward compatibility
+def embedding_name(i):
+    if i == 0:
+        return 'Wemb'
+    else:
+        return 'Wemb'+str(i)
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
@@ -198,15 +205,16 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
             return None, None, None, None
 
     n_samples = len(seqs_x)
+    n_factors = len(seqs_x[0][0])
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
-    x = numpy.zeros((maxlen_x, n_samples)).astype('int64')
+    x = numpy.zeros((n_factors, maxlen_x, n_samples)).astype('int64')
     y = numpy.zeros((maxlen_y, n_samples)).astype('int64')
     x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
     y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
     for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:lengths_x[idx], idx] = s_x
+        x[:, :lengths_x[idx], idx] = zip(*s_x)
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
@@ -540,7 +548,9 @@ def init_params(options):
     params = OrderedDict()
 
     # embedding
-    params['Wemb'] = norm_weight(options['n_words_src'], options['dim_word'])
+    for factor in range(options['factors']):
+        params[embedding_name(factor)] = norm_weight(options['n_words_src'], options['dim_per_factor'][factor])
+
     params['Wemb_dec'] = norm_weight(options['n_words'], options['dim_word'])
 
     # encoder: bidirectional RNN
@@ -588,8 +598,8 @@ def build_model(tparams, options):
     use_noise = theano.shared(numpy.float32(0.))
 
     # description string: #words x #samples
-    x = tensor.matrix('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(5, 10)*100).astype('int64')
+    x = tensor.tensor3('x', dtype='int64')
+    x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
     x_mask = tensor.matrix('x_mask', dtype='float32')
     x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
     y = tensor.matrix('y', dtype='int64')
@@ -598,12 +608,12 @@ def build_model(tparams, options):
     y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
     # for the backward rnn, we just need to invert x and x_mask
-    xr = x[::-1]
+    xr = x[:,::-1]
     xr_mask = x_mask[::-1]
 
-    n_timesteps = x.shape[0]
+    n_timesteps = x.shape[1]
     n_timesteps_trg = y.shape[0]
-    n_samples = x.shape[1]
+    n_samples = x.shape[2]
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
@@ -631,7 +641,10 @@ def build_model(tparams, options):
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     # word embedding for forward rnn (source)
-    emb = tparams['Wemb'][x.flatten()]
+    emb = []
+    for factor in range(options['factors']):
+        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
+    emb = concatenate(emb, axis=1)
     emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
     if options['use_dropout']:
         emb *= source_dropout
@@ -644,7 +657,10 @@ def build_model(tparams, options):
     
 
     # word embedding for backward rnn (source)
-    embr = tparams['Wemb'][xr.flatten()]
+    embr = []
+    for factor in range(options['factors']):
+        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
+    embr = concatenate(embr, axis=1)
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
     if options['use_dropout']:
         embr *= source_dropout[::-1]
@@ -741,15 +757,20 @@ def build_model(tparams, options):
 
 # build a sampler
 def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
-    x = tensor.matrix('x', dtype='int64')
-    xr = x[::-1]
-    n_timesteps = x.shape[0]
-    n_samples = x.shape[1]
+    x = tensor.tensor3('x', dtype='int64')
+    xr = x[:,::-1]
+    n_timesteps = x.shape[1]
+    n_samples = x.shape[2]
 
     # word embedding (source), forward and backward
-    emb = tparams['Wemb'][x.flatten()]
+    emb = []
+    embr = []
+    for factor in range(options['factors']):
+        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
+        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
+    emb = concatenate(emb, axis=1)
+    embr = concatenate(embr, axis=1)
     emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
-    embr = tparams['Wemb'][xr.flatten()]
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
 
     if options['use_dropout']:
@@ -1039,6 +1060,11 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     alignments_json = []
 
     for x, y in iterator:
+        #ensure consistency in number of factors
+        if len(x[0][0]) != options['factors']:
+            sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(options['factors'], len(x[0][0])))
+            sys.exit(1)
+
         n_done += len(x)
 
         x, x_mask, y, y_mask = prepare_data(x, y,
@@ -1191,6 +1217,8 @@ def sgd(lr, tparams, grads, inp, cost):
 
 def train(dim_word=100,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
+          factors=1, # input factors
+          dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
           decoder='gru_cond',
           patience=10,  # early stopping patience
@@ -1234,6 +1262,18 @@ def train(dim_word=100,  # word vector dimensionality
     # Model options
     model_options = locals().copy()
 
+
+    if model_options['dim_per_factor'] == None:
+        if factors == 1:
+            model_options['dim_per_factor'] = [model_options['dim_word']]
+        else:
+            sys.stderr.write('Error: if using factored input, you must specify \'dim_per_factor\'\n')
+            sys.exit(1)
+
+    assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
+    assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
+    assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
+
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
     worddicts_r = [None] * len(dictionaries)
@@ -1255,14 +1295,14 @@ def train(dim_word=100,  # word vector dimensionality
 
     print 'Loading data'
     train = TextIterator(datasets[0], datasets[1],
-                         dictionaries[0], dictionaries[1],
+                         dictionaries[:-1], dictionaries[-1],
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
                          shuffle_each_epoch=shuffle_each_epoch,
                          maxibatch_size=maxibatch_size)
     valid = TextIterator(valid_datasets[0], valid_datasets[1],
-                         dictionaries[0], dictionaries[1],
+                         dictionaries[:-1], dictionaries[-1],
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=valid_batch_size,
                          maxlen=maxlen)
@@ -1318,7 +1358,7 @@ def train(dim_word=100,  # word vector dimensionality
 
     # allow finetuning with fixed embeddings
     if finetune:
-        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key not in ['Wemb', 'Wemb_dec']])
+        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if not key.startswith('Wemb')])
     else:
         updated_params = tparams
 
@@ -1374,6 +1414,11 @@ def train(dim_word=100,  # word vector dimensionality
             uidx += 1
             use_noise.set_value(1.)
 
+            #ensure consistency in number of factors
+            if len(x) and len(x[0]) and len(x[0][0]) != factors:
+                sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
+                sys.exit(1)
+
             x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                 n_words_src=n_words_src,
                                                 n_words=n_words)
@@ -1428,30 +1473,36 @@ def train(dim_word=100,  # word vector dimensionality
             # generate some samples with the model and display them
             if numpy.mod(uidx, sampleFreq) == 0:
                 # FIXME: random selection?
-                for jj in xrange(numpy.minimum(5, x.shape[1])):
+                for jj in xrange(numpy.minimum(5, x.shape[2])):
                     stochastic = True
                     sample, score, sample_word_probs, alignment = gen_sample([f_init], [f_next],
-                                               x[:, jj][:, None],
+                                               x[:, :, jj][:, :, None],
                                                trng=trng, k=1,
                                                maxlen=30,
                                                stochastic=stochastic,
                                                argmax=False,
                                                suppress_unk=False)
                     print 'Source ', jj, ': ',
-                    for vv in x[:, jj]:
-                        if vv == 0:
+                    for pos in range(x.shape[1]):
+                        if x[0, pos, jj] == 0:
                             break
-                        if vv in worddicts_r[0]:
-                            print worddicts_r[0][vv],
-                        else:
-                            print 'UNK',
+                        for factor in range(factors):
+                            vv = x[factor, pos, jj]
+                            if vv in worddicts_r[factor]:
+                                sys.stdout.write(worddicts_r[factor][vv])
+                            else:
+                                sys.stdout.write('UNK')
+                            if factor+1 < factors:
+                                sys.stdout.write('|')
+                            else:
+                                sys.stdout.write(' ')
                     print
                     print 'Truth ', jj, ' : ',
                     for vv in y[:, jj]:
                         if vv == 0:
                             break
-                        if vv in worddicts_r[1]:
-                            print worddicts_r[1][vv],
+                        if vv in worddicts_r[-1]:
+                            print worddicts_r[-1][vv],
                         else:
                             print 'UNK',
                     print
@@ -1464,8 +1515,8 @@ def train(dim_word=100,  # word vector dimensionality
                     for vv in ss:
                         if vv == 0:
                             break
-                        if vv in worddicts_r[1]:
-                            print worddicts_r[1][vv],
+                        if vv in worddicts_r[-1]:
+                            print worddicts_r[-1][vv],
                         else:
                             print 'UNK',
                     print
