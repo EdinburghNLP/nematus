@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from util import load_dict
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -35,7 +35,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
         tparams = init_tparams(params)
 
         # word index
-        f_init, f_next = build_sampler(tparams, option, use_noise, trng)
+        f_init, f_next = build_sampler(tparams, option, use_noise, trng, return_alignment=return_alignment)
 
         fs_init.append(f_init)
         fs_next.append(f_next)
@@ -45,7 +45,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
         sample, score, alignment = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
-                                   stochastic=False, argmax=False, suppress_unk=suppress_unk)
+                                   stochastic=False, argmax=False, return_alignment=return_alignment, suppress_unk=suppress_unk)
 
         # normalize scores according to sequence lengths
         if normalize:
@@ -153,7 +153,7 @@ def main(models, source_file, saveto, save_alignment, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk))
         processes[midx].start()
 
     # utility function
@@ -207,20 +207,22 @@ def main(models, source_file, saveto, save_alignment, k=5,
                 saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
                 # print alignment matrix for each hypothesis
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
-                if a_json:
-                  print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), save_alignment)
-                else:
-                  save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                      i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
-                  print_matrix(alignment[j], save_alignment)
+                if save_alignment is not None:
+                  if a_json:
+                    print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), save_alignment)
+                  else:
+                    save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                        i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
+                    print_matrix(alignment[j], save_alignment)
         else:
             saveto.write(_seqs2words(trans[0]) + '\n')
-            if a_json:
-              print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), save_alignment)
-            else:
-              save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                    i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
-              print_matrix(trans[1], save_alignment)
+            if save_alignment is not None:
+              if a_json:
+                print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), save_alignment)
+              else:
+                save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                      i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
+                print_matrix(trans[1], save_alignment)
 
     sys.stderr.write('Done\n')
 
@@ -243,7 +245,7 @@ if __name__ == "__main__":
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
     parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
-                        default=sys.stdout, metavar='PATH',
+                        default=None, metavar='PATH',
                         help="Output file for alignment weights (default: standard output)")
     parser.add_argument('--json_alignment', action="store_true",
                         help="Output alignment in json format")
