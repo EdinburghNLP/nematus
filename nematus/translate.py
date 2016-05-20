@@ -73,7 +73,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
 
 def main(models, source_file, saveto, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, print_word_probabilities=False):
 
     # load model model_options
     options = []
@@ -173,10 +173,10 @@ def main(models, source_file, saveto, k=5,
             samples, scores, word_probs = trans
     
             saveto.write(_seqs2words(samples) + "\n")
-            for prob in word_probs:
-                saveto.write("{} ".format(prob))
-            
-            saveto.write('\n')
+            if print_word_probabilities:
+                for prob in word_probs:
+                    saveto.write("{} ".format(prob))
+                saveto.write('\n')
 
     sys.stderr.write('Done\n')
 
@@ -201,9 +201,10 @@ if __name__ == "__main__":
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
+    parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each world")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk)
+         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, print_word_probabilities = args.print_word_probabilities)
