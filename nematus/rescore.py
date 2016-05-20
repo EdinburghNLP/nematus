@@ -11,6 +11,7 @@ import cPickle as pkl
 
 from data_iterator import TextIterator
 from util import load_dict
+from alignment_util import *
 
 from nmt import (pred_probs, load_params, build_model, prepare_data,
     init_params, init_tparams)
@@ -18,14 +19,13 @@ from nmt import (pred_probs, load_params, build_model, prepare_data,
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
 
-def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose):
+def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights):
 
     trng = RandomStreams(1234)
 
     fs_log_probs = []
 
     for model, option in zip(models, options):
-
         # allocate model parameters
         params = init_params(option)
 
@@ -41,44 +41,76 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         inps = [x, x_mask, y, y_mask]
         use_noise.set_value(0.)
 
-        f_log_probs = theano.function(inps, cost)
+        #### @liucan: added for the command line option.
+        if alignweights:
+            print "\t*** Save weight mode ON, alignment matrix will be saved."
+            outputs = [cost, opt_ret['dec_alphas']]
+            f_log_probs = theano.function(inps, outputs)
+        else:
+            print "\t*** Save weight mode OFF, alignment matrix will not be saved."
+            f_log_probs = theano.function(inps, cost)
 
         fs_log_probs.append(f_log_probs)
 
-    def _score(pairs):
+    def _score(pairs, alignweights):
         # sample given an input sequence and obtain scores
         scores = []
+        all_alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            scores.append(pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize))
+            #### @liucan: add this to optional, depending on the choice of file.
+            score_this_batch, alignment_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            scores.append(score_this_batch)
+            all_alignments += alignment_this_batch
+        #### @liucan
+        return scores, all_alignments
 
-        return scores
 
     lines = source_file.readlines()
     nbest_lines = nbest_file.readlines()
 
     with tempfile.NamedTemporaryFile(prefix='rescore-tmpin') as tmp_in, tempfile.NamedTemporaryFile(prefix='rescore-tmpout') as tmp_out:
+    #tempfile.NamedTemporaryFile(prefix="rescore-temp-source-index") as tmp_source_index:
+    #### @liucan: added a temporary file to store the index of the source sentences, this is used to print out the alignment matrix.
+    #### @liucan: TODO, in a better version, add command line option so people can choose not to store the alignment matrix.
         for line in nbest_lines:
             linesplit = line.split(' ||| ')
-            idx = int(linesplit[0])
+            idx = int(linesplit[0])   ##index from the source file. Starting from 0.
             tmp_in.write(lines[idx])
             tmp_out.write(linesplit[1] + '\n')
+            #### @liucan: write to file.
+            #tmp_source_index.write(str(idx) + "\n")
+
         tmp_in.seek(0)
         tmp_out.seek(0)
-        pairs = TextIterator(tmp_in.name, tmp_out.name,
+        #tmp_source_index.seek(0)
+        pairs = TextIterator(tmp_in.name, tmp_out.name, #tmp_source_index.name,  #### @liucan: need to change too many places, will use the index as a post-processing.
                          options[0]['dictionaries'][0], options[0]['dictionaries'][1],
                          n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                          batch_size=b,
                          maxlen=float('inf'),
                          sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
 
-        scores = _score(pairs)
+        if alignweights: #### @liucan
+            scores, all_alignments = _score(pairs, alignweights)  #### @liucan: added option.
+        else:
+            scores = _score(pairs, alignweights)  #### @liucan: added option.
         for i, line in enumerate(nbest_lines):
             score_str = ' '.join(map(str,[s[i] for s in scores]))
             saveto.write('{0} {1}\n'.format(line.strip(), score_str))
 
+        #### @liucan: save the alignments.
+        if alignweights:
+            ### writing out the alignments.
+            with open("alignments.json", "w") as align_OUT:
+                for line in all_alignments:
+                    align_OUT.write(line + "\n")
+    ### combining the actual source and target words.
+    combine_source_target_text(source_file, nbest_file)
+    #print "In resore.py::"
+    #print outputs[1]
 
 def main(models, source_file, nbest_file, saveto, b=80,
-         normalize=False, verbose=False):
+         normalize=False, verbose=False, alignweights=False):
 
     # load model model_options
     options = []
@@ -117,8 +149,7 @@ def main(models, source_file, nbest_file, saveto, b=80,
     word_idict_trg[0] = '<eos>'
     word_idict_trg[1] = 'UNK'
 
-    rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose)
-
+    rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -137,8 +168,10 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
+    parser.add_argument('--walign', '-w',required = False,action="store_true",
+                        help="Whether to store the alignment weights or not. If specified, weights will be saved in <input>.alignment")
 
     args = parser.parse_args()
 
     main(args.models, args.source, args.input,
-         args.output, b=args.b, normalize=args.n, verbose=args.v)
+         args.output, b=args.b, normalize=args.n, verbose=args.v, alignweights=args.walign)

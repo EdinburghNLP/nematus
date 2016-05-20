@@ -22,6 +22,7 @@ from collections import OrderedDict
 
 from data_iterator import TextIterator
 from util import load_dict
+from alignment_util import *
 
 profile = False
 
@@ -704,7 +705,7 @@ def build_model(tparams, options):
         emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
         ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
 
-    # weights (alignment matrix)
+    # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
 
     # compute word probabilities
@@ -731,6 +732,9 @@ def build_model(tparams, options):
     cost = -tensor.log(probs.flatten()[y_flat_idx])
     cost = cost.reshape([y.shape[0], y.shape[1]])
     cost = (cost * y_mask).sum(0)
+
+    #print "Print out in build_model()"
+    #print opt_ret
 
     return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
 
@@ -792,10 +796,10 @@ def build_sampler(tparams, options, use_noise, trng):
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    print >>sys.stderr, 'Building f_init...',
+    print 'Building f_init...',
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print >>sys.stderr, 'Done'
+    print 'Done'
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -853,11 +857,11 @@ def build_sampler(tparams, options, use_noise, trng):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next..',
+    print 'Building f_next..',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print >>sys.stderr, 'Done'
+    print 'Done'
 
     return f_init, f_next
 
@@ -973,19 +977,36 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
 
 # calculate the log probablities on a given corpus using translation model
-def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalize=False):
+def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalize=False, alignweights=False):
     probs = []
-
     n_done = 0
 
-    for x, y in iterator:
+    #### @liucan
+    if alignweights:
+        alignments_json = []
+
+
+    for x, y in iterator:  ##x is source, y is target.
+    #for x, y, source_indexes in iterator: #### @liucan.
         n_done += len(x)
 
         x, x_mask, y, y_mask = prepare_data(x, y,
                                             n_words_src=options['n_words_src'],
                                             n_words=options['n_words'])
 
-        pprobs = f_log_probs(x, x_mask, y, y_mask)
+        """
+        ***************************** Need to move this block into another function ****************
+        """
+        #print "Source sentence index for this pair is::", source_indexes
+        if alignweights:
+            pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
+            for jdata in get_alignments(attention, x_mask, y_mask):
+                alignments_json.append(jdata)
+        else:
+            pprobs = f_log_probs(x, x_mask, y, y_mask)
+        """
+        ***************************** Need to move this block into another function ****************
+        """
 
         # normalize scores according to output length
         if normalize:
@@ -1001,7 +1022,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         if verbose:
             print >>sys.stderr, '%d samples computed' % (n_done)
 
-    return numpy.array(probs)
+    return numpy.array(probs), alignments_json
 
 
 # optimizers
@@ -1213,6 +1234,11 @@ def train(dim_word=100,  # word vector dimensionality
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
+
+    ####Added by Can Liu.
+    print "Printing out the debugging weights for alignment:::"
+    print opt_ret
+
     inps = [x, x_mask, y, y_mask]
 
     print 'Building sampler'

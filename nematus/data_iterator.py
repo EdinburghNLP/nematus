@@ -13,7 +13,7 @@ def fopen(filename, mode='r'):
 
 class TextIterator:
     """Simple Bitext iterator."""
-    def __init__(self, source, target,
+    def __init__(self, source, target, #source_index, ####@liucan. added source index.
                  source_dict, target_dict,
                  batch_size=128,
                  maxlen=100,
@@ -28,6 +28,7 @@ class TextIterator:
         else:
             self.source = fopen(source, 'r')
             self.target = fopen(target, 'r')
+            #self.source_index = fopen(source_index, 'r')
         self.source_dict = load_dict(source_dict)
         self.target_dict = load_dict(target_dict)
 
@@ -66,6 +67,7 @@ class TextIterator:
 
         source = []
         target = []
+        #source_indexes = []  #### @liucan:
 
         # fill buffer, if it's empty
         assert len(self.source_buffer) == len(self.target_buffer), 'Buffer size mismatch!'
@@ -81,6 +83,9 @@ class TextIterator:
 
                 self.source_buffer.append(ss.strip().split())
                 self.target_buffer.append(tt.strip().split())
+
+                #### @liucan:
+                #source_indexes.append(int(self.source_index.readline().strip()))
 
             # sort by target buffer
             if self.sort_by_length:
@@ -141,4 +146,4 @@ class TextIterator:
             self.reset()
             raise StopIteration
 
-        return source, target
+        return source, target#, source_indexes
