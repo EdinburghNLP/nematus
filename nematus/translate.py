@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from util import load_dict
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -35,27 +35,27 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
         tparams = init_tparams(params)
 
         # word index
-        f_init, f_next = build_sampler(tparams, option, use_noise, trng)
+        f_init, f_next = build_sampler(tparams, option, use_noise, trng, return_alignment=return_alignment)
 
         fs_init.append(f_init)
         fs_next.append(f_next)
 
     def _translate(seq):
         # sample given an input sequence and obtain scores
-        sample, score, word_probs = gen_sample(fs_init, fs_next,
+        sample, score, word_probs, alignment = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
-                                   stochastic=False, argmax=False, suppress_unk=suppress_unk)
+                                   stochastic=False, argmax=False, return_alignment=return_alignment, suppress_unk=suppress_unk)
 
         # normalize scores according to sequence lengths
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
         if nbest:
-            return sample, score, word_probs
+            return sample, score, word_probs, alignment
         else:
             sidx = numpy.argmin(score)
-            return sample[sidx], score[sidx], word_probs[sidx]
+            return sample[sidx], score[sidx], word_probs[sidx], alignment[sidx]
 
     while True:
         req = queue.get()
@@ -71,10 +71,36 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
     return
 
+# prints alignment weights for a hypothesis
+# dimension (target_words+1 * source_words+1)
+def print_matrix(hyp, file):
+  # each target word has corresponding alignment weights
+  for target_word_alignment in hyp:
+    # each source hidden state has a corresponding weight
+    for w in target_word_alignment:
+      print >>file, w,
+    print >> file, ""
+  print >> file, ""
 
-def main(models, source_file, saveto, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, print_word_probabilities=False):
+import json, io
+def print_matrix_json(hyp, source, target, sid, tid, file):
+  source.append("</s>")
+  target.append("</s>")
+  links = []
+  for ti, target_word_alignment in enumerate(hyp):
+    for si,w in enumerate(target_word_alignment):
+      links.append((target[ti], source[si], str(w), sid, tid))
+  json.dump(links,file, ensure_ascii=False)
 
+
+def print_matrices(mm, file):
+  for hyp in mm:
+    print_matrix(hyp, file)
+    print >>file, "\n"
+
+
+def main(models, source_file, saveto, save_alignment, k=5,
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False):
     # load model model_options
     options = []
     for model in args.models:
@@ -120,7 +146,7 @@ def main(models, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk))
         processes[midx].start()
 
     # utility function
@@ -133,6 +159,7 @@ def main(models, source_file, saveto, k=5,
         return ' '.join(ww)
 
     def _send_jobs(f):
+        source_sentences = []
         for idx, line in enumerate(f):
             if chr_level:
                 words = list(line.decode('utf-8').strip())
@@ -142,7 +169,8 @@ def main(models, source_file, saveto, k=5,
             x = map(lambda ii: ii if ii < options[0]['n_words_src'] else 1, x)
             x += [0]
             queue.put((idx, x))
-        return idx+1
+            source_sentences.append(words)
+        return idx+1, source_sentences
 
     def _finish_processes():
         for midx in xrange(n_process):
@@ -161,22 +189,39 @@ def main(models, source_file, saveto, k=5,
                 out_idx += 1
 
     sys.stderr.write('Translating {0} ...\n'.format(source_file.name))
-    n_samples = _send_jobs(source_file)
+    n_samples, source_sentences = _send_jobs(source_file)
     _finish_processes()
+
     for i, trans in enumerate(_retrieve_jobs(n_samples)):
         if nbest:
-            samples, scores, word_probs = trans
+            samples, scores, word_probs, alignment = trans
             order = numpy.argsort(scores)
             for j in order:
                 saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
+                # print alignment matrix for each hypothesis
+                # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
+                if save_alignment is not None:
+                  if a_json:
+                    print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), i, i+j,save_alignment)
+                  else:
+                    save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                        i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
+                    print_matrix(alignment[j], save_alignment)
         else:
-            samples, scores, word_probs = trans
+            samples, scores, word_probs, alignment = trans
     
             saveto.write(_seqs2words(samples) + "\n")
             if print_word_probabilities:
                 for prob in word_probs:
                     saveto.write("{} ".format(prob))
                 saveto.write('\n')
+            if save_alignment is not None:
+              if a_json:
+                print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
+              else:
+                save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                      i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
+                print_matrix(trans[3], save_alignment)
 
     sys.stderr.write('Done\n')
 
@@ -198,6 +243,11 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
+    parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
+                        default=None, metavar='PATH',
+                        help="Output file for alignment weights (default: standard output)")
+    parser.add_argument('--json_alignment', action="store_true",
+                        help="Output alignment in json format")
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
@@ -207,4 +257,5 @@ if __name__ == "__main__":
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, print_word_probabilities = args.print_word_probabilities)
+         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, 
+         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment)
