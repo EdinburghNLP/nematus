@@ -94,10 +94,12 @@ def read_plot_alignment_json(file, n):
 
 def read_alignment_json(file):
     data = file.readline() ##one line containing the json object.
+    if len(data.strip()) == 0:
+        return None, None, None, None
     jdata = json.loads(data)
     ## messy json encodings... TODO: make this better
     jdata = json.loads(json.dumps(jdata).decode('unicode-escape').encode('utf8'))
-    print jdata
+    #print jdata
     sid = int(jdata["id"])
     mma = numpy.array(jdata["matrix"])
     ##target words

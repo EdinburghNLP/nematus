@@ -46,35 +46,63 @@ def get_alignments(attention, x_mask, y_mask):
         #print "\t\t",jdata
         yield jdata
 
-def combine_source_target_text(source_IN, nbest_IN):
-
+def combine_source_target_text(source_IN, nbest_IN, saveto, alignment_IN):
+    """
+    there can be multiple target sentences, aligned to the same source sentence.
+    """
     source_IN.seek(0)
     nbest_IN.seek(0)
-    alignment_file = "alignments.json"
-    with open(alignment_file, "r") as alignment_IN :
-        with open("withtext" + alignment_file, "w") as alignment_OUT:
+    alignment_IN.seek(0)
 
-            all_matrixes = alignment_IN.readlines()
-            nbest_lines = nbest_IN.readlines()
-            source_lines = source_IN.readlines()
-            assert len(all_matrixes) == len(nbest_lines), "The number of lines does not match with each other!"
+    with open(saveto + "_withwords.json", "w") as alignment_OUT:
+        all_matrixes = alignment_IN.readlines()
+        nbest_lines = nbest_IN.readlines()
+        source_lines = source_IN.readlines()
+        assert len(all_matrixes) == len(nbest_lines), "The number of lines does not match with each other!"
 
-            for target_index in range(len(all_matrixes)):
-                jdata = json.loads(all_matrixes[target_index])
-                target_line = nbest_lines[target_index]
-                elements = target_line.strip().split("|||")
-                refer_index = int(elements[0].strip())
-                source_sent = source_lines[refer_index].strip()
-                target_sent = elements[1].strip()
+        for target_index in range(len(all_matrixes)):
+            jdata = json.loads(all_matrixes[target_index])
+            target_line = nbest_lines[target_index]
+            elements = target_line.strip().split("|||")
+            refer_index = int(elements[0].strip())
+            source_sent = source_lines[refer_index].strip()
+            target_sent = elements[1].strip()
 
-                jdata["source_sent"] = source_sent
-                jdata["target_sent"] = target_sent
-                jdata["id"] = refer_index
-                jdata["prob"] = 0 #float(elements[2].strip().split()[1])
+            jdata["source_sent"] = source_sent
+            jdata["target_sent"] = target_sent
+            jdata["id"] = refer_index
+            jdata["prob"] = 0 #float(elements[2].strip().split()[1])
 
-                #jdata = json.dumps(jdata)
-                jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
-                alignment_OUT.write(jdata + "\n")
+            #jdata = json.dumps(jdata)
+            jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
+            alignment_OUT.write(jdata + "\n")
+
+def combine_source_target_text_1to1(source_IN, target_IN, saveto, alignment_IN):
+    """
+    There is a 1-1 mapping of target and source sentence.
+    """
+    source_IN.seek(0)
+    target_IN.seek(0)
+    alignment_IN.seek(0)
+    with open(saveto + "_withwords.json", "w") as alignment_OUT:
+
+        all_matrixes = alignment_IN.readlines()
+        target_lines = target_IN.readlines()
+        source_lines = source_IN.readlines()
+        assert len(all_matrixes) == len(target_lines), "The number of lines does not match with each other!"
+
+        for target_index in range(len(all_matrixes)):
+            jdata = json.loads(all_matrixes[target_index])
+
+            jdata["source_sent"] = source_lines[target_index].strip()
+            jdata["target_sent"] = target_lines[target_index].strip()
+            jdata["id"] = target_index
+            jdata["prob"] = 0 #float(elements[2].strip().split()[1])
+
+            #jdata = json.dumps(jdata)
+            jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
+            alignment_OUT.write(jdata + "\n")
+
 
 def convert_to_nodes_edges(filename):
     """
