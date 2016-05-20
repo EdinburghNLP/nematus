@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from util import load_dict
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk, word_idict, word_idict_trg):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -42,7 +42,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
     def _translate(seq):
         # sample given an input sequence and obtain scores
-        sample, score = gen_sample(fs_init, fs_next,
+        sample, score, word_probs = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).reshape([len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
                                    stochastic=False, argmax=False, suppress_unk=suppress_unk)
@@ -52,10 +52,10 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
         if nbest:
-            return sample, score
+            return sample, score, word_probs
         else:
             sidx = numpy.argmin(score)
-            return sample[sidx]
+            return sample[sidx], score[sidx], word_probs[sidx]
 
     while True:
         req = queue.get()
@@ -120,7 +120,7 @@ def main(models, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk, word_idict, word_idict_trg))
         processes[midx].start()
 
     # utility function
@@ -165,12 +165,18 @@ def main(models, source_file, saveto, k=5,
     _finish_processes()
     for i, trans in enumerate(_retrieve_jobs(n_samples)):
         if nbest:
-            samples, scores = trans
+            samples, scores, word_probs = trans
             order = numpy.argsort(scores)
             for j in order:
                 saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
         else:
-            saveto.write(_seqs2words(trans) + '\n')
+            samples, scores, word_probs = trans
+    
+            saveto.write(_seqs2words(samples) + "\n")
+            for prob in word_probs:
+                saveto.write("{} ".format(prob))
+            
+            saveto.write('\n')
 
     sys.stderr.write('Done\n')
 

@@ -581,6 +581,7 @@ def init_params(options):
 
 # build a training model
 def build_model(tparams, options):
+    print "Build Model called"
     opt_ret = dict()
 
     trng = RandomStreams(1234)
@@ -640,6 +641,7 @@ def build_model(tparams, options):
                                             mask=x_mask,
                                             emb_dropout=emb_dropout, 
                                             rec_dropout=rec_dropout)
+    
 
     # word embedding for backward rnn (source)
     embr = tparams['Wemb'][xr.flatten()]
@@ -776,6 +778,8 @@ def build_sampler(tparams, options, use_noise, trng):
     # encoder
     proj = get_layer(options['encoder'])[1](tparams, emb, options,
                                             prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout)
+
+
     projr = get_layer(options['encoder'])[1](tparams, embr, options,
                                              prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r)
 
@@ -792,10 +796,10 @@ def build_sampler(tparams, options, use_noise, trng):
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    print 'Building f_init...',
+    print >>sys.stderr, 'Building f_init...',
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -823,6 +827,10 @@ def build_sampler(tparams, options, use_noise, trng):
 
     # get the weighted averages of context for this target word y
     ctxs = proj[1]
+    
+    # TODO (maria) get the attention model weights proj[3]
+    # alignment matrix (attention model)
+    dec_alphas = proj[2]
 
     if options['use_dropout']:
         next_state_up = next_state * retain_probability_hidden
@@ -843,7 +851,7 @@ def build_sampler(tparams, options, use_noise, trng):
         logit *= retain_probability_hidden
 
     logit = get_layer('ff')[1](tparams, logit, options,
-                               prefix='ff_logit', activ='linear')
+                              prefix='ff_logit', activ='linear')
 
     # compute the softmax probability
     next_probs = tensor.nnet.softmax(logit)
@@ -853,11 +861,11 @@ def build_sampler(tparams, options, use_noise, trng):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print 'Building f_next..',
+    print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, next_state]
+    outs = [next_probs, next_sample, next_state, dec_alphas]
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     return f_init, f_next
 
@@ -874,13 +882,16 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
     sample = []
     sample_score = []
+    sample_word_probs = []
     if stochastic:
         sample_score = 0
+        sample_word_probs = 0
 
     live_k = 1
     dead_k = 0
 
     hyp_samples = [[]] * live_k
+    word_probs = [[]] * live_k
     hyp_scores = numpy.zeros(live_k).astype('float32')
     hyp_states = []
 
@@ -890,6 +901,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     next_state = [None]*num_models
     ctx0 = [None]*num_models
     next_p = [None]*num_models
+    dec_alphas = [None]*num_models
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
@@ -897,60 +909,73 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         ctx0[i] = ret[1]
     next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
 
+    # x is a sequence of word ids followed by 0, eos id
     for ii in xrange(maxlen):
         for i in xrange(num_models):
             ctx = numpy.tile(ctx0[i], [live_k, 1])
             inps = [next_w, ctx, next_state[i]]
             ret = f_next[i](*inps)
-            next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+            next_p[i], next_w_tmp, next_state[i], dec_alphas[i] = ret[0], ret[1], ret[2], ret[3]
+            #print ret[3]
 
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
-
         if stochastic:
             if argmax:
                 nw = sum(next_p)[0].argmax()
             else:
                 nw = next_w_tmp[0]
             sample.append(nw)
+            #CHECK
+            sample_word_probs.append(next_p[0][0,nw])
             sample_score += next_p[0][0, nw]
             if nw == 0:
                 break
         else:
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
+            probs = sum(next_p)
             cand_flat = cand_scores.flatten()
+            probs_flat = probs.flatten()
             ranks_flat = cand_flat.argpartition(k-dead_k-1)[:(k-dead_k)]
 
             voc_size = next_p[0].shape[1]
+            # index of each k-best hypothesis
             trans_indices = ranks_flat / voc_size
             word_indices = ranks_flat % voc_size
             costs = cand_flat[ranks_flat]
 
             new_hyp_samples = []
             new_hyp_scores = numpy.zeros(k-dead_k).astype('float32')
+            new_word_probs = []
             new_hyp_states = []
 
             for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
                 new_hyp_samples.append(hyp_samples[ti]+[wi])
+                new_word_prob_tmp = word_probs[ti]
+                new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
+                
                 new_hyp_scores[idx] = copy.copy(costs[idx])
                 new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
-
             # check the finished samples
             new_live_k = 0
             hyp_samples = []
             hyp_scores = []
             hyp_states = []
+            word_probs = []
 
+            # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
                 if new_hyp_samples[idx][-1] == 0:
                     sample.append(new_hyp_samples[idx])
                     sample_score.append(new_hyp_scores[idx])
+                    sample_word_probs.append(new_word_probs[idx])
                     dead_k += 1
                 else:
                     new_live_k += 1
                     hyp_samples.append(new_hyp_samples[idx])
                     hyp_scores.append(new_hyp_scores[idx])
                     hyp_states.append(new_hyp_states[idx])
+                    word_probs.append(new_word_probs[idx])
             hyp_scores = numpy.array(hyp_scores)
             live_k = new_live_k
 
@@ -968,8 +993,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             for idx in xrange(live_k):
                 sample.append(hyp_samples[idx])
                 sample_score.append(hyp_scores[idx])
-
-    return sample, sample_score
+                #CHECK
+                sample_word_probs.append(word_probs[idx])
+    return sample, sample_score, sample_word_probs
 
 
 # calculate the log probablities on a given corpus using translation model
