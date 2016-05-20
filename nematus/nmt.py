@@ -581,7 +581,6 @@ def init_params(options):
 
 # build a training model
 def build_model(tparams, options):
-    print "Build Model called"
     opt_ret = dict()
 
     trng = RandomStreams(1234)
@@ -951,7 +950,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
             for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
                 new_hyp_samples.append(hyp_samples[ti]+[wi])
-                new_word_prob_tmp = word_probs[ti]
                 new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
                 
                 new_hyp_scores[idx] = copy.copy(costs[idx])

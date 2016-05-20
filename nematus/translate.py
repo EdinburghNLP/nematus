@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from util import load_dict
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk, word_idict, word_idict_trg):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, suppress_unk):
 
     from nmt import (build_sampler, gen_sample, load_params,
                  init_params, init_tparams)
@@ -120,7 +120,7 @@ def main(models, source_file, saveto, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk, word_idict, word_idict_trg))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, suppress_unk))
         processes[midx].start()
 
     # utility function
