@@ -9,9 +9,9 @@ import argparse
 # one line correpsonds to one decoding step producing one target token
 # each line has the attention model weights corresponding to that decoding step
 # each float on a line is the attention model weight for a corresponding source state.
-# plot: a head map of the alignment matrix
+# plot: a heat map of the alignment matrix
 # x axis are the source tokens (alignment is to source hidden state that roughly corresponds to a source token)
-# y azis are the target tokens
+# y axis are the target tokens
 
 # http://stackoverflow.com/questions/14391959/heatmap-in-matplotlib-with-pcolor
 def plot_head_map(mma, target_labels, source_labels):
@@ -35,14 +35,11 @@ def plot_head_map(mma, target_labels, source_labels):
   ax.set_xticklabels(source_labels, minor=False)
   # target words -> row labels
   ax.set_yticklabels(target_labels, minor=False)
-
+  
   plt.xticks(rotation=45)
 
+  #plt.tight_layout()
   plt.show()
-
-
-# column labels -> target words
-# row labels -> source words
 
 
 def read_alignment_matrix(f):
@@ -82,7 +79,7 @@ def read_plot_alignment_matrices(f, n):
 parser = argparse.ArgumentParser()
 # '/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/en-de/test.alignment'
 parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                        default='/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/ro-en/newstest2016-roen-src.ro.alignment', metavar='PATH',
+                        default='/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/de-en/newstest2016-deen-src.de.k12.viz.alignment', metavar='PATH',
                         help="Input file (default: standard input)")
 
 args = parser.parse_args()

@@ -83,21 +83,15 @@ def print_matrix(hyp, file):
   print >> file, ""
 
 import json, io
-def print_matrix_json(hyp, source, target, file):
+def print_matrix_json(hyp, source, target, sid, tid, file):
   source.append("</s>")
   target.append("</s>")
-  nodes = []
-  for token in source:
-    nodes.append({"group":1, "name":token})
-  for token in target:
-    nodes.append({"group":2, "name":token})
   links = []
   for ti, target_word_alignment in enumerate(hyp):
     for si,w in enumerate(target_word_alignment):
-      links.append({"source":source[si],"target":target[ti],"value":str(w)})
-  am = {"nodes":nodes, "links":links}
-  json.dump(am,file, ensure_ascii=False)
-  print >>file, "\n"
+      links.append((target[ti], source[si], str(w), sid, tid))
+  json.dump(links,file, ensure_ascii=False)
+
 
 def print_matrices(mm, file):
   for hyp in mm:
@@ -209,7 +203,7 @@ def main(models, source_file, saveto, save_alignment, k=5,
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
                 if save_alignment is not None:
                   if a_json:
-                    print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), save_alignment)
+                    print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), i, i+j,save_alignment)
                   else:
                     save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
                                         i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
@@ -218,7 +212,7 @@ def main(models, source_file, saveto, save_alignment, k=5,
             saveto.write(_seqs2words(trans[0]) + '\n')
             if save_alignment is not None:
               if a_json:
-                print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), save_alignment)
+                print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
               else:
                 save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
                                       i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
