@@ -82,6 +82,23 @@ def print_matrix(hyp, file):
     print >> file, ""
   print >> file, ""
 
+import json, io
+def print_matrix_json(hyp, source, target, file):
+  source.append("</s>")
+  target.append("</s>")
+  nodes = []
+  for token in source:
+    nodes.append({"group":1, "name":token})
+  for token in target:
+    nodes.append({"group":2, "name":token})
+  links = []
+  for ti, target_word_alignment in enumerate(hyp):
+    for si,w in enumerate(target_word_alignment):
+      links.append({"source":source[si],"target":target[ti],"value":str(w)})
+  am = {"nodes":nodes, "links":links}
+  json.dump(am,file, ensure_ascii=False)
+  print >>file, "\n"
+
 def print_matrices(mm, file):
   for hyp in mm:
     print_matrix(hyp, file)
@@ -89,7 +106,7 @@ def print_matrices(mm, file):
 
 
 def main(models, source_file, saveto, save_alignment, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False):
 
     # load model model_options
     options = []
@@ -190,12 +207,20 @@ def main(models, source_file, saveto, save_alignment, k=5,
                 saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
                 # print alignment matrix for each hypothesis
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
-                save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                    i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
-                print_matrix(alignment[j], save_alignment)
+                if a_json:
+                  print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), save_alignment)
+                else:
+                  save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                      i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
+                  print_matrix(alignment[j], save_alignment)
         else:
             saveto.write(_seqs2words(trans[0]) + '\n')
-            print_matrix(trans[1], save_alignment)
+            if a_json:
+              print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), save_alignment)
+            else:
+              save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                    i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
+              print_matrix(trans[1], save_alignment)
 
     sys.stderr.write('Done\n')
 
@@ -220,6 +245,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file for alignment weights (default: standard output)")
+    parser.add_argument('--json_alignment', action="store_true",
+                        help="Output alignment in json format")
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
@@ -228,4 +255,5 @@ if __name__ == "__main__":
 
     main(args.models, args.input,
          args.output, args.output_alignment, k=args.k, normalize=args.n, n_process=args.p,
-         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk)
+         chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk,
+         a_json=args.json_alignment)
