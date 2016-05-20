@@ -735,7 +735,6 @@ def build_model(tparams, options):
 
     #print "Print out in build_model()"
     #print opt_ret
-
     return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
 
 
@@ -981,32 +980,24 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     probs = []
     n_done = 0
 
-    #### @liucan
+    ### optional save weights mode.
     if alignweights:
         alignments_json = []
 
-
     for x, y in iterator:  ##x is source, y is target.
-    #for x, y, source_indexes in iterator: #### @liucan.
         n_done += len(x)
 
         x, x_mask, y, y_mask = prepare_data(x, y,
                                             n_words_src=options['n_words_src'],
                                             n_words=options['n_words'])
 
-        """
-        ***************************** Need to move this block into another function ****************
-        """
-        #print "Source sentence index for this pair is::", source_indexes
+        ### in optional save weights mode.
         if alignweights:
             pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
             for jdata in get_alignments(attention, x_mask, y_mask):
                 alignments_json.append(jdata)
         else:
             pprobs = f_log_probs(x, x_mask, y, y_mask)
-        """
-        ***************************** Need to move this block into another function ****************
-        """
 
         # normalize scores according to output length
         if normalize:
@@ -1022,7 +1013,10 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         if verbose:
             print >>sys.stderr, '%d samples computed' % (n_done)
 
-    return numpy.array(probs), alignments_json
+    if alignweights:
+        return numpy.array(probs), alignments_json
+    else:
+        return numpy.array(probs)
 
 
 # optimizers
@@ -1234,10 +1228,6 @@ def train(dim_word=100,  # word vector dimensionality
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
-
-    ####Added by Can Liu.
-    print "Printing out the debugging weights for alignment:::"
-    print opt_ret
 
     inps = [x, x_mask, y, y_mask]
 

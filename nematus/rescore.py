@@ -52,8 +52,11 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
 
         fs_log_probs.append(f_log_probs)
 
-    def _score(pairs, alignweights):
-        # sample given an input sequence and obtain scores
+    def _score_align(pairs):
+        """
+        The version of _score that has the SAVE_alignment mode on.
+        """
+        alignweights = True
         scores = []
         all_alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
@@ -61,53 +64,60 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
             score_this_batch, alignment_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
             scores.append(score_this_batch)
             all_alignments += alignment_this_batch
-        #### @liucan
+
         return scores, all_alignments
 
+    def _score(pairs):
+        """
+        The version of _score that has the SAVE_alignment mode on.
+        """
+        alignweights = False
+        scores = []
+        for i, f_log_probs in enumerate(fs_log_probs):
+            #### @liucan: add this to optional, depending on the choice of file.
+            score_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            scores.append(score_this_batch)
+
+        return scores
 
     lines = source_file.readlines()
     nbest_lines = nbest_file.readlines()
 
     with tempfile.NamedTemporaryFile(prefix='rescore-tmpin') as tmp_in, tempfile.NamedTemporaryFile(prefix='rescore-tmpout') as tmp_out:
-    #tempfile.NamedTemporaryFile(prefix="rescore-temp-source-index") as tmp_source_index:
-    #### @liucan: added a temporary file to store the index of the source sentences, this is used to print out the alignment matrix.
-    #### @liucan: TODO, in a better version, add command line option so people can choose not to store the alignment matrix.
         for line in nbest_lines:
             linesplit = line.split(' ||| ')
             idx = int(linesplit[0])   ##index from the source file. Starting from 0.
             tmp_in.write(lines[idx])
             tmp_out.write(linesplit[1] + '\n')
-            #### @liucan: write to file.
-            #tmp_source_index.write(str(idx) + "\n")
 
         tmp_in.seek(0)
         tmp_out.seek(0)
-        #tmp_source_index.seek(0)
-        pairs = TextIterator(tmp_in.name, tmp_out.name, #tmp_source_index.name,  #### @liucan: need to change too many places, will use the index as a post-processing.
-                         options[0]['dictionaries'][0], options[0]['dictionaries'][1],
+        pairs = TextIterator(tmp_in.name, tmp_out.name,
+                        options[0]['dictionaries'][0], options[0]['dictionaries'][1],
                          n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                          batch_size=b,
                          maxlen=float('inf'),
                          sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
 
-        if alignweights: #### @liucan
-            scores, all_alignments = _score(pairs, alignweights)  #### @liucan: added option.
+        ### optional save weights mode.
+        if alignweights:
+            scores, all_alignments = _score_align(pairs)
         else:
-            scores = _score(pairs, alignweights)  #### @liucan: added option.
+            scores = _score(pairs)
+
         for i, line in enumerate(nbest_lines):
             score_str = ' '.join(map(str,[s[i] for s in scores]))
             saveto.write('{0} {1}\n'.format(line.strip(), score_str))
 
-        #### @liucan: save the alignments.
+        ### optional save weights mode.
         if alignweights:
             ### writing out the alignments.
             with open("alignments.json", "w") as align_OUT:
                 for line in all_alignments:
                     align_OUT.write(line + "\n")
     ### combining the actual source and target words.
-    combine_source_target_text(source_file, nbest_file)
-    #print "In resore.py::"
-    #print outputs[1]
+    if alignweights:
+        combine_source_target_text(source_file, nbest_file)
 
 def main(models, source_file, nbest_file, saveto, b=80,
          normalize=False, verbose=False, alignweights=False):
