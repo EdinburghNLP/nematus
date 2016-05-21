@@ -1,3 +1,5 @@
+// javascript util to visualize attention weights between source and target
+
 !function(){
 	var bP={};	
 	var b=30, bb=150, height=600, buffMargin=1, minHeight=14;

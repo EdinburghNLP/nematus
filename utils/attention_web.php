@@ -53,7 +53,7 @@ rect{
 <div id="area1"></div>
 <div id="area2"></div>
 <script src="http://d3js.org/d3.v3.min.js"></script>
-<script src="biPartite.js"></script>
+<script src="attention.js"></script>
 <script>
 var target = [["eine", "republi@@", "kanische", "Strategie", ",", "um", "der", "Wiederwahl", "von", "Obama", "entgegenzutreten", "EOS"]];//[['katze','bin','eine','katze'],['a','cat']];
 var source = [["a", "Republican", "strategy", "to", "counter", "the", "re-election", "of", "Obama", "EOS"]];//[['cat','am','a','cat'],['eine','katze']]
