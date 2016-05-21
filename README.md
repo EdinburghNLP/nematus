@@ -12,6 +12,7 @@ The changes to Nematus include:
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - automatic training set reshuffling between epochs
  - n-best output for decoder
+ - more output options (attention weights; word-level probabilities) and visualization scripts
  - performance improvements to decoder
  - rescoring support
  - execute arbitrary validation scripts (for BLEU early stopping)
