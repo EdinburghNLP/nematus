@@ -43,7 +43,6 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
         inps = [x, x_mask, y, y_mask]
         use_noise.set_value(0.)
 
-        #### @liucan: added for the command line option.
         if alignweights:
             print "\t*** Save weight mode ON, alignment matrix will be saved."
             outputs = [cost, opt_ret['dec_alphas']]
@@ -54,29 +53,10 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
 
         fs_log_probs.append(f_log_probs)
 
-    def _score_align(pairs):
-        """
-        The version of _score that has the SAVE_alignment mode on.
-        """
-        alignweights = True
-        scores = []
-        all_alignments = []
-        for i, f_log_probs in enumerate(fs_log_probs):
-            #### @liucan: add this to optional, depending on the choice of file.
-            score_this_batch, alignment_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
-            scores.append(score_this_batch)
-            all_alignments += alignment_this_batch
-
-        return scores, all_alignments
-
-    def _score(pairs):
-        """
-        The version of _score that has the SAVE_alignment mode on.
-        """
-        alignweights = False
+    def _score(pairs, alignweights=False):
+        # sample given an input sequence and obtain scores
         scores = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            #### @liucan: add this to optional, depending on the choice of file.
             score_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
             scores.append(score_this_batch)
 
@@ -89,11 +69,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
                      maxlen=float('inf'),
                      sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
 
-    ### optional save weights mode.
-    if alignweights:
-        scores, all_alignments = _score_align(pairs)
-    else:
-        scores = _score(pairs)
+    scores = _score(pairs, alignweights)
 
     source_file.seek(0)
     target_file.seek(0)

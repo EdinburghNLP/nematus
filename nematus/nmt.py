@@ -798,10 +798,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     init_state = get_layer('ff')[1](tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    print 'Building f_init...',
+    print >>sys.stderr, 'Building f_init...',
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -829,10 +829,6 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # get the weighted averages of context for this target word y
     ctxs = proj[1]
-    
-    # TODO (maria) get the attention model weights proj[3]
-    # alignment matrix (attention model)
-    dec_alphas = proj[2]
 
     # alignment matrix (attention model)
     dec_alphas = proj[2]
@@ -866,7 +862,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print 'Building f_next..',
+    print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
 
@@ -874,7 +870,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         outs.append(dec_alphas)
 
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print 'Done'
+    print >>sys.stderr, 'Done'
 
     return f_init, f_next
 
@@ -975,7 +971,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
                 new_hyp_samples.append(hyp_samples[ti]+[wi])
                 new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
-                
                 new_hyp_scores[idx] = copy.copy(costs[idx])
                 new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
                 if return_alignment:
@@ -1044,11 +1039,9 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     probs = []
     n_done = 0
 
-    ### optional save weights mode.
-    if alignweights:
-        alignments_json = []
+    alignments_json = []
 
-    for x, y in iterator:  ##x is source, y is target.
+    for x, y in iterator:
         n_done += len(x)
 
         x, x_mask, y, y_mask = prepare_data(x, y,
@@ -1077,10 +1070,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         if verbose:
             print >>sys.stderr, '%d samples computed' % (n_done)
 
-    if alignweights:
-        return numpy.array(probs), alignments_json
-    else:
-        return numpy.array(probs)
+    return numpy.array(probs), alignments_json
 
 
 # optimizers
