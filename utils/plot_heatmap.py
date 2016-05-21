@@ -1,6 +1,7 @@
 import numpy
 import matplotlib.pyplot as plt
 import sys
+import json
 import argparse
 
 # input:
@@ -41,6 +42,8 @@ def plot_head_map(mma, target_labels, source_labels):
   #plt.tight_layout()
   plt.show()
 
+# column labels -> target words
+# row labels -> source words
 
 def read_alignment_matrix(f):
   header = f.readline().strip().split('|||')
@@ -55,7 +58,7 @@ def read_alignment_matrix(f):
   # target words
   target_labels = header[1].decode('UTF-8').split()
   target_labels.append('</s>')
- 
+
   mm = []
   for r in range(trg_count):
     alignment = map(float,f.readline().strip().split())
@@ -76,12 +79,51 @@ def read_plot_alignment_matrices(f, n):
     f.readline()
 
 
-parser = argparse.ArgumentParser()
-# '/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/en-de/test.alignment'
-parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                        default='/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/de-en/newstest2016-deen-src.de.k12.viz.alignment', metavar='PATH',
-                        help="Input file (default: standard input)")
+"""
+Adding functions to read the json format.
+"""
 
-args = parser.parse_args()
+def read_plot_alignment_json(file, n):
+    while (file):
+        sid, mma, target_labels, source_labels = read_alignment_json(file)
+        if mma is None:
+            return
+        if sid > n:
+            return
+        plot_head_map(mma, target_labels, source_labels)
 
-read_plot_alignment_matrices(args.input,10)
+def read_alignment_json(file):
+    data = file.readline() ##one line containing the json object.
+    if len(data.strip()) == 0:
+        return None, None, None, None
+    jdata = json.loads(data)
+    ## messy json encodings... TODO: make this better
+    jdata = json.loads(json.dumps(jdata).decode('unicode-escape').encode('utf8'))
+    #print jdata
+    sid = int(jdata["id"])
+    mma = numpy.array(jdata["matrix"])
+    ##target words
+    target_labels = jdata["target_sent"].split()
+    target_labels.append('</s>')
+    ##source words
+    source_labels = jdata["source_sent"].split()
+    source_labels.append('</s>')
+    return sid,mma, target_labels, source_labels
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    # '/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/en-de/test.alignment'
+    parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+                            default='/Users/mnadejde/Documents/workspace/MTMA2016/models/wmt16_systems/ro-en/newstest2016-roen-src.ro.alignment', metavar='PATH',
+                            help="Input file (default: standard input)")
+
+    parser.add_argument('--json', '-j', required = False,action="store_true",
+                            help="If this option is used, then read alignment matrix from a Json formatted file.")
+    args = parser.parse_args()
+
+    if args.json:
+        read_plot_alignment_json(args.input, 10)   ##n is the maximum number of sentences to process.
+    else:
+        read_plot_alignment_matrices(args.input,10)
+>>>>>>> origin/nematus-liucan

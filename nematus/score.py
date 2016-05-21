@@ -1,6 +1,8 @@
-'''
-Rescoring an n-best list of translations using a translation model.
-'''
+"""
+Given a parallel corpus of sentence pairs: with one-to-one of target and source sentences,
+produce the score, and optionally alignment for each pair.
+"""
+
 import sys
 import argparse
 import tempfile
@@ -19,7 +21,7 @@ from nmt import (pred_probs, load_params, build_model, prepare_data,
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
 
-def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights):
+def rescore_model(source_file, target_file, saveto, models, options, b, normalize, verbose, alignweights):
 
     trng = RandomStreams(1234)
 
@@ -80,48 +82,37 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
 
         return scores
 
-    lines = source_file.readlines()
-    nbest_lines = nbest_file.readlines()
+    pairs = TextIterator(source_file.name, target_file.name,
+                    options[0]['dictionaries'][0], options[0]['dictionaries'][1],
+                     n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
+                     batch_size=b,
+                     maxlen=float('inf'),
+                     sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
 
-    if alignweights: ### opening the temporary file.
+    ### optional save weights mode.
+    if alignweights:
+        scores, all_alignments = _score_align(pairs)
+    else:
+        scores = _score(pairs)
+
+    source_file.seek(0)
+    target_file.seek(0)
+    source_lines = source_file.readlines()
+    target_lines = target_file.readlines()
+
+    for i, line in enumerate(target_lines):
+        score_str = ' '.join(map(str,[s[i] for s in scores]))
+        saveto.write('{0} {1}\n'.format(line.strip(), score_str))
+
+    ### optional save weights mode.
+    if alignweights:
+        ### writing out the alignments.
         temp_name = saveto.name + ".json"
-        align_OUT = tempfile.NamedTemporaryFile(prefix=temp_name)
-
-    with tempfile.NamedTemporaryFile(prefix='rescore-tmpin') as tmp_in, tempfile.NamedTemporaryFile(prefix='rescore-tmpout') as tmp_out:
-        for line in nbest_lines:
-            linesplit = line.split(' ||| ')
-            idx = int(linesplit[0])   ##index from the source file. Starting from 0.
-            tmp_in.write(lines[idx])
-            tmp_out.write(linesplit[1] + '\n')
-
-        tmp_in.seek(0)
-        tmp_out.seek(0)
-        pairs = TextIterator(tmp_in.name, tmp_out.name,
-                        options[0]['dictionaries'][0], options[0]['dictionaries'][1],
-                         n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
-                         batch_size=b,
-                         maxlen=float('inf'),
-                         sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
-
-        ### optional save weights mode.
-        if alignweights:
-            scores, all_alignments = _score_align(pairs)
-        else:
-            scores = _score(pairs)
-
-        for i, line in enumerate(nbest_lines):
-            score_str = ' '.join(map(str,[s[i] for s in scores]))
-            saveto.write('{0} {1}\n'.format(line.strip(), score_str))
-
-        ### optional save weights mode.
-        if alignweights:
-            ### writing out the alignments.
+        with tempfile.NamedTemporaryFile(prefix=temp_name) as align_OUT:
             for line in all_alignments:
                 align_OUT.write(line + "\n")
-    ### combining the actual source and target words.
-    if alignweights:
-        combine_source_target_text(source_file, nbest_file, saveto.name, align_OUT)
-    align_OUT.close() ### closing the temporary file.
+            ### combining the actual source and target words.
+            combine_source_target_text_1to1(source_file, target_file, saveto.name, align_OUT)
 
 def main(models, source_file, nbest_file, saveto, b=80,
          normalize=False, verbose=False, alignweights=False):
