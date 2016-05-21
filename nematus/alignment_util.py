@@ -104,7 +104,7 @@ def combine_source_target_text_1to1(source_IN, target_IN, saveto, alignment_IN):
             alignment_OUT.write(jdata + "\n")
 
 
-def convert_to_nodes_edges(filename):
+def convert_to_nodes_edges_v1(filename):
     """
     Take as input the aligned file with file names ".withtext", and convert this into a file with nodes and edges.
     Which will later used for Visualization.
@@ -113,10 +113,10 @@ def convert_to_nodes_edges(filename):
         with open(filename + ".forweb" , "w") as OUT:
             in_lines = IN.readlines()
             for data in in_lines:
-                data4web = convert_to_nodes_edges_each(data)
+                data4web = convert_to_nodes_edges_each_v1(data)
                 OUT.write(data4web + "\n")
 
-def convert_to_nodes_edges_each(data):
+def convert_to_nodes_edges_each_v1(data):
     """
     give a single data object string, convert it into a json data string that is compatible with the Web interface.
     """
@@ -156,13 +156,79 @@ def convert_to_nodes_edges_each(data):
     #print web_data, "\n\n"
     return web_data
 
+def convert_to_nodes_edges_v2(filename):
+    """
+    Take as input the aligned file with file names ".withtext", and convert this into a file with nodes and edges.
+    Which will later used for Visualization.
+    """
+    with codecs.open(filename, "r", encoding="UTF-8") as IN:
+        with open(filename + ".forweb" , "w") as OUT:
+            in_lines = IN.readlines()
+            source_list = []
+            target_list = []
+            all_links = []
+            for sent_id in range(len(in_lines)):
+                data = in_lines[sent_id]
+                #print data
+                source_sent, target_sent, links = convert_to_nodes_edges_each_v2(data, sent_id)
+                source_list.append(source_sent)
+                target_list.append(target_sent)
+                all_links += links
+
+            jdata = {}
+            jdata["source_list"] = source_list
+            jdata["target_list"] = target_list
+            jdata["links"] = all_links
+            jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
+
+            OUT.write(jdata)
+
+def convert_to_nodes_edges_each_v2(data, sent_id):
+    """
+    give a single data object string, convert it into a json data string that is compatible with the Web interface.
+    """
+    #print data
+    jdata = json.loads(data)
+    #jdata = json.loads(json.dumps(jdata).decode('unicode-escape').encode('utf8'))
+    print jdata
+    source_words = jdata["source_sent"].encode('unicode-escape').strip().split()
+    source_words.append("EOS")
+    target_words = jdata["target_sent"].strip().split()
+    #print target_words
+    target_words.append("EOS")
+
+    #print target_words
+
+    matrix = jdata["matrix"]
+    n_rows = len(matrix)
+    n_cols = len(matrix[0])
+
+    links = []
+    for target_index in range(n_rows):
+        for source_index in range(n_cols):
+            five_tuple = []
+            score = matrix[target_index][source_index]
+            five_tuple.append(target_index)
+            five_tuple.append(sent_id)
+            five_tuple.append(score)
+            five_tuple.append(source_index)
+            five_tuple.append(sent_id)
+            links.append(five_tuple)
+
+    return source_words, target_words, links
+
 if __name__ == "__main__":
     """
     Run the conversion to Web format if needed.
     """
     input_file = sys.argv[1]
-    convert_to_nodes_edges(input_file)
+    convert_to_nodes_edges_v2(input_file)
 
+    import sys
+    reload(sys)
+    sys.setdefaultencoding('utf-8')
+### Json for web visuaslization format version 1.
+### This corresponds to convert_to_nodes_edges_each_v1; and convert_to_nodes_edges_v1.
 """
 {
   "nodes":[
@@ -180,5 +246,6 @@ if __name__ == "__main__":
 }
 """
 
-
+### Json for Web visualization format version 2.
+### This corresponds to
 
