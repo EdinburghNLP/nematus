@@ -890,7 +890,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     alignment = []
     if stochastic:
         sample_score = 0
-        sample_word_probs = 0
 
     live_k = 1
     dead_k = 0
@@ -935,8 +934,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             else:
                 nw = next_w_tmp[0]
             sample.append(nw)
-            #CHECK
-            sample_word_probs.append(next_p[0][0,nw])
             sample_score += next_p[0][0, nw]
             if nw == 0:
                 break
