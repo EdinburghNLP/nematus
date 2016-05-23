@@ -1428,7 +1428,7 @@ def train(dim_word=100,  # word vector dimensionality
                 # FIXME: random selection?
                 for jj in xrange(numpy.minimum(5, x.shape[1])):
                     stochastic = True
-                    sample, score = gen_sample([f_init], [f_next],
+                    sample, score, sample_word_probs, alignment = gen_sample([f_init], [f_next],
                                                x[:, jj][:, None],
                                                trng=trng, k=1,
                                                maxlen=30,
