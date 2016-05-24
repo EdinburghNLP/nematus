@@ -1471,7 +1471,7 @@ def train(dim_word=100,  # word vector dimensionality
             # validate model on validation set and early stop if necessary
             if numpy.mod(uidx, validFreq) == 0:
                 use_noise.set_value(0.)
-                valid_errs = pred_probs(f_log_probs, prepare_data,
+                valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
                 valid_err = valid_errs.mean()
                 history_errs.append(valid_err)
@@ -1516,7 +1516,7 @@ def train(dim_word=100,  # word vector dimensionality
         zipp(best_p, tparams)
 
     use_noise.set_value(0.)
-    valid_err = pred_probs(f_log_probs, prepare_data,
+    valid_err, alignment = pred_probs(f_log_probs, prepare_data,
                            model_options, valid).mean()
 
     print 'Valid ', valid_err
