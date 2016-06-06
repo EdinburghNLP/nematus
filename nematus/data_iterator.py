@@ -20,7 +20,8 @@ class TextIterator:
                  n_words_source=-1,
                  n_words_target=-1,
                  shuffle_each_epoch=False,
-                 sort_by_length=True):
+                 sort_by_length=True,
+                 maxibatch_size=20):
         if shuffle_each_epoch:
             shuffle.main([source, target])
             self.source = fopen(source+'.shuf', 'r')
@@ -42,7 +43,9 @@ class TextIterator:
 
         self.source_buffer = []
         self.target_buffer = []
-        self.k = batch_size * 20
+        self.k = batch_size * maxibatch_size
+        
+        print "K=", self.k
 
         self.end_of_data = False
 

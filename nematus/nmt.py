@@ -1228,7 +1228,8 @@ def train(dim_word=100,  # word vector dimensionality
           overwrite=False,
           external_validation_script=None,
           shuffle_each_epoch=True,
-          finetune=False):
+          finetune=False,
+          maxibatch_size=20): #How many minibatches to load at one time
 
     # Model options
     model_options = locals().copy()
@@ -1258,7 +1259,8 @@ def train(dim_word=100,  # word vector dimensionality
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
-                         shuffle_each_epoch=shuffle_each_epoch)
+                         shuffle_each_epoch=shuffle_each_epoch,
+                         maxibatch_size=maxibatch_size)
     valid = TextIterator(valid_datasets[0], valid_datasets[1],
                          dictionaries[0], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
