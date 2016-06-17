@@ -57,7 +57,6 @@ class TextIterator:
         self.target_buffer = []
         self.k = batch_size * maxibatch_size
         
-        print "K=", self.k
 
         self.end_of_data = False
 
