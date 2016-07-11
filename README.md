@@ -45,14 +45,9 @@ you can run Nematus locally. To install it, execute `python setup.py install`
 USAGE INSTRUCTIONS
 ------------------
 
-Change the hard-coded paths to data in `test/train_nmt.py` then run
-```
-THEANO_FLAGS=device=gpu,floatX=float32 python train_nmt.py 
-```
+instructions to train a model are provided in https://github.com/rsennrich/wmt16-scripts
 
-To decode, see the command `test/test.sh`
-
-A sample setup that includes preprocessing is provided at https://github.com/rsennrich/wmt16-scripts/tree/master/sample
+sample models, and instructions on using them for translation, are provided at http://statmt.org/rsennrich/wmt16_systems/
 
 
 PUBLICATIONS
