@@ -1098,44 +1098,42 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
 # optimizers
 # name(hyperp, tparams, grads, inputs (list), cost) = f_grad_shared, f_update
-def adam(lr, tparams, grads, inp, cost):
-    gshared = [theano.shared(p.get_value() * 0.,
-                             name='%s_grad' % k)
+def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8):
+
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad' % k)
                for k, p in tparams.iteritems()]
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile)
 
-    lr0 = 0.0002
-    b1 = 0.1
-    b2 = 0.001
+
+    lr0 = 0.0001
+    b1 = 0.9
+    b2 = 0.999
     e = 1e-8
 
     updates = []
 
-    i = theano.shared(numpy.float32(0.))
-    i_t = i + 1.
-    fix1 = 1. - b1**(i_t)
-    fix2 = 1. - b2**(i_t)
-    lr_t = lr0 * (tensor.sqrt(fix2) / fix1)
+    t_prev = theano.shared(numpy.float32(0.))
+    t = t_prev + 1.
+    lr_t = lr * tensor.sqrt(1. - beta2**t) / (1. - beta1**t)
 
     for p, g in zip(tparams.values(), gshared):
-        m = theano.shared(p.get_value() * 0.)
-        v = theano.shared(p.get_value() * 0.)
-        m_t = (b1 * g) + ((1. - b1) * m)
-        v_t = (b2 * tensor.sqr(g)) + ((1. - b2) * v)
-        g_t = m_t / (tensor.sqrt(v_t) + e)
-        p_t = p - (lr_t * g_t)
+        m = theano.shared(p.get_value() * 0., p.name + '_mean')
+        v = theano.shared(p.get_value() * 0., p.name + '_variance')
+        m_t = beta1 * m + (1. - beta1) * g
+        v_t = beta2 * v + (1. - beta2) * g**2
+        step = lr_t * m_t / (tensor.sqrt(v_t) + e)
+        p_t = p - step
         updates.append((m, m_t))
         updates.append((v, v_t))
         updates.append((p, p_t))
-    updates.append((i, i_t))
+    updates.append((t_prev, t))
 
     f_update = theano.function([lr], [], updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return f_grad_shared, f_update
-
 
 def adadelta(lr, tparams, grads, inp, cost):
     zipped_grads = [theano.shared(p.get_value() * numpy.float32(0.),
