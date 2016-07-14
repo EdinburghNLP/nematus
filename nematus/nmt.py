@@ -1106,12 +1106,6 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8):
 
     f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile)
 
-
-    lr0 = 0.0001
-    b1 = 0.9
-    b2 = 0.999
-    e = 1e-8
-
     updates = []
 
     t_prev = theano.shared(numpy.float32(0.))
