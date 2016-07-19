@@ -1561,8 +1561,9 @@ def train(dim_word=100,  # word vector dimensionality
         zipp(best_p, tparams)
 
     use_noise.set_value(0.)
-    valid_err, alignment = pred_probs(f_log_probs, prepare_data,
-                           model_options, valid).mean()
+    valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
+                                       model_options, valid)
+    valid_err = valid_errs.mean()
 
     print 'Valid ', valid_err
 
