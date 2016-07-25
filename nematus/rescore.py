@@ -42,11 +42,10 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         use_noise.set_value(0.)
 
         if alignweights:
-            print "\t*** Save weight mode ON, alignment matrix will be saved."
+            sys.stderr.write("\t*** Save weight mode ON, alignment matrix will be saved.\n")
             outputs = [cost, opt_ret['dec_alphas']]
             f_log_probs = theano.function(inps, outputs)
         else:
-            print "\t*** Save weight mode OFF, alignment matrix will not be saved."
             f_log_probs = theano.function(inps, cost)
 
         fs_log_probs.append(f_log_probs)
@@ -54,11 +53,13 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
     def _score(pairs, alignweights=False):
         # sample given an input sequence and obtain scores
         scores = []
+        alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            score_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
-            scores.append(score_this_batch)
+            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            scores.append(score)
+            alignments.append(alignment)
 
-        return scores
+        return scores, alignments
 
     lines = source_file.readlines()
     nbest_lines = nbest_file.readlines()

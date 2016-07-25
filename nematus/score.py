@@ -44,11 +44,10 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
         use_noise.set_value(0.)
 
         if alignweights:
-            print "\t*** Save weight mode ON, alignment matrix will be saved."
+            sys.stderr.write("\t*** Save weight mode ON, alignment matrix will be saved.\n")
             outputs = [cost, opt_ret['dec_alphas']]
             f_log_probs = theano.function(inps, outputs)
         else:
-            print "\t*** Save weight mode OFF, alignment matrix will not be saved."
             f_log_probs = theano.function(inps, cost)
 
         fs_log_probs.append(f_log_probs)
@@ -56,20 +55,22 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
     def _score(pairs, alignweights=False):
         # sample given an input sequence and obtain scores
         scores = []
+        alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            score_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
-            scores.append(score_this_batch)
+            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            scores.append(score)
+            alignments.append(alignment)
 
-        return scores
+        return scores, alignments
 
     pairs = TextIterator(source_file.name, target_file.name,
                     options[0]['dictionaries'][0], options[0]['dictionaries'][1],
                      n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                      batch_size=b,
                      maxlen=float('inf'),
-                     sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
+                     sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd want to resort after
 
-    scores = _score(pairs, alignweights)
+    scores, alignments = _score(pairs, alignweights)
 
     source_file.seek(0)
     target_file.seek(0)
@@ -143,16 +144,16 @@ if __name__ == "__main__":
     parser.add_argument('--source', '-s', type=argparse.FileType('r'),
                         required=True, metavar='PATH',
                         help="Source text file")
-    parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                        default=sys.stdin, metavar='PATH',
-                        help="Input n-best list file (default: standard input)")
+    parser.add_argument('--target', '-t', type=argparse.FileType('r'),
+                        required=True, metavar='PATH',
+                        help="Target text file")
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, metavar='PATH',
                         help="Output file (default: standard output)")
     parser.add_argument('--walign', '-w',required = False,action="store_true",
-                        help="Whether to store the alignment weights or not. If specified, weights will be saved in <input>.alignment")
+                        help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment")
 
     args = parser.parse_args()
 
-    main(args.models, args.source, args.input,
+    main(args.models, args.source, args.target,
          args.output, b=args.b, normalize=args.n, verbose=args.v, alignweights=args.walign)
