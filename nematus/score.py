@@ -64,7 +64,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
         return scores, alignments
 
     pairs = TextIterator(source_file.name, target_file.name,
-                    options[0]['dictionaries'][0], options[0]['dictionaries'][1],
+                    options[0]['dictionaries'][:-1], options[0]['dictionaries'][1],
                      n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                      batch_size=b,
                      maxlen=float('inf'),
@@ -113,15 +113,27 @@ def main(models, source_file, nbest_file, saveto, b=80,
         if not 'dropout_target' in options[-1]:
             options[-1]['dropout_target'] = 0
 
-    dictionary, dictionary_target = options[0]['dictionaries']
+    dictionaries = options[0]['dictionaries']
+
+    dictionaries_source = dictionaries[:-1]
+    dictionary_target = dictionaries[-1]
 
     # load source dictionary and invert
-    word_dict = load_dict(dictionary)
-    word_idict = dict()
-    for kk, vv in word_dict.iteritems():
-        word_idict[vv] = kk
-    word_idict[0] = '<eos>'
-    word_idict[1] = 'UNK'
+    word_dicts = []
+    word_idicts = []
+    for dictionary in dictionaries_source:
+        word_dict = load_dict(dictionary)
+        if options[0]['n_words_src']:
+            for key, idx in word_dict.items():
+                if idx >= options[0]['n_words_src']:
+                    del word_dict[key]
+        word_idict = dict()
+        for kk, vv in word_dict.iteritems():
+            word_idict[vv] = kk
+        word_idict[0] = '<eos>'
+        word_idict[1] = 'UNK'
+        word_dicts.append(word_dict)
+        word_idicts.append(word_idict)
 
     # load target dictionary and invert
     word_dict_trg = load_dict(dictionary_target)
