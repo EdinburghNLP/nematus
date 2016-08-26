@@ -222,7 +222,11 @@ def main(models, source_file, saveto, save_alignment, k=5,
             samples, scores, word_probs, alignment = trans
             order = numpy.argsort(scores)
             for j in order:
-                saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
+                if print_word_probabilities:
+                    probs = " ||| " + " ".join("{0}".format(prob) for prob in word_probs[j])
+                else:
+                    probs = ""
+                saveto.write('{0} ||| {1} ||| {2}{3}\n'.format(i, _seqs2words(samples[j]), scores[j], probs))
                 # print alignment matrix for each hypothesis
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
                 if save_alignment is not None:
