@@ -10,17 +10,17 @@ def fopen(filename, mode='r'):
         return gzip.open(filename, mode)
     return open(filename, mode)
 
-
 class TextIterator:
     """Simple Bitext iterator."""
     def __init__(self, source, target,
-                 source_dict, target_dict,
+                 source_dicts, target_dict,
                  batch_size=128,
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
                  shuffle_each_epoch=False,
-                 sort_by_length=True):
+                 sort_by_length=True,
+                 maxibatch_size=20):
         if shuffle_each_epoch:
             shuffle.main([source, target])
             self.source = fopen(source+'.shuf', 'r')
@@ -28,7 +28,9 @@ class TextIterator:
         else:
             self.source = fopen(source, 'r')
             self.target = fopen(target, 'r')
-        self.source_dict = load_dict(source_dict)
+        self.source_dicts = []
+        for source_dict in source_dicts:
+            self.source_dicts.append(load_dict(source_dict))
         self.target_dict = load_dict(target_dict)
 
         self.batch_size = batch_size
@@ -37,12 +39,24 @@ class TextIterator:
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
 
+        if self.n_words_source > 0:
+            for d in self.source_dicts:
+                for key, idx in d.items():
+                    if idx >= self.n_words_source:
+                        del d[key]
+
+        if self.n_words_target > 0:
+                for key, idx in self.target_dict.items():
+                    if idx >= self.n_words_target:
+                        del self.target_dict[key]
+
         self.shuffle = shuffle_each_epoch
         self.sort_by_length = sort_by_length
 
         self.source_buffer = []
         self.target_buffer = []
-        self.k = batch_size * 20
+        self.k = batch_size * maxibatch_size
+        
 
         self.end_of_data = False
 
@@ -112,10 +126,11 @@ class TextIterator:
                     ss = self.source_buffer.pop()
                 except IndexError:
                     break
-                ss = [self.source_dict[w] if w in self.source_dict else 1
-                      for w in ss]
-                if self.n_words_source > 0:
-                    ss = [w if w < self.n_words_source else 1 for w in ss]
+                tmp = []
+                for w in ss:
+                    w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                    tmp.append(w)
+                ss = tmp
 
                 # read from source file and map to word index
                 tt = self.target_buffer.pop()

@@ -8,6 +8,7 @@ It was used to produce top-scoring systems at the WMT 16 shared translation task
 
 The changes to Nematus include:
 
+ - arbitrary input features (factors)
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - automatic training set reshuffling between epochs
@@ -44,14 +45,9 @@ you can run Nematus locally. To install it, execute `python setup.py install`
 USAGE INSTRUCTIONS
 ------------------
 
-Change the hard-coded paths to data in `test/train_nmt.py` then run
-```
-THEANO_FLAGS=device=gpu,floatX=float32 python train_nmt.py 
-```
+instructions to train a model are provided in https://github.com/rsennrich/wmt16-scripts
 
-To decode, see the command `test/test.sh`
-
-A sample setup that includes preprocessing is provided at https://github.com/rsennrich/wmt16-scripts/tree/master/sample
+sample models, and instructions on using them for translation, are provided at http://statmt.org/rsennrich/wmt16_systems/
 
 
 PUBLICATIONS
@@ -63,4 +59,6 @@ Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio (2015): Neural Machine Translatio
 
 for the changes specific to Nematus, please consider the following papers:
 
-TBD
+Sennrich, Rico, Haddow, Barry, Birch, Alexandra (2016): Edinburgh Neural Machine Translation Systems for WMT 16, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany
+
+Sennrich, Rico, Haddow, Barry (2016): Linguistic Input Features Improve Neural Machine Translation, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany

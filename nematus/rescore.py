@@ -42,11 +42,10 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         use_noise.set_value(0.)
 
         if alignweights:
-            print "\t*** Save weight mode ON, alignment matrix will be saved."
+            sys.stderr.write("\t*** Save weight mode ON, alignment matrix will be saved.\n")
             outputs = [cost, opt_ret['dec_alphas']]
             f_log_probs = theano.function(inps, outputs)
         else:
-            print "\t*** Save weight mode OFF, alignment matrix will not be saved."
             f_log_probs = theano.function(inps, cost)
 
         fs_log_probs.append(f_log_probs)
@@ -54,11 +53,13 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
     def _score(pairs, alignweights=False):
         # sample given an input sequence and obtain scores
         scores = []
+        alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            score_this_batch = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
-            scores.append(score_this_batch)
+            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            scores.append(score)
+            alignments.append(alignment)
 
-        return scores
+        return scores, alignments
 
     lines = source_file.readlines()
     nbest_lines = nbest_file.readlines()
@@ -77,7 +78,7 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         tmp_in.seek(0)
         tmp_out.seek(0)
         pairs = TextIterator(tmp_in.name, tmp_out.name,
-                        options[0]['dictionaries'][0], options[0]['dictionaries'][1],
+                        options[0]['dictionaries'][:-1], options[0]['dictionaries'][1],
                          n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                          batch_size=b,
                          maxlen=float('inf'),
@@ -120,15 +121,27 @@ def main(models, source_file, nbest_file, saveto, b=80,
         if not 'dropout_target' in options[-1]:
             options[-1]['dropout_target'] = 0
 
-    dictionary, dictionary_target = options[0]['dictionaries']
+    dictionaries = options[0]['dictionaries']
+
+    dictionaries_source = dictionaries[:-1]
+    dictionary_target = dictionaries[-1]
 
     # load source dictionary and invert
-    word_dict = load_dict(dictionary)
-    word_idict = dict()
-    for kk, vv in word_dict.iteritems():
-        word_idict[vv] = kk
-    word_idict[0] = '<eos>'
-    word_idict[1] = 'UNK'
+    word_dicts = []
+    word_idicts = []
+    for dictionary in dictionaries_source:
+        word_dict = load_dict(dictionary)
+        if options[0]['n_words_src']:
+            for key, idx in word_dict.items():
+                if idx >= options[0]['n_words_src']:
+                    del word_dict[key]
+        word_idict = dict()
+        for kk, vv in word_dict.iteritems():
+            word_idict[vv] = kk
+        word_idict[0] = '<eos>'
+        word_idict[1] = 'UNK'
+        word_dicts.append(word_dict)
+        word_idicts.append(word_idict)
 
     # load target dictionary and invert
     word_dict_trg = load_dict(dictionary_target)

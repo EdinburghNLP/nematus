@@ -43,7 +43,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
     def _translate(seq):
         # sample given an input sequence and obtain scores
         sample, score, word_probs, alignment = gen_sample(fs_init, fs_next,
-                                   numpy.array(seq).reshape([len(seq), 1]),
+                                   numpy.array(seq).T.reshape([len(seq[0]), len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
                                    stochastic=False, argmax=False, return_alignment=return_alignment, suppress_unk=suppress_unk)
 
@@ -120,16 +120,32 @@ def main(models, source_file, saveto, save_alignment, k=5,
             options[-1]['dropout_source'] = 0
         if not 'dropout_target' in options[-1]:
             options[-1]['dropout_target'] = 0
+        if not 'factors' in options[-1]:
+            options[-1]['factors'] = 1
+        if not 'dim_per_factor' in options[-1]:
+            options[-1]['dim_per_factor'] = [options[-1]['dim_word']]
 
-    dictionary, dictionary_target = options[0]['dictionaries']
+    dictionaries = options[0]['dictionaries']
+
+    dictionaries_source = dictionaries[:-1]
+    dictionary_target = dictionaries[-1]
 
     # load source dictionary and invert
-    word_dict = load_dict(dictionary)
-    word_idict = dict()
-    for kk, vv in word_dict.iteritems():
-        word_idict[vv] = kk
-    word_idict[0] = '<eos>'
-    word_idict[1] = 'UNK'
+    word_dicts = []
+    word_idicts = []
+    for dictionary in dictionaries_source:
+        word_dict = load_dict(dictionary)
+        if options[0]['n_words_src']:
+            for key, idx in word_dict.items():
+                if idx >= options[0]['n_words_src']:
+                    del word_dict[key]
+        word_idict = dict()
+        for kk, vv in word_dict.iteritems():
+            word_idict[vv] = kk
+        word_idict[0] = '<eos>'
+        word_idict[1] = 'UNK'
+        word_dicts.append(word_dict)
+        word_idicts.append(word_idict)
 
     # load target dictionary and invert
     word_dict_trg = load_dict(dictionary_target)
@@ -165,9 +181,18 @@ def main(models, source_file, saveto, save_alignment, k=5,
                 words = list(line.decode('utf-8').strip())
             else:
                 words = line.strip().split()
-            x = map(lambda w: word_dict[w] if w in word_dict else 1, words)
-            x = map(lambda ii: ii if ii < options[0]['n_words_src'] else 1, x)
-            x += [0]
+
+            x = []
+            for w in words:
+                w = [word_dicts[i][f] if f in word_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                if len(w) != options[0]['factors']:
+                    sys.stderr.write('Error: expected {0} factors, but input word has {1}\n'.format(options[0]['factors'], len(w)))
+                    for midx in xrange(n_process):
+                        processes[midx].terminate()
+                    sys.exit(1)
+                x.append(w)
+
+            x += [[0]*options[0]['factors']]
             queue.put((idx, x))
             source_sentences.append(words)
         return idx+1, source_sentences
@@ -197,7 +222,11 @@ def main(models, source_file, saveto, save_alignment, k=5,
             samples, scores, word_probs, alignment = trans
             order = numpy.argsort(scores)
             for j in order:
-                saveto.write('{0} ||| {1} ||| {2}\n'.format(i, _seqs2words(samples[j]), scores[j]))
+                if print_word_probabilities:
+                    probs = " ||| " + " ".join("{0}".format(prob) for prob in word_probs[j])
+                else:
+                    probs = ""
+                saveto.write('{0} ||| {1} ||| {2}{3}\n'.format(i, _seqs2words(samples[j]), scores[j], probs))
                 # print alignment matrix for each hypothesis
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
                 if save_alignment is not None:
