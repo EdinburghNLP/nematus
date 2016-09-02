@@ -8,7 +8,7 @@ It was used to produce top-scoring systems at the WMT 16 shared translation task
 
 The changes to Nematus include:
 
- - arbitrary input features (factors)
+ - arbitrary input features (factored neural machine translation)
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - automatic training set reshuffling between epochs
