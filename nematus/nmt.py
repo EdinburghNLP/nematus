@@ -1307,7 +1307,7 @@ def train(dim_word=100,  # word vector dimensionality
         print 'Using domain interpolation with initial ratio %s, increase rate %s' % (domain_interpolation_min, domain_interpolation_inc)
         domain_interpolation_cur = domain_interpolation_min
         train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
-                         dictionaries[0], dictionaries[1],
+                         dictionaries[:-1], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
@@ -1315,7 +1315,8 @@ def train(dim_word=100,  # word vector dimensionality
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
                          indomain_target=domain_interpolation_indomain_datasets[1], 
-                         interpolation_rate=domain_interpolation_cur)
+                         interpolation_rate=domain_interpolation_cur,
+                         maxibatch_size=maxibatch_size)
     else:
         train = TextIterator(datasets[0], datasets[1],
                          dictionaries[:-1], dictionaries[-1],
