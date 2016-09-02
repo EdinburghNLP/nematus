@@ -1296,10 +1296,11 @@ def train(dim_word=100,  # word vector dimensionality
         print 'Reloading model options'
         try:
             with open('%s.json' % saveto, 'rb') as f:
-                model_options = json.load(f)
+                loaded_model_options = json.load(f)
         except:
             with open('%s.pkl' % saveto, 'rb') as f:
-                model_options = pkl.load(f)
+                loaded_model_options = pkl.load(f)
+        model_options.update(loaded_model_options)
 
     print 'Loading data'
     domain_interpolation_cur = None
