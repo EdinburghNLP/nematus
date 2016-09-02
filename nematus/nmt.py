@@ -24,6 +24,8 @@ from data_iterator import TextIterator
 from util import load_dict
 from alignment_util import *
 
+from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
+
 profile = False
 
 
@@ -1198,11 +1200,12 @@ def train(dim_word=100,  # word vector dimensionality
           finish_after=10000000,  # finish after this many updates
           dispFreq=100,
           decay_c=0.,  # L2 regularization penalty
+          map_decay_c=0., # L2 regularization penalty towards original weights
           alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
           lrate=0.01,  # learning rate
-          n_words_src=100000,  # source vocabulary size
-          n_words=100000,  # target vocabulary size
+          n_words_src=None,  # source vocabulary size
+          n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
           optimizer='rmsprop',
           batch_size=16,
@@ -1228,7 +1231,13 @@ def train(dim_word=100,  # word vector dimensionality
           overwrite=False,
           external_validation_script=None,
           shuffle_each_epoch=True,
-          finetune=False):
+          finetune=False,
+          finetune_only_last=False,
+          sort_by_length=True,
+          use_domain_interpolation=False,
+          domain_interpolation_min=0.1,
+          domain_interpolation_inc=0.1,
+          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr']):
 
     # Model options
     model_options = locals().copy()
@@ -1242,6 +1251,13 @@ def train(dim_word=100,  # word vector dimensionality
         for kk, vv in worddicts[ii].iteritems():
             worddicts_r[ii][vv] = kk
 
+    if n_words_src is None:
+	n_words_src = len(worddicts[0])
+        model_options['n_words_src'] = n_words_src
+    if n_words is None:
+	n_words = len(worddicts[1])
+        model_options['n_words'] = n_words
+
     # reload options
     if reload_ and os.path.exists(saveto):
         print 'Reloading model options'
@@ -1253,12 +1269,28 @@ def train(dim_word=100,  # word vector dimensionality
                 model_options = pkl.load(f)
 
     print 'Loading data'
-    train = TextIterator(datasets[0], datasets[1],
+    domain_interpolation_cur = None
+    if use_domain_interpolation:
+        print 'Using domain interpolation with initial ratio %s, increase rate %s' % (domain_interpolation_min, domain_interpolation_inc)
+        domain_interpolation_cur = domain_interpolation_min
+        train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
                          dictionaries[0], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
-                         shuffle_each_epoch=shuffle_each_epoch)
+                         shuffle_each_epoch=shuffle_each_epoch,
+                         sort_by_length=sort_by_length,
+                         indomain_source=domain_interpolation_indomain_datasets[0],
+                         indomain_target=domain_interpolation_indomain_datasets[1], 
+                         interpolation_rate=domain_interpolation_cur)
+    else:
+        train = TextIterator(datasets[0], datasets[1],
+                         dictionaries[0], dictionaries[1],
+                         n_words_source=n_words_src, n_words_target=n_words,
+                         batch_size=batch_size,
+                         maxlen=maxlen,
+                         shuffle_each_epoch=shuffle_each_epoch,
+                         sort_by_length=sort_by_length)
     valid = TextIterator(valid_datasets[0], valid_datasets[1],
                          dictionaries[0], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
@@ -1309,6 +1341,16 @@ def train(dim_word=100,  # word vector dimensionality
              opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
         cost += alpha_reg
 
+     # apply L2 regularisation to loaded model (map training)
+    if map_decay_c > 0:
+        map_decay_c = theano.shared(numpy.float32(map_decay_c), name="map_decay_c")
+        weight_map_decay = 0.
+        for kk, vv in tparams.iteritems():
+            init_value = theano.shared(vv.get_value(), name= kk + "_init")
+            weight_map_decay += ((vv -init_value) ** 2).sum()
+        weight_map_decay *= map_decay_c
+        cost += weight_map_decay
+
     # after all regularizers - compile the computational graph for cost
     print 'Building f_cost...',
     f_cost = theano.function(inps, cost, profile=profile)
@@ -1317,6 +1359,12 @@ def train(dim_word=100,  # word vector dimensionality
     # allow finetuning with fixed embeddings
     if finetune:
         updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key not in ['Wemb', 'Wemb_dec']])
+    else:
+        updated_params = tparams
+
+    # allow finetuning of only last layer (becomes a linear model training problem)
+    if finetune_only_last:
+        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
     else:
         updated_params = tparams
 
@@ -1483,9 +1531,17 @@ def train(dim_word=100,  # word vector dimensionality
                         numpy.array(history_errs)[:-patience].min():
                     bad_counter += 1
                     if bad_counter > patience:
-                        print 'Early Stop!'
-                        estop = True
-                        break
+                        if use_domain_interpolation and (domain_interpolation_cur < 1.0):
+                            domain_interpolation_cur = min(domain_interpolation_cur + domain_interpolation_inc, 1.0)
+                            print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % domain_interpolation_cur
+                            train.adjust_domain_interpolation_rate(domain_interpolation_cur)
+                            if best_p is not None:
+                                zipp(best_p, tparams)
+                            bad_counter = 0
+                        else:
+                            print 'Early Stop!'
+                            estop = True
+                            break
 
                 if numpy.isnan(valid_err):
                     ipdb.set_trace()
@@ -1517,11 +1573,14 @@ def train(dim_word=100,  # word vector dimensionality
 
     use_noise.set_value(0.)
     valid_err, alignment = pred_probs(f_log_probs, prepare_data,
-                           model_options, valid).mean()
+                           model_options, valid)#.mean()
 
     print 'Valid ', valid_err
 
-    params = copy.copy(best_p)
+    if best_p is not None:
+        params = copy.copy(best_p)
+    else:
+        params = unzip(tparams)
     numpy.savez(saveto, zipped_params=best_p,
                 history_errs=history_errs,
                 uidx=uidx,
