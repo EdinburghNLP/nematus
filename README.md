@@ -41,6 +41,17 @@ the following packages are optional, but *highly* recommended
 
 you can run Nematus locally. To install it, execute `python setup.py install`
 
+DOCKER USAGE
+------------
+
+You can also create docker image by running:
+
+docker build -t nematus-docker .
+
+
+And then starting docker machine with current directory (which could contain your scripts) by:
+
+docker run -v `pwd`:/playground -it nematus-docker
 
 USAGE INSTRUCTIONS
 ------------------

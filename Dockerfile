@@ -19,13 +19,13 @@ WORKDIR /path/to/
 
 # Install mosesdecoder
 RUN git clone https://github.com/moses-smt/mosesdecoder
-#WORKDIR /mosesdecoder
 
 # Install subwords
 RUN git clone https://github.com/rsennrich/subword-nmt
 
 # Install nematus
-RUN git clone https://github.com/rsennrich/nematus.git
+#RUN git clone https://github.com/rsennrich/nematus.git
+COPY . /path/to/nematus
 WORKDIR /path/to/nematus
 RUN python setup.py install
 
