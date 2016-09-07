@@ -1,0 +1,50 @@
+FROM nvidia/cuda:7.5-cudnn5-devel
+MAINTAINER Tom Kocmi <kocmi@ufal.mff.cuni.cz>
+
+# Install git, wget, python-dev, pip and other dependencies
+RUN apt-get update && apt-get install -y \
+  git \
+  wget \
+  cmake \
+  vim \
+  nano \
+  python3 \
+  libopenblas-dev \
+  python-dev \
+  python-pip \
+  python-nose \
+  python-numpy \
+  python-scipy
+
+RUN pip install --upgrade pip
+RUN pip install -U setuptools
+RUN pip install numexpr cython ipdb
+
+# Set CUDA_ROOT
+ENV CUDA_ROOT /usr/local/cuda/bin
+# Install bleeding-edge Theano
+RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
+# Set up .theanorc for CUDA
+RUN echo "[global]\ndevice=gpu\nfloatX=float32\noptimizer_including=cudnn\n[lib]\ncnmem=0.1\n[nvcc]\nfastmath=True" > /root/.theanorc
+
+
+RUN mkdir -p /path/to
+WORKDIR /path/to/
+
+# Install mosesdecoder
+RUN git clone https://github.com/moses-smt/mosesdecoder
+
+# Install subwords
+RUN git clone https://github.com/rsennrich/subword-nmt
+
+# Install nematus
+COPY . /path/to/nematus
+WORKDIR /path/to/nematus
+RUN python setup.py install
+
+WORKDIR /
+
+# playground will contain user defined scripts, it should be run as:
+# nvidia-docker run -v `pwd`:/playground -it nematus-docker
+RUN mkdir playground
+WORKDIR /playground

@@ -31,7 +31,7 @@ Nematus requires the following packages:
  - Theano >= 0.7 (and its dependencies).
 
 we recommend executing the following command in a Python virtual environment:
-   pip install numpy numexpr cython tables theano ipdb
+   `pip install numpy numexpr cython tables theano ipdb`
 
 the following packages are optional, but *highly* recommended
 
@@ -44,14 +44,18 @@ you can run Nematus locally. To install it, execute `python setup.py install`
 DOCKER USAGE
 ------------
 
-You can also create docker image by running:
+You can also create docker image by running following command, where you change suffix with either `cpu` or `gpu`:
 
-docker build -t nematus-docker .
+`docker build -t nematus-docker -f Dockerfile.suffix .`
 
 
-And then starting docker machine with current directory (which could contain your scripts) by:
+And then starting CPU docker machine with current directory (which could contain your scripts) by:
 
-docker run -v `pwd`:/playground -it nematus-docker
+``docker run -v `pwd`:/playground -it nematus-docker``
+
+For GPU you need to have nvidia-docker installed and run:
+
+``nvidia-docker run -v `pwd`:/playground -it nematus-docker``
 
 USAGE INSTRUCTIONS
 ------------------
