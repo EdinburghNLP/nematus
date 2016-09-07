@@ -46,16 +46,16 @@ DOCKER USAGE
 
 You can also create docker image by running following command, where you change suffix with either `cpu` or `gpu`:
 
-`docker build -t nematus-docker -f Dockerfile.`suffix` .`
+`docker build -t nematus-docker -f Dockerfile.suffix .`
 
 
 And then starting CPU docker machine with current directory (which could contain your scripts) by:
 
-`docker run -v \`pwd\`:/playground -it nematus-docker`
+``docker run -v `pwd`:/playground -it nematus-docker``
 
 For GPU you need to have nvidia-docker installed and run:
 
-`nvidia-docker run -v \`pwd\`:/playground -it nematus-docker`
+``nvidia-docker run -v `pwd`:/playground -it nematus-docker``
 
 USAGE INSTRUCTIONS
 ------------------
