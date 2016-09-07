@@ -15,7 +15,7 @@ from util import load_dict
 def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
 
     from nmt import (build_sampler, gen_sample, load_params,
-                 init_params, init_tparams)
+                 init_params, init_theano_params)
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     from theano import shared
@@ -32,7 +32,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
         # load model parameters and set theano shared variables
         params = load_params(model, params)
-        tparams = init_tparams(params)
+        tparams = init_theano_params(params)
 
         # word index
         f_init, f_next = build_sampler(tparams, option, use_noise, trng, return_alignment=return_alignment)

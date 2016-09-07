@@ -1,3 +1,7 @@
+'''
+Utility functions
+'''
+
 import json
 import cPickle as pkl
 
@@ -12,3 +16,5 @@ def load_dict(filename):
     except:
         with open(filename, 'rb') as f:
             return pkl.load(f)
+
+
