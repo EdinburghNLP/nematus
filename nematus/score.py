@@ -15,8 +15,8 @@ from data_iterator import TextIterator
 from util import load_dict
 from alignment_util import *
 
-from nmt import (pred_probs, load_params, build_model, prepare_data,
-    init_params, init_tparams)
+from theano_util import (load_params, init_theano_params)
+from nmt import (pred_probs, build_model, prepare_data, init_params)
 
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
@@ -33,7 +33,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
 
         # load model parameters and set theano shared variables
         params = load_params(model, params)
-        tparams = init_tparams(params)
+        tparams = init_theano_params(params)
 
         trng, use_noise, \
             x, x_mask, y, y_mask, \
