@@ -99,7 +99,7 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None, rank='full
         params[pp(prefix, 'Ux')] = Ux
     else:
         if share_proj_matrix:
-            U_proj = norm_weight(nin, rank)
+            U_proj = norm_weight(dim, rank)
             params[pp(prefix, 'U_proj')] = U_proj
         else:
             U_proj_u = norm_weight(dim, rank)
