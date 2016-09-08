@@ -2,6 +2,7 @@
 Layer definitions
 '''
 
+import sys
 import json
 import cPickle as pkl
 import numpy
@@ -70,7 +71,7 @@ def fflayer(tparams, state_below, options, prefix='rconv',
 
 
 # GRU layer
-def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
+def param_init_gru(options, params, prefix='gru', nin=None, dim=None, rank='full', share_proj_matrix=False, plus_diagonal=True):
     if nin is None:
         nin = options['dim_proj']
     if dim is None:
@@ -82,19 +83,44 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
     params[pp(prefix, 'W')] = W
     params[pp(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
 
-    # recurrent transformation weights for gates
-    U = numpy.concatenate([ortho_weight(dim),
-                           ortho_weight(dim)], axis=1)
-    params[pp(prefix, 'U')] = U
-
     # embedding to hidden state proposal weights, biases
     Wx = norm_weight(nin, dim)
     params[pp(prefix, 'Wx')] = Wx
     params[pp(prefix, 'bx')] = numpy.zeros((dim,)).astype('float32')
 
-    # recurrent transformation weights for hidden state proposal
-    Ux = ortho_weight(dim)
-    params[pp(prefix, 'Ux')] = Ux
+    if rank == 'full':
+        # recurrent transformation weights for gates
+        U = numpy.concatenate([ortho_weight(dim),
+                           ortho_weight(dim)], axis=1)
+        params[pp(prefix, 'U')] = U
+
+        # recurrent transformation weights for hidden state proposal
+        Ux = ortho_weight(dim)
+        params[pp(prefix, 'Ux')] = Ux
+    else:
+        if share_proj_matrix:
+            U_proj = norm_weight(dim, rank)
+            params[pp(prefix, 'U_proj')] = U_proj
+        else:
+            U_proj_u = norm_weight(dim, rank)
+            U_proj_r = norm_weight(dim, rank)
+            U_proj_x = norm_weight(dim, rank)
+            params[pp(prefix, 'U_proj_u')] = U_proj_u
+            params[pp(prefix, 'U_proj_r')] = U_proj_r
+            params[pp(prefix, 'U_proj_x')] = U_proj_x
+        U_expand_u = norm_weight(rank, dim)
+        U_expand_r = norm_weight(rank, dim)
+        U_expand_x = norm_weight(rank, dim)
+        params[pp(prefix, 'U_expand_u')] = U_expand_u
+        params[pp(prefix, 'U_expand_r')] = U_expand_r
+        params[pp(prefix, 'U_expand_x')] = U_expand_x
+        if plus_diagonal:
+            U_diag_u = numpy.random.uniform(size=dim, low=-0.01, high=0.01).astype('float32')
+            U_diag_r = numpy.random.uniform(size=dim, low=-0.01, high=0.01).astype('float32')
+            U_diag_x = numpy.random.uniform(size=dim, low=-0.01, high=0.01).astype('float32')
+            params[pp(prefix, 'U_diag_u')] = U_diag_u
+            params[pp(prefix, 'U_diag_r')] = U_diag_r
+            params[pp(prefix, 'U_diag_x')] = U_diag_x
 
     return params
 
@@ -103,6 +129,9 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
               emb_dropout=None,
               rec_dropout=None,
               profile=False,
+              rank='full',
+              share_proj_matrix=False,
+              plus_diagonal=True,
               **kwargs):
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
@@ -110,7 +139,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     else:
         n_samples = 1
 
-    dim = tparams[pp(prefix, 'Ux')].shape[1]
+    dim = tparams[pp(prefix, 'Wx')].shape[1]
 
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
@@ -128,22 +157,42 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     # input to compute the hidden state proposal
     state_belowx = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'Wx')]) + \
         tparams[pp(prefix, 'bx')]
-
+            
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
-    def _step_slice(m_, x_, xx_, h_, U, Ux, rec_dropout):
+    def _step_slice(m_, x_, xx_, h_):
+        if rank == 'full':
+            preact = tensor.dot(h_*rec_dropout[0], U)
+            preact += x_
 
-        preact = tensor.dot(h_*rec_dropout[0], U)
-        preact += x_
+            # reset and update gates
+            r = tensor.nnet.sigmoid(_slice(preact, 0, dim))
+            u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
 
-        # reset and update gates
-        r = tensor.nnet.sigmoid(_slice(preact, 0, dim))
-        u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
-
-        # compute the hidden state proposal
-        preactx = tensor.dot(h_*rec_dropout[1], Ux)
-        preactx = preactx * r
-        preactx = preactx + xx_
+            # compute the hidden state proposal
+            preactx = tensor.dot(h_*rec_dropout[1], Ux)
+            preactx = preactx * r
+            preactx = preactx + xx_
+        else:
+            if share_proj_matrix:
+                proj = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj')])
+                proj_u, proj_r, proj_x = proj, proj, proj
+            else:
+                proj_u = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj_u')])
+                proj_r = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj_r')])
+                proj_x = tensor.dot(h_*rec_dropout[1], tparams[pp(prefix, 'U_proj_x')])
+            preact_u = tensor.dot(proj_u, tparams[pp(prefix, 'U_expand_u')]) + _slice(x_, 0, dim)
+            preact_r = tensor.dot(proj_r, tparams[pp(prefix, 'U_expand_r')]) + _slice(x_, 1, dim)
+            if plus_diagonal:
+                 preact_u += h_*rec_dropout[0] * tparams[pp(prefix, 'U_diag_u')]
+                 preact_r += h_*rec_dropout[0] * tparams[pp(prefix, 'U_diag_r')]
+            u = tensor.nnet.sigmoid(preact_u)
+            r = tensor.nnet.sigmoid(preact_r)
+            pre_preactx = tensor.dot(proj_x, tparams[pp(prefix, 'U_expand_x')])
+            if plus_diagonal:
+                pre_preactx += h_*rec_dropout[1] * tparams[pp(prefix, 'U_diag_x')]
+            preactx = pre_preactx * r + xx_
+            
 
         # hidden state proposal
         h = tensor.tanh(preactx)
@@ -158,18 +207,14 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     seqs = [mask, state_below_, state_belowx]
     init_states = [tensor.alloc(0., n_samples, dim)]
     _step = _step_slice
-    shared_vars = [tparams[pp(prefix, 'U')],
-                   tparams[pp(prefix, 'Ux')],
-                   rec_dropout]
 
     rval, updates = theano.scan(_step,
                                 sequences=seqs,
                                 outputs_info=init_states,
-                                non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
                                 profile=profile,
-                                strict=True)
+                                strict=False)
     rval = [rval]
     return rval
 

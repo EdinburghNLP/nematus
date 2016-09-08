@@ -91,11 +91,17 @@ def init_params(options):
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder',
                                               nin=options['dim_word'],
-                                              dim=options['dim'])
+                                              dim=options['dim'],
+                                              rank=options['encoder_rank'],
+                                              share_proj_matrix=options['encoder_share_proj_matrix'],
+                                              plus_diagonal=options['encoder_plus_diagonal'])
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder_r',
                                               nin=options['dim_word'],
-                                              dim=options['dim'])
+                                              dim=options['dim'],
+                                              rank=options['encoder_rank'],
+                                              share_proj_matrix=options['encoder_share_proj_matrix'],
+                                              plus_diagonal=options['encoder_plus_diagonal'])
     ctxdim = 2 * options['dim']
 
     # init_state, init_cell
@@ -188,7 +194,10 @@ def build_model(tparams, options):
                                             mask=x_mask,
                                             emb_dropout=emb_dropout, 
                                             rec_dropout=rec_dropout,
-                                            profile=profile)
+                                            profile=profile,
+                                            rank=options['encoder_rank'],
+                                            share_proj_matrix=options['encoder_share_proj_matrix'],
+                                            plus_diagonal=options['encoder_plus_diagonal'])
     
 
     # word embedding for backward rnn (source)
@@ -205,7 +214,10 @@ def build_model(tparams, options):
                                              mask=xr_mask,
                                              emb_dropout=emb_dropout_r,
                                              rec_dropout=rec_dropout_r,
-                                             profile=profile)
+                                             profile=profile,
+                                             rank=options['encoder_rank'],
+                                             share_proj_matrix=options['encoder_share_proj_matrix'],
+                                             plus_diagonal=options['encoder_plus_diagonal'])
 
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -337,11 +349,17 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # encoder
     proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile)
+                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile,
+                                            rank=options['encoder_rank'],
+                                            share_proj_matrix=options['encoder_share_proj_matrix'],
+                                            plus_diagonal=options['encoder_plus_diagonal'])
 
 
     projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile)
+                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile,
+                                             rank=options['encoder_rank'],
+                                             share_proj_matrix=options['encoder_share_proj_matrix'],
+                                             plus_diagonal=options['encoder_plus_diagonal'])
 
     # concatenate forward and backward rnn hidden states
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -683,7 +701,11 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_min=0.1,
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
-          maxibatch_size=20): #How many minibatches to load at one time
+          maxibatch_size=20, #How many minibatches to load at one time
+          encoder_rank='full',
+          encoder_share_proj_matrix=False,
+          encoder_plus_diagonal=True
+): 
 
     # Model options
     model_options = locals().copy()
