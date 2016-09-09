@@ -15,18 +15,24 @@ from util import load_dict
 def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
 
     from theano_util import (load_params, init_theano_params)
-    from nmt import (build_sampler, gen_sample, init_params)
+    from nmt import (build_sampler, gen_sample, init_params, train)
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     from theano import shared
     trng = RandomStreams(1234)
     use_noise = shared(numpy.float32(0.))
 
+    default_option = train(return_option_dict=True)
+
     fs_init = []
     fs_next = []
 
     for model, option in zip(models, options):
-
+        # init model default options
+        tmp_option = default_option.copy()
+        tmp_option.update(option)
+        option = tmp_option
+        
         # allocate model parameters
         params = init_params(option)
 

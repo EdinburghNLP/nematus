@@ -716,12 +716,16 @@ def train(dim_word=100,  # word vector dimensionality
           encoder_plus_diagonal=True, # switch between low-rank and low-rank plus diagonal
           decoder_rank='full', # 'full' or integer. If it is integer enables low-rank or low-rank plus diagonal parametrization (Miceli Barone 2016) arXiv:1603.03116
           decoder_share_proj_matrix=False, # in low-rank or low-rank plus diagonal mode, control whether the projection matrices are shared between the proposal, reset and update gates of the GRU
-          decoder_plus_diagonal=True # switch between low-rank and low-rank plus diagonal
+          decoder_plus_diagonal=True, # switch between low-rank and low-rank plus diagonal
+          return_option_dict=False # Ugly hack used to initialize model option defaults during translation
 ): 
 
     # Model options
     model_options = locals().copy()
 
+    del model_options['return_option_dict']
+    if return_option_dict:
+        return model_options
 
     if model_options['dim_per_factor'] == None:
         if factors == 1:

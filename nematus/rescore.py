@@ -23,9 +23,16 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
 
     trng = RandomStreams(1234)
 
+    default_option = train(return_option_dict=True)
+
     fs_log_probs = []
 
     for model, option in zip(models, options):
+        # init model default options
+        tmp_option = default_option.copy()
+        tmp_option.update(option)
+        option = tmp_option
+
         # allocate model parameters
         params = init_params(option)
 
