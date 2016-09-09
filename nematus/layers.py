@@ -162,7 +162,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     # arguments    | sequences |outputs-info| non-seqs
     def _step_slice(m_, x_, xx_, h_):
         if rank == 'full':
-            preact = tensor.dot(h_*rec_dropout[0], U)
+            preact = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U')])
             preact += x_
 
             # reset and update gates
@@ -170,7 +170,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
             u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
 
             # compute the hidden state proposal
-            preactx = tensor.dot(h_*rec_dropout[1], Ux)
+            preactx = tensor.dot(h_*rec_dropout[1], tparams[pp(prefix, 'Ux')])
             preactx = preactx * r
             preactx = preactx + xx_
         else:
@@ -222,7 +222,8 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
-                        nin_nonlin=None, dim_nonlin=None):
+                        nin_nonlin=None, dim_nonlin=None,
+                        rank='full', share_proj_matrix=False, plus_diagonal=True):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -238,24 +239,68 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
                            norm_weight(nin, dim)], axis=1)
     params[pp(prefix, 'W')] = W
     params[pp(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
-    U = numpy.concatenate([ortho_weight(dim_nonlin),
-                           ortho_weight(dim_nonlin)], axis=1)
-    params[pp(prefix, 'U')] = U
-
     Wx = norm_weight(nin_nonlin, dim_nonlin)
     params[pp(prefix, 'Wx')] = Wx
-    Ux = ortho_weight(dim_nonlin)
-    params[pp(prefix, 'Ux')] = Ux
     params[pp(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
 
-    U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
-                              ortho_weight(dim_nonlin)], axis=1)
-    params[pp(prefix, 'U_nl')] = U_nl
     params[pp(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
-
-    Ux_nl = ortho_weight(dim_nonlin)
-    params[pp(prefix, 'Ux_nl')] = Ux_nl
     params[pp(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
+
+    if rank == 'full':
+        U = numpy.concatenate([ortho_weight(dim_nonlin),
+                           ortho_weight(dim_nonlin)], axis=1)
+        params[pp(prefix, 'U')] = U
+        Ux = ortho_weight(dim_nonlin)
+        params[pp(prefix, 'Ux')] = Ux
+        U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
+                              ortho_weight(dim_nonlin)], axis=1)
+        params[pp(prefix, 'U_nl')] = U_nl
+        Ux_nl = ortho_weight(dim_nonlin)
+        params[pp(prefix, 'Ux_nl')] = Ux_nl
+    else:
+        if share_proj_matrix:
+            U_proj = norm_weight(dim_nonlin, rank)
+            U_proj_nl = norm_weight(dim_nonlin, rank)
+            params[pp(prefix, 'U_proj')] = U_proj
+            params[pp(prefix, 'U_proj_nl')] = U_proj_nl
+        else:
+            U_proj_u = norm_weight(dim_nonlin, rank)
+            U_proj_r = norm_weight(dim_nonlin, rank)
+            U_proj_x = norm_weight(dim_nonlin, rank)
+            U_proj_u_nl = norm_weight(dim_nonlin, rank)
+            U_proj_r_nl = norm_weight(dim_nonlin, rank)
+            U_proj_x_nl = norm_weight(dim_nonlin, rank)
+            params[pp(prefix, 'U_proj_u')] = U_proj_u
+            params[pp(prefix, 'U_proj_r')] = U_proj_r
+            params[pp(prefix, 'U_proj_x')] = U_proj_x
+            params[pp(prefix, 'U_proj_u_nl')] = U_proj_u_nl
+            params[pp(prefix, 'U_proj_r_nl')] = U_proj_r_nl
+            params[pp(prefix, 'U_proj_x_nl')] = U_proj_x_nl
+        U_expand_u = norm_weight(rank, dim_nonlin)
+        U_expand_r = norm_weight(rank, dim_nonlin)
+        U_expand_x = norm_weight(rank, dim_nonlin)
+        U_expand_u_nl = norm_weight(rank, dim_nonlin)
+        U_expand_r_nl = norm_weight(rank, dim_nonlin)
+        U_expand_x_nl = norm_weight(rank, dim_nonlin)
+        params[pp(prefix, 'U_expand_u')] = U_expand_u
+        params[pp(prefix, 'U_expand_r')] = U_expand_r
+        params[pp(prefix, 'U_expand_x')] = U_expand_x
+        params[pp(prefix, 'U_expand_u_nl')] = U_expand_u_nl
+        params[pp(prefix, 'U_expand_r_nl')] = U_expand_r_nl
+        params[pp(prefix, 'U_expand_x_nl')] = U_expand_x_nl
+        if plus_diagonal:
+            U_diag_u = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            U_diag_r = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            U_diag_x = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            U_diag_u_nl = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            U_diag_r_nl = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            U_diag_x_nl = numpy.random.uniform(size=dim_nonlin, low=-0.01, high=0.01).astype('float32')
+            params[pp(prefix, 'U_diag_u')] = U_diag_u
+            params[pp(prefix, 'U_diag_r')] = U_diag_r
+            params[pp(prefix, 'U_diag_x')] = U_diag_x
+            params[pp(prefix, 'U_diag_u_nl')] = U_diag_u_nl
+            params[pp(prefix, 'U_diag_r_nl')] = U_diag_r_nl
+            params[pp(prefix, 'U_diag_x_nl')] = U_diag_x_nl
 
     # context to LSTM
     Wc = norm_weight(dimctx, dim*2)
@@ -279,7 +324,7 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     # attention:
     U_att = norm_weight(dimctx, 1)
     params[pp(prefix, 'U_att')] = U_att
-    c_att = numpy.zeros((1,)).astype('float32')
+    c_att = numpy.zeros((1,)).astype('float32') 	# What is c_att for? Isn't it cancelled out by the attention softmax?
     params[pp(prefix, 'c_tt')] = c_att
 
     return params
@@ -291,6 +336,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
                    profile=False,
+                   rank='full', share_proj_matrix=False, plus_diagonal=True,
                    **kwargs):
 
     assert context, 'Context must be provided'
@@ -331,20 +377,37 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
         tparams[pp(prefix, 'b')]
 
-    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
-                    U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
-                    U_nl, Ux_nl, b_nl, bx_nl):
+    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout):
+        if rank == 'full':
+            preact1 = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U')])
+            preact1 += x_
+            preact1 = tensor.nnet.sigmoid(preact1)
 
-        preact1 = tensor.dot(h_*rec_dropout[0], U)
-        preact1 += x_
-        preact1 = tensor.nnet.sigmoid(preact1)
+            r1 = _slice(preact1, 0, dim)
+            u1 = _slice(preact1, 1, dim)
 
-        r1 = _slice(preact1, 0, dim)
-        u1 = _slice(preact1, 1, dim)
-
-        preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
-        preactx1 *= r1
-        preactx1 += xx_
+            preactx1 = tensor.dot(h_*rec_dropout[1], tparams[pp(prefix, 'Ux')])
+            preactx1 *= r1
+            preactx1 += xx_
+        else:
+            if share_proj_matrix:
+                proj1 = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj')])
+                proj_u1, proj_r1, proj_x1 = proj1, proj1, proj1
+            else:
+                proj_u1 = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj_u')])
+                proj_r1 = tensor.dot(h_*rec_dropout[0], tparams[pp(prefix, 'U_proj_r')])
+                proj_x1 = tensor.dot(h_*rec_dropout[1], tparams[pp(prefix, 'U_proj_x')])
+            preact_u1 = tensor.dot(proj_u1, tparams[pp(prefix, 'U_expand_u')]) + _slice(x_, 0, dim)
+            preact_r1 = tensor.dot(proj_r1, tparams[pp(prefix, 'U_expand_r')]) + _slice(x_, 1, dim)
+            if plus_diagonal:
+                 preact_u1 += h_*rec_dropout[0] * tparams[pp(prefix, 'U_diag_u')]
+                 preact_r1 += h_*rec_dropout[0] * tparams[pp(prefix, 'U_diag_r')]
+            u1 = tensor.nnet.sigmoid(preact_u1)
+            r1 = tensor.nnet.sigmoid(preact_r1)
+            pre_preactx1 = tensor.dot(proj_x1, tparams[pp(prefix, 'U_expand_x')])
+            if plus_diagonal:
+                pre_preactx1 += h_*rec_dropout[1] * tparams[pp(prefix, 'U_diag_x')]
+            preactx1 = pre_preactx1 * r1 + xx_
 
         h1 = tensor.tanh(preactx1)
 
@@ -352,11 +415,11 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
         # attention
-        pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
+        pstate_ = tensor.dot(h1*rec_dropout[2], tparams[pp(prefix, 'W_comb_att')])
         pctx__ = pctx_ + pstate_[None, :, :]
         #pctx__ += xc_
         pctx__ = tensor.tanh(pctx__)
-        alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
+        alpha = tensor.dot(pctx__*ctx_dropout[1], tparams[pp(prefix, 'U_att')])+tparams[pp(prefix, 'c_tt')]
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
         alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
         if context_mask:
@@ -364,16 +427,38 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         alpha = alpha / alpha.sum(0, keepdims=True)
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
-        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
-        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
-        preact2 = tensor.nnet.sigmoid(preact2)
+        if rank == 'full':
+            preact2 = tensor.dot(h1*rec_dropout[3], tparams[pp(prefix, 'U_nl')])+tparams[pp(prefix, 'b_nl')]
+            preact2 += tensor.dot(ctx_*ctx_dropout[2], tparams[pp(prefix, 'Wc')])
+            preact2 = tensor.nnet.sigmoid(preact2)
 
-        r2 = _slice(preact2, 0, dim)
-        u2 = _slice(preact2, 1, dim)
+            r2 = _slice(preact2, 0, dim)
+            u2 = _slice(preact2, 1, dim)
 
-        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
-        preactx2 *= r2
-        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
+            preactx2 = tensor.dot(h1*rec_dropout[4], tparams[pp(prefix, 'Ux_nl')])+tparams[pp(prefix, 'bx_nl')]
+            preactx2 *= r2
+            preactx2 += tensor.dot(ctx_*ctx_dropout[3], tparams[pp(prefix, 'Wcx')])
+        else:
+            x2 = tensor.dot(ctx_*ctx_dropout[2], tparams[pp(prefix, 'Wc')])+tparams[pp(prefix, 'b_nl')]
+            xx2 =  tensor.dot(ctx_*ctx_dropout[3], tparams[pp(prefix, 'Wcx')])+tparams[pp(prefix, 'bx_nl')] 	# Different combination of the bias with reset gate
+            if share_proj_matrix:
+                proj2 = tensor.dot(h1*rec_dropout[3], tparams[pp(prefix, 'U_proj_nl')])
+                proj_u2, proj_r2, proj_x2 = proj2, proj2, proj2
+            else:
+                proj_u2 = tensor.dot(h1*rec_dropout[3], tparams[pp(prefix, 'U_proj_u_nl')])
+                proj_r2 = tensor.dot(h1*rec_dropout[3], tparams[pp(prefix, 'U_proj_r_nl')])
+                proj_x2 = tensor.dot(h1*rec_dropout[4], tparams[pp(prefix, 'U_proj_x_nl')])
+            preact_u2 = tensor.dot(proj_u2, tparams[pp(prefix, 'U_expand_u_nl')]) + _slice(x2, 0, dim)
+            preact_r2 = tensor.dot(proj_r2, tparams[pp(prefix, 'U_expand_r_nl')]) + _slice(x2, 1, dim)
+            if plus_diagonal:
+                 preact_u2 += h1*rec_dropout[3] * tparams[pp(prefix, 'U_diag_u_nl')]
+                 preact_r2 += h1*rec_dropout[3] * tparams[pp(prefix, 'U_diag_r_nl')]
+            u2 = tensor.nnet.sigmoid(preact_u2)
+            r2 = tensor.nnet.sigmoid(preact_r2)
+            pre_preactx2 = tensor.dot(proj_x2, tparams[pp(prefix, 'U_expand_x_nl')])
+            if plus_diagonal:
+                pre_preactx2 += h1*rec_dropout[4] * tparams[pp(prefix, 'U_diag_x_nl')]
+            preactx2 = pre_preactx2 * r2 + xx2
 
         h2 = tensor.tanh(preactx2)
 
@@ -386,21 +471,9 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
     #seqs = [mask, state_below_, state_belowx, state_belowc]
     _step = _step_slice
 
-    shared_vars = [tparams[pp(prefix, 'U')],
-                   tparams[pp(prefix, 'Wc')],
-                   tparams[pp(prefix, 'W_comb_att')],
-                   tparams[pp(prefix, 'U_att')],
-                   tparams[pp(prefix, 'c_tt')],
-                   tparams[pp(prefix, 'Ux')],
-                   tparams[pp(prefix, 'Wcx')],
-                   tparams[pp(prefix, 'U_nl')],
-                   tparams[pp(prefix, 'Ux_nl')],
-                   tparams[pp(prefix, 'b_nl')],
-                   tparams[pp(prefix, 'bx_nl')]]
 
     if one_step:
-        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
-                       shared_vars))
+        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout]))
     else:
         rval, updates = theano.scan(_step,
                                     sequences=seqs,
@@ -409,11 +482,11 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                                                                context.shape[2]),
                                                   tensor.alloc(0., n_samples,
                                                                context.shape[0])],
-                                    non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
+                                    non_sequences=[pctx_, context, rec_dropout, ctx_dropout],
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
                                     profile=profile,
-                                    strict=True)
+                                    strict=False)
     return rval
 
 

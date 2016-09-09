@@ -112,7 +112,10 @@ def init_params(options):
                                               prefix='decoder',
                                               nin=options['dim_word'],
                                               dim=options['dim'],
-                                              dimctx=ctxdim)
+                                              dimctx=ctxdim,
+                                              rank=options['decoder_rank'],
+                                              share_proj_matrix=options['decoder_share_proj_matrix'],
+                                              plus_diagonal=options['decoder_plus_diagonal'])
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
                                 nin=options['dim'], nout=options['dim_word'],
@@ -259,7 +262,10 @@ def build_model(tparams, options):
                                             emb_dropout=emb_dropout_d,
                                             ctx_dropout=ctx_dropout_d,
                                             rec_dropout=rec_dropout_d,
-                                            profile=profile)
+                                            profile=profile,
+                                            rank=options['decoder_rank'],
+                                            share_proj_matrix=options['decoder_share_proj_matrix'],
+                                            plus_diagonal=options['decoder_plus_diagonal'])
     # hidden states of the decoder gru
     proj_h = proj[0]
 
@@ -400,7 +406,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                             emb_dropout=emb_dropout_d,
                                             ctx_dropout=ctx_dropout_d,
                                             rec_dropout=rec_dropout_d,
-                                            profile=profile)
+                                            profile=profile,
+                                            rank=options['decoder_rank'],
+                                            share_proj_matrix=options['decoder_share_proj_matrix'],
+                                            plus_diagonal=options['decoder_plus_diagonal'])
     # get the next hidden state
     next_state = proj[0]
 
@@ -702,9 +711,12 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
           maxibatch_size=20, #How many minibatches to load at one time
-          encoder_rank='full',
-          encoder_share_proj_matrix=False,
-          encoder_plus_diagonal=True
+          encoder_rank='full', # 'full' or integer. If it is integer enables low-rank or low-rank plus diagonal parametrization (Miceli Barone 2016) arXiv:1603.03116
+          encoder_share_proj_matrix=False, # in low-rank or low-rank plus diagonal mode, control whether the projection matrices are shared between the proposal, reset and update gates of the GRU
+          encoder_plus_diagonal=True, # switch between low-rank and low-rank plus diagonal
+          decoder_rank='full', # 'full' or integer. If it is integer enables low-rank or low-rank plus diagonal parametrization (Miceli Barone 2016) arXiv:1603.03116
+          decoder_share_proj_matrix=False, # in low-rank or low-rank plus diagonal mode, control whether the projection matrices are shared between the proposal, reset and update gates of the GRU
+          decoder_plus_diagonal=True # switch between low-rank and low-rank plus diagonal
 ): 
 
     # Model options
