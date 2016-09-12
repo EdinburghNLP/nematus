@@ -1,3 +1,4 @@
+import sys
 import numpy
 
 import gzip
@@ -86,13 +87,19 @@ class TextIterator:
 
         if len(self.source_buffer) == 0:
             for k_ in xrange(self.k):
-                ss = self.source.readline()
-                if ss == "":
-                    break
-                tt = self.target.readline()
-                if tt == "":
-                    break
-
+                data_error = False
+                ss = ""
+                tt = ""
+                try:
+                    ss = self.source.readline()
+                    tt = self.target.readline()
+                except IOError:
+                   data_error = True
+                   print >> sys.stderr, "Warning: IOError while reading corpus"
+                if (ss == "") or (tt == "") or data_error:
+                    self.reset()
+                    raise StopIteration
+                
                 self.source_buffer.append(ss.strip().split())
                 self.target_buffer.append(tt.strip().split())
 
