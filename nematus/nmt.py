@@ -149,6 +149,11 @@ def build_model(tparams, options):
     n_timesteps_trg = y.shape[0]
     n_samples = x.shape[2]
 
+    #only used for MRT
+    loss = tensor.matrix('loss', dtype='float32')
+    normalizing_constant = theano.shared(numpy.float32())
+    alpha = theano.shared(numpy.float32())
+
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
@@ -280,16 +285,19 @@ def build_model(tparams, options):
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
                                                logit_shp[2]]))
 
-    # cost
-    y_flat = y.flatten()
-    y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
-    cost = -tensor.log(probs.flatten()[y_flat_idx])
-    cost = cost.reshape([y.shape[0], y.shape[1]])
-    cost = (cost * y_mask).sum(0)
+    if options['objective'] == 'CE':
+        # cost
+        y_flat = y.flatten()
+        y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
+        cost = -tensor.log(probs.flatten()[y_flat_idx])
+        cost = cost.reshape([y.shape[0], y.shape[1]])
+        cost = (cost * y_mask).sum(0)
+    elif options['objective'] == 'MRT':
+        #TODO: define MRT cost function
 
     #print "Print out in build_model()"
     #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
+    return trng, use_noise, x, x_mask, y, y_mask, normalizing_constant, loss, alpha, opt_ret, cost
 
 
 # build a sampler
@@ -773,11 +781,15 @@ def train(dim_word=100,  # word vector dimensionality
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
+        normalizing_constant, loss, alpha, \
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
 
     inps = [x, x_mask, y, y_mask]
+    
+    if options['objective'] == 'MRT':
+        inps += [normalizing_constant, loss, alpha]
 
     if validFreq or sampleFreq:
         print 'Building sampler'
@@ -893,24 +905,49 @@ def train(dim_word=100,  # word vector dimensionality
                 sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
-            x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
-                                                n_words_src=n_words_src,
-                                                n_words=n_words)
 
-            if x is None:
-                print 'Minibatch with zero sample under length ', maxlen
-                uidx -= 1
-                continue
+            if options['objective'] == 'CE':
+                x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
+                                                    n_words_src=n_words_src,
+                                                    n_words=n_words)
 
-            ud_start = time.time()
+                if x is None:
+                    print 'Minibatch with zero sample under length ', maxlen
+                    uidx -= 1
+                    continue
 
-            # compute cost, grads and copy grads to shared variables
-            cost = f_grad_shared(x, x_mask, y, y_mask)
+                ud_start = time.time()
 
-            # do the update on parameters
-            f_update(lrate)
+                # compute cost, grads and copy grads to shared variables
+                cost = f_grad_shared(x, x_mask, y, y_mask)
 
-            ud = time.time() - ud_start
+                # do the update on parameters
+                f_update(lrate)
+
+                ud = time.time() - ud_start
+
+            elif options['objective'] == 'MRT':
+                #TODO: numberize a single sentence pair (x,y)
+                
+                #TODO: create 100 samples and get probability of each
+                
+                #TODO: add gold translation to samples
+
+                #TODO: compute normalizing constant (sum of probabilities of all samples)
+
+                #TODO: get negative smoothed BLEU (or other loss) for each sample
+                
+                #TODO: create minibatch with masking
+                
+                ud_start = time.time()
+
+                # compute cost, grads and copy grads to shared variables
+                cost = f_grad_shared(x, x_mask, y, y_mask, normalizing_constant, loss, alpha)
+
+                # do the update on parameters
+                f_update(lrate)
+
+                ud = time.time() - ud_start
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
