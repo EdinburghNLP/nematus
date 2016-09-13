@@ -878,6 +878,8 @@ def train(dim_word=100,  # word vector dimensionality
     if sampleFreq == -1:
         sampleFreq = len(train[0])/batch_size
 
+    valid_err = None
+
     for eidx in xrange(max_epochs):
         n_samples = 0
 
