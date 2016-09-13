@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
   python-pip \
   python-nose \
   python-numpy \
-  python-scipy
+  python-scipy \
+  xml-twig-tools
 
 RUN pip install --upgrade pip
 RUN pip install -U setuptools

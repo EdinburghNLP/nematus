@@ -8,7 +8,7 @@ It was used to produce top-scoring systems at the WMT 16 shared translation task
 
 The changes to Nematus include:
 
- - arbitrary input features (factored neural machine translation)
+ - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - automatic training set reshuffling between epochs
@@ -44,12 +44,11 @@ you can run Nematus locally. To install it, execute `python setup.py install`
 DOCKER USAGE
 ------------
 
-You can also create docker image by running following command, where you change suffix with either `cpu` or `gpu`:
+You can also create docker image by running following command, where you change `suffix` to either `cpu` or `gpu`:
 
 `docker build -t nematus-docker -f Dockerfile.suffix .`
 
-
-And then starting CPU docker machine with current directory (which could contain your scripts) by:
+To run a CPU docker instance with the current working directory shared with the Docker container, execute:
 
 ``docker run -v `pwd`:/playground -it nematus-docker``
 

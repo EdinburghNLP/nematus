@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y \
 	vim \
 	nano \
 	python-dev \
-	python-pip
+	python-pip \
+	xml-twig-tools
 
 RUN pip install --upgrade pip
 
