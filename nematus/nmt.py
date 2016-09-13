@@ -151,8 +151,7 @@ def build_model(tparams, options):
 
     #only used for MRT
     loss = tensor.matrix('loss', dtype='float32')
-    normalizing_constant = theano.shared(numpy.float32())
-    alpha = theano.shared(numpy.float32())
+    alpha = theano.shared(numpy.float32(options['mrt-alpha']))
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
@@ -285,19 +284,29 @@ def build_model(tparams, options):
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
                                                logit_shp[2]]))
 
-    if options['objective'] == 'CE':
-        # cost
-        y_flat = y.flatten()
-        y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
-        cost = -tensor.log(probs.flatten()[y_flat_idx])
-        cost = cost.reshape([y.shape[0], y.shape[1]])
-        cost = (cost * y_mask).sum(0)
+    # cost
+    y_flat = y.flatten()
+    y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
+    cost = -tensor.log(probs.flatten()[y_flat_idx])
+    cost = cost.reshape([y.shape[0], y.shape[1]])
+    cost = (cost * y_mask).sum(0)
+
     elif options['objective'] == 'MRT':
-        #TODO: define MRT cost function
+        cost *= alpha
+
+        # numerically stable normalization of probabilities in batch (in log space)
+        mincost = mincost.min(0, keepdims=True)
+        total_cost = -tensor.log(tensor.exp(-cost + mincost).sum(0)) + mincost
+        cost -= total_cost
+
+        # back to probability space
+        cost = tensor.exp(-cost)
+
+        cost *= loss
 
     #print "Print out in build_model()"
     #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, normalizing_constant, loss, alpha, opt_ret, cost
+    return trng, use_noise, x, x_mask, y, y_mask, loss, opt_ret, cost
 
 
 # build a sampler
@@ -781,7 +790,7 @@ def train(dim_word=100,  # word vector dimensionality
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
-        normalizing_constant, loss, alpha, \
+        loss, \
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
@@ -789,7 +798,7 @@ def train(dim_word=100,  # word vector dimensionality
     inps = [x, x_mask, y, y_mask]
     
     if options['objective'] == 'MRT':
-        inps += [normalizing_constant, loss, alpha]
+        inps += [loss]
 
     if validFreq or sampleFreq:
         print 'Building sampler'
@@ -933,8 +942,6 @@ def train(dim_word=100,  # word vector dimensionality
                 
                 #TODO: add gold translation to samples
 
-                #TODO: compute normalizing constant (sum of probabilities of all samples)
-
                 #TODO: get negative smoothed BLEU (or other loss) for each sample
                 
                 #TODO: create minibatch with masking
@@ -942,7 +949,7 @@ def train(dim_word=100,  # word vector dimensionality
                 ud_start = time.time()
 
                 # compute cost, grads and copy grads to shared variables
-                cost = f_grad_shared(x, x_mask, y, y_mask, normalizing_constant, loss, alpha)
+                cost = f_grad_shared(x, x_mask, y, y_mask, loss)
 
                 # do the update on parameters
                 f_update(lrate)
