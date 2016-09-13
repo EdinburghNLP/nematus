@@ -752,11 +752,15 @@ def train(dim_word=100,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          maxibatch_size=maxibatch_size)
-    valid = TextIterator(valid_datasets[0], valid_datasets[1],
-                         dictionaries[:-1], dictionaries[-1],
-                         n_words_source=n_words_src, n_words_target=n_words,
-                         batch_size=valid_batch_size,
-                         maxlen=maxlen)
+
+    if valid_datasets and validFreq:
+        valid = TextIterator(valid_datasets[0], valid_datasets[1],
+                            dictionaries[:-1], dictionaries[-1],
+                            n_words_source=n_words_src, n_words_target=n_words,
+                            batch_size=valid_batch_size,
+                            maxlen=maxlen)
+    else:
+        valid = None
 
     print 'Building model'
     params = init_params(model_options)
@@ -775,8 +779,9 @@ def train(dim_word=100,  # word vector dimensionality
 
     inps = [x, x_mask, y, y_mask]
 
-    print 'Building sampler'
-    f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
+    if validFreq or sampleFreq:
+        print 'Building sampler'
+        f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
 
     # before any regularizer
     print 'Building f_log_probs...',
@@ -938,7 +943,7 @@ def train(dim_word=100,  # word vector dimensionality
 
 
             # generate some samples with the model and display them
-            if numpy.mod(uidx, sampleFreq) == 0:
+            if sampleFreq and numpy.mod(uidx, sampleFreq) == 0:
                 # FIXME: random selection?
                 for jj in xrange(numpy.minimum(5, x.shape[2])):
                     stochastic = True
@@ -989,7 +994,7 @@ def train(dim_word=100,  # word vector dimensionality
                     print
 
             # validate model on validation set and early stop if necessary
-            if numpy.mod(uidx, validFreq) == 0:
+            if valid and validFreq and numpy.mod(uidx, validFreq) == 0:
                 use_noise.set_value(0.)
                 valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
@@ -1043,12 +1048,13 @@ def train(dim_word=100,  # word vector dimensionality
     if best_p is not None:
         zip_to_theano(best_p, tparams)
 
-    use_noise.set_value(0.)
-    valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
-                                       model_options, valid)
-    valid_err = valid_errs.mean()
+    if valid:
+        use_noise.set_value(0.)
+        valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
+                                        model_options, valid)
+        valid_err = valid_errs.mean()
 
-    print 'Valid ', valid_err
+        print 'Valid ', valid_err
 
     if best_p is not None:
         params = copy.copy(best_p)
