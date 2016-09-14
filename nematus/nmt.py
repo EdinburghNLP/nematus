@@ -608,6 +608,73 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     return sample, sample_score, sample_word_probs, alignment
 
 
+def score_gold_standard(f_init, f_next, x, y):
+    # for ensemble decoding, we keep track of states and probability distribution
+    # for each model in the ensemble
+    num_models = len(f_init)
+    next_state = [None]*num_models
+    ctx0 = [None]*num_models
+    next_p = [None]*num_models
+    # get initial state of decoder rnn and encoder context
+    for j in xrange(num_models):
+        ret = f_init[j](x)
+        next_state[j] = ret[0]
+        ctx0[j] = ret[1]
+    next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
+    y_score = 0
+    for w in y:
+        for i in xrange(num_models):
+            ctx = numpy.tile(ctx0[i], [1, 1])
+            inps = [next_w, ctx, next_state[i]]
+            ret = f_next[i](*inps)
+            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+            next_p[i], _, next_state[i] = ret[0], ret[1], ret[2]
+        y_score += numpy.log(next_p[0][0, w])
+    return y_score
+
+
+def gen_mrt_samples(f_init, f_next, x, y, trng, maxlen=30, k=100):
+    non_duplicates = set()
+    samples = [y]
+    sample_scores = [score_gold_standard(f_init, f_next, x, y)]
+
+    for i in range(k):
+        # for ensemble decoding, we keep track of states and probability distribution
+        # for each model in the ensemble
+        num_models = len(f_init)
+        next_state = [None]*num_models
+        ctx0 = [None]*num_models
+        next_p = [None]*num_models
+        # get initial state of decoder rnn and encoder context
+        for j in xrange(num_models):
+            ret = f_init[j](x)
+            next_state[j] = ret[0]
+            ctx0[j] = ret[1]
+        next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
+
+        sample = []
+        sample_score = 0
+        for n in range(maxlen):
+            for i in xrange(num_models):
+                ctx = numpy.tile(ctx0[i], [1, 1])
+                inps = [next_w, ctx, next_state[i]]
+                ret = f_next[i](*inps)
+                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+                next_p[i], _, next_state[i] = ret[0], ret[1], ret[2]
+            nw = trng.multinomial(pvals=sum(next_p)[0], n=1).argmax()
+            sample.append(nw)
+            sample_score += numpy.log(next_p[0][0, nw])
+            if nw == 0:
+                break
+
+        if sample not in non_duplicates:
+            non_duplicates.add(sample)
+            samples.append(sample)
+            sample_scores.append(sample_score)
+
+    return samples, sample_scores
+
+
 # calculate the log probablities on a given corpus using translation model
 def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalize=False, alignweights=False):
     probs = []
@@ -963,6 +1030,7 @@ def train(dim_word=100,  # word vector dimensionality
                 hypothesis_matrix = [[]] #TODO: populate
                 reference = SmoothedBleuReference(reference_tokens)
                 scores = numpy.array(reference.score(hypothesis_matrix))
+                #TODO: get negative smoothed BLEU (or other loss) for each sample
 
                 #TODO: create minibatch with masking
 
