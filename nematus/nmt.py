@@ -30,6 +30,7 @@ from alignment_util import *
 from layers import *
 from initializers import *
 from optimizers import *
+from metrics.bleu import SmoothedBleuReference
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
@@ -190,10 +191,10 @@ def build_model(tparams, options):
     proj = get_layer_constr(options['encoder'])(tparams, emb, options,
                                             prefix='encoder',
                                             mask=x_mask,
-                                            emb_dropout=emb_dropout, 
+                                            emb_dropout=emb_dropout,
                                             rec_dropout=rec_dropout,
                                             profile=profile)
-    
+
 
     # word embedding for backward rnn (source)
     embr = []
@@ -278,18 +279,18 @@ def build_model(tparams, options):
     if options['use_dropout']:
         logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden)
 
-    logit = get_layer_constr('ff')(tparams, logit, options,
-                               prefix='ff_logit', activ='linear')
-    logit_shp = logit.shape
-    probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
-                                               logit_shp[2]]))
+        logit = get_layer_constr('ff')(tparams, logit, options,
+                                   prefix='ff_logit', activ='linear')
+        logit_shp = logit.shape
+        probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
+                                                   logit_shp[2]]))
 
-    # cost
-    y_flat = y.flatten()
-    y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
-    cost = -tensor.log(probs.flatten()[y_flat_idx])
-    cost = cost.reshape([y.shape[0], y.shape[1]])
-    cost = (cost * y_mask).sum(0)
+        # cost
+        y_flat = y.flatten()
+        y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
+        cost = -tensor.log(probs.flatten()[y_flat_idx])
+        cost = cost.reshape([y.shape[0], y.shape[1]])
+        cost = (cost * y_mask).sum(0)
 
     elif options['objective'] == 'MRT':
         cost *= alpha
@@ -757,7 +758,7 @@ def train(dim_word=100,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
-                         indomain_target=domain_interpolation_indomain_datasets[1], 
+                         indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=domain_interpolation_cur,
                          maxibatch_size=maxibatch_size)
     else:
@@ -796,7 +797,7 @@ def train(dim_word=100,  # word vector dimensionality
         build_model(tparams, model_options)
 
     inps = [x, x_mask, y, y_mask]
-    
+
     if options['objective'] == 'MRT':
         inps += [loss]
 
@@ -937,15 +938,34 @@ def train(dim_word=100,  # word vector dimensionality
 
             elif options['objective'] == 'MRT':
                 #TODO: numberize a single sentence pair (x,y)
-                
+
                 #TODO: create 100 samples and get probability of each
-                
+
                 #TODO: add gold translation to samples
 
-                #TODO: get negative smoothed BLEU (or other loss) for each sample
-                
+                #TODO: format reference and hypotheses for BLEU scoring:
+                #
+                #      reference_tokens  = list of tokens in reference
+                #      translation. Example:
+                #
+                #      reference_tokens = ['This', 'is', 'my', 'reference', '.']
+                #
+                #      hypothesis_matrix = list of hypotheses, each hypothesis
+                #      being a list of tokens. Example:
+                #
+                #      hypothesis_matrix = [
+                #           ['This', 'is', 'my', 'hypothesis', '1', '.'],
+                #           ['This', 'is', 'my', 'hypothesis', '2', '.'],
+                #           ['This', 'is', 'my', 'hypothesis', '3', '.']
+                #      ]
+
+                reference_tokens = [] #TODO: populate
+                hypothesis_matrix = [[]] #TODO: populate
+                reference = SmoothedBleuReference(reference_tokens)
+                scores = numpy.array(reference.score(hypothesis_matrix))
+
                 #TODO: create minibatch with masking
-                
+
                 ud_start = time.time()
 
                 # compute cost, grads and copy grads to shared variables
