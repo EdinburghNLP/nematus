@@ -151,7 +151,7 @@ def build_model(tparams, options):
     n_samples = x.shape[2]
 
     #only used for MRT
-    loss = tensor.matrix('loss', dtype='float32')
+    loss = tensor.vector('loss', dtype='float32')
     alpha = theano.shared(numpy.float32(options['mrt-alpha']))
 
     if options['use_dropout']:
@@ -279,20 +279,20 @@ def build_model(tparams, options):
     if options['use_dropout']:
         logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden)
 
-        logit = get_layer_constr('ff')(tparams, logit, options,
+    logit = get_layer_constr('ff')(tparams, logit, options,
                                    prefix='ff_logit', activ='linear')
-        logit_shp = logit.shape
-        probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
-                                                   logit_shp[2]]))
+    logit_shp = logit.shape
+    probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
+                                               logit_shp[2]]))
 
-        # cost
-        y_flat = y.flatten()
-        y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
-        cost = -tensor.log(probs.flatten()[y_flat_idx])
-        cost = cost.reshape([y.shape[0], y.shape[1]])
-        cost = (cost * y_mask).sum(0)
+    # cost
+    y_flat = y.flatten()
+    y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
+    cost = -tensor.log(probs.flatten()[y_flat_idx])
+    cost = cost.reshape([y.shape[0], y.shape[1]])
+    cost = (cost * y_mask).sum(0)
 
-    elif options['objective'] == 'MRT':
+    if options['objective'] == 'MRT':
         cost *= alpha
 
         # numerically stable normalization of probabilities in batch (in log space)
@@ -606,73 +606,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         alignment = [None for i in range(len(sample))]
 
     return sample, sample_score, sample_word_probs, alignment
-
-
-def score_gold_standard(f_init, f_next, x, y):
-    # for ensemble decoding, we keep track of states and probability distribution
-    # for each model in the ensemble
-    num_models = len(f_init)
-    next_state = [None]*num_models
-    ctx0 = [None]*num_models
-    next_p = [None]*num_models
-    # get initial state of decoder rnn and encoder context
-    for j in xrange(num_models):
-        ret = f_init[j](x)
-        next_state[j] = ret[0]
-        ctx0[j] = ret[1]
-    next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
-    y_score = 0
-    for w in y:
-        for i in xrange(num_models):
-            ctx = numpy.tile(ctx0[i], [1, 1])
-            inps = [next_w, ctx, next_state[i]]
-            ret = f_next[i](*inps)
-            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], _, next_state[i] = ret[0], ret[1], ret[2]
-        y_score += numpy.log(next_p[0][0, w])
-    return y_score
-
-
-def gen_mrt_samples(f_init, f_next, x, y, trng, maxlen=30, k=100):
-    non_duplicates = set()
-    samples = [y]
-    sample_scores = [score_gold_standard(f_init, f_next, x, y)]
-
-    for i in range(k):
-        # for ensemble decoding, we keep track of states and probability distribution
-        # for each model in the ensemble
-        num_models = len(f_init)
-        next_state = [None]*num_models
-        ctx0 = [None]*num_models
-        next_p = [None]*num_models
-        # get initial state of decoder rnn and encoder context
-        for j in xrange(num_models):
-            ret = f_init[j](x)
-            next_state[j] = ret[0]
-            ctx0[j] = ret[1]
-        next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
-
-        sample = []
-        sample_score = 0
-        for n in range(maxlen):
-            for i in xrange(num_models):
-                ctx = numpy.tile(ctx0[i], [1, 1])
-                inps = [next_w, ctx, next_state[i]]
-                ret = f_next[i](*inps)
-                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-                next_p[i], _, next_state[i] = ret[0], ret[1], ret[2]
-            nw = trng.multinomial(pvals=sum(next_p)[0], n=1).argmax()
-            sample.append(nw)
-            sample_score += numpy.log(next_p[0][0, nw])
-            if nw == 0:
-                break
-
-        if sample not in non_duplicates:
-            non_duplicates.add(sample)
-            samples.append(sample)
-            sample_scores.append(sample_score)
-
-    return samples, sample_scores
 
 
 # calculate the log probablities on a given corpus using translation model
@@ -1004,49 +937,37 @@ def train(dim_word=100,  # word vector dimensionality
                 ud = time.time() - ud_start
 
             elif options['objective'] == 'MRT':
-                #TODO: numberize a single sentence pair (x,y)
+                cost = 0
+                # numberize each single sentence-pair
+                for x_s, y_s in zip(x, y):
+                    # add golden standard
+                    samples = set([y_s])
+                    # create k samples
+                    for i in range(options['mrt-samples-number']):
+                        sample, _, _, _ = gen_sample([f_init], [f_next], x_s, trng=trng, k=1,
+                                                     maxlen=maxlen, stochastic=True, argmax=False,
+                                                     suppress_unk=False)
+                        samples.add(sample)
+                    # create mini-batch with masking
+                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s] * len(samples), list(samples),
+                                                                    maxlen=maxlen, n_words_src=n_words_src,
+                                                                    n_words=n_words)
+                    # get negative smoothed BLEU for samples
+                    reference = SmoothedBleuReference(y_s.split())
+                    hypothesis_matrix = []
+                    for sample in samples:
+                        hypothesis_matrix.append(sample.split())
+                    loss.fill(numpy.array(reference.score_matrix(hypothesis_matrix)))
 
-                #TODO: create 100 samples and get probability of each
+                    ud_start = time.time()
 
-                #TODO: add gold translation to samples
+                    # compute cost, grads and copy grads to shared variables
+                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
 
-                #TODO: format reference and hypotheses for BLEU scoring:
-                #
-                #      reference_tokens  = list of tokens in reference
-                #      translation. Example:
-                #
-                #      reference_tokens = ['This', 'is', 'my', 'reference', '.']
-                #
-                #      hypothesis_matrix = list of hypotheses, each hypothesis
-                #      being a list of tokens. Example:
-                #
-                #      hypothesis_matrix = [
-                #           ['This', 'is', 'my', 'hypothesis', '1', '.'],
-                #           ['This', 'is', 'my', 'hypothesis', '2', '.'],
-                #           ['This', 'is', 'my', 'hypothesis', '3', '.']
-                #      ]
-                #
-                #      Note: Tokens can be of any type (no strings needed)
+                    # do the update on parameters
+                    f_update(lrate)
 
-                reference_tokens = [] #TODO: populate
-                hypothesis_matrix = [[]] #TODO: populate
-
-                # get negative smoothed BLEU for each sample
-                reference = SmoothedBleuReference(reference_tokens)
-                scores = numpy.array(reference.score_matrix(hypothesis_matrix))
-
-
-                #TODO: create minibatch with masking
-
-                ud_start = time.time()
-
-                # compute cost, grads and copy grads to shared variables
-                cost = f_grad_shared(x, x_mask, y, y_mask, loss)
-
-                # do the update on parameters
-                f_update(lrate)
-
-                ud = time.time() - ud_start
+                    ud = time.time() - ud_start
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
