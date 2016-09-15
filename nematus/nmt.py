@@ -30,7 +30,7 @@ from alignment_util import *
 from layers import *
 from initializers import *
 from optimizers import *
-from metrics.bleu import SmoothedBleuReference
+from metrics.bleu import SmoothedBleuScorer
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
@@ -958,11 +958,12 @@ def train(dim_word=100,  # word vector dimensionality
                                                                     maxlen=maxlen, n_words_src=n_words_src,
                                                                     n_words=n_words)
                     # get negative smoothed BLEU for samples
-                    reference = SmoothedBleuReference(y_s)
+                    scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
+                    scorer.set_reference(y_s)
                     hypothesis_matrix = []
                     for sample in samples:
                         hypothesis_matrix.append(sample)
-                    loss.fill(numpy.array(reference.score_matrix(hypothesis_matrix)))
+                    loss.fill(numpy.array(scorer.score_matrix(hypothesis_matrix)))
 
                     ud_start = time.time()
 

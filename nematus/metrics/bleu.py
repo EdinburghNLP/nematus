@@ -6,7 +6,31 @@ from __future__ import division
 from math import exp
 from operator import mul
 
+from scorer import Scorer
 from reference import Reference
+
+class SmoothedBleuScorer(Scorer):
+    """
+    Scores SmoothedBleuReference objects.
+    """
+
+    def __init__(self, argument_string):
+        """
+        Initialises metric-specific parameters.
+        """
+        Scorer.__init__(self, argument_string)
+        # use n-gram order of 4 by default
+        if not 'n' in self._arguments.keys():
+            self._arguments['n'] = 4
+
+    def set_reference(self, reference_tokens):
+        """
+        Sets the reference against hypotheses are scored.
+        """
+        self._reference = SmoothedBleuReference(
+            reference_tokens,
+            self._arguments['n']
+        )
 
 class SmoothedBleuReference(Reference):
     """
