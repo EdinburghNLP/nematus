@@ -1025,12 +1025,16 @@ def train(dim_word=100,  # word vector dimensionality
                 #           ['This', 'is', 'my', 'hypothesis', '2', '.'],
                 #           ['This', 'is', 'my', 'hypothesis', '3', '.']
                 #      ]
+                #
+                #      Note: Tokens can be of any type (no strings needed)
 
                 reference_tokens = [] #TODO: populate
                 hypothesis_matrix = [[]] #TODO: populate
+
+                # get negative smoothed BLEU for each sample
                 reference = SmoothedBleuReference(reference_tokens)
-                scores = numpy.array(reference.score(hypothesis_matrix))
-                #TODO: get negative smoothed BLEU (or other loss) for each sample
+                scores = numpy.array(reference.score_matrix(hypothesis_matrix))
+
 
                 #TODO: create minibatch with masking
 
