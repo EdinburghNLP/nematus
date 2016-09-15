@@ -151,8 +151,9 @@ def build_model(tparams, options):
     n_samples = x.shape[2]
 
     #only used for MRT
-    loss = tensor.vector('loss', dtype='float32')
-    alpha = theano.shared(numpy.float32(options['mrt-alpha']))
+    if options["objective"] == "MRT":
+        loss = tensor.vector('loss', dtype='float32')
+        alpha = theano.shared(numpy.float32(options['mrt_alpha']))
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
@@ -296,7 +297,7 @@ def build_model(tparams, options):
         cost *= alpha
 
         # numerically stable normalization of probabilities in batch (in log space)
-        mincost = mincost.min(0, keepdims=True)
+        mincost = cost.min(0, keepdims=True)
         total_cost = -tensor.log(tensor.exp(-cost + mincost).sum(0)) + mincost
         cost -= total_cost
 
@@ -701,7 +702,10 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_min=0.1,
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
-          maxibatch_size=20): #How many minibatches to load at one time
+          maxibatch_size=20,
+          objective="CE",
+          mrt_alpha=0.005,
+          mrt_samples_number=100): #How many minibatches to load at one time
 
     # Model options
     model_options = locals().copy()
@@ -798,7 +802,7 @@ def train(dim_word=100,  # word vector dimensionality
 
     inps = [x, x_mask, y, y_mask]
 
-    if options['objective'] == 'MRT':
+    if model_options['objective'] == 'MRT':
         inps += [loss]
 
     if validFreq or sampleFreq:
@@ -916,7 +920,7 @@ def train(dim_word=100,  # word vector dimensionality
                 sys.exit(1)
 
 
-            if options['objective'] == 'CE':
+            if model_options['objective'] == 'CE':
                 x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                     n_words_src=n_words_src,
                                                     n_words=n_words)
@@ -936,27 +940,28 @@ def train(dim_word=100,  # word vector dimensionality
 
                 ud = time.time() - ud_start
 
-            elif options['objective'] == 'MRT':
+            elif model_options['objective'] == 'MRT':
                 cost = 0
                 # numberize each single sentence-pair
                 for x_s, y_s in zip(x, y):
                     # add golden standard
-                    samples = set([y_s])
+                    samples = [y_s]
                     # create k samples
-                    for i in range(options['mrt-samples-number']):
-                        sample, _, _, _ = gen_sample([f_init], [f_next], x_s, trng=trng, k=1,
+                    for i in range(model_options['mrt_samples_number']):
+                        sample, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=1,
                                                      maxlen=maxlen, stochastic=True, argmax=False,
                                                      suppress_unk=False)
-                        samples.add(sample)
+                        samples.append(sample)
+                    samples = numpy.unique(samples)
                     # create mini-batch with masking
-                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s] * len(samples), list(samples),
+                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s] * len(samples), samples,
                                                                     maxlen=maxlen, n_words_src=n_words_src,
                                                                     n_words=n_words)
                     # get negative smoothed BLEU for samples
-                    reference = SmoothedBleuReference(y_s.split())
+                    reference = SmoothedBleuReference(y_s)
                     hypothesis_matrix = []
                     for sample in samples:
-                        hypothesis_matrix.append(sample.split())
+                        hypothesis_matrix.append(sample)
                     loss.fill(numpy.array(reference.score_matrix(hypothesis_matrix)))
 
                     ud_start = time.time()
