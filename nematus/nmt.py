@@ -970,10 +970,10 @@ def train(dim_word=100,  # word vector dimensionality
                     # compute cost, grads and copy grads to shared variables
                     cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
 
-                    # do the update on parameters
-                    f_update(lrate)
+                # do the update on parameters
+                f_update(lrate)
 
-                    ud = time.time() - ud_start
+                ud = time.time() - ud_start
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
