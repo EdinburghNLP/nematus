@@ -963,12 +963,12 @@ def train(dim_word=100,  # word vector dimensionality
                     hypothesis_matrix = []
                     for sample in samples:
                         hypothesis_matrix.append(sample)
-                    loss.fill(numpy.array(scorer.score_matrix(hypothesis_matrix)))
+                    bleu_scores = numpy.array(reference.score_matrix(hypothesis_matrix), dtype='float32')
 
                     ud_start = time.time()
 
                     # compute cost, grads and copy grads to shared variables
-                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
+                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
 
                     # do the update on parameters
                     f_update(lrate)
