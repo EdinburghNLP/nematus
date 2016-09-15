@@ -963,7 +963,7 @@ def train(dim_word=100,  # word vector dimensionality
                     hypothesis_matrix = []
                     for sample in samples:
                         hypothesis_matrix.append(sample)
-                    bleu_scores = numpy.array(reference.score_matrix(hypothesis_matrix), dtype='float32')
+                    bleu_scores = numpy.array(scorer.score_matrix(hypothesis_matrix), dtype='float32')
 
                     ud_start = time.time()
 
