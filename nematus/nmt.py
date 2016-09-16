@@ -948,7 +948,7 @@ def train(dim_word=100,  # word vector dimensionality
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
                 ud_start = time.time()
-                print 'Computing cost...',
+                print 'Computing cost...'
                 cost = 0
                 for x_s, y_s in zip(x, y):
                     if len(x_s) >= maxlen or len(y_s) >= maxlen:
@@ -973,7 +973,7 @@ def train(dim_word=100,  # word vector dimensionality
                                                                     n_words=n_words)
 
                     # get negative smoothed BLEU for samples
-                    scorer = ScorerProvider().get(scorer_config)
+                    scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
                     loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
@@ -1191,7 +1191,7 @@ if __name__ == '__main__':
     #network.add_argument('--decoder', type=str, default='gru_cond',
                          #choices=['gru_cond'],
                          #help='decoder recurrent layer')
-    
+
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
@@ -1251,6 +1251,8 @@ if __name__ == '__main__':
                          help="MRT alpha (default: %(default)s)")
     mrt.add_argument('--mrt_samples', type=int, default=100, metavar='INT',
                          help="samples per source sentence (default: %(default)s)")
+    mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
+                         help='loss used in MRT (default: %(default)s)')
 
     args = parser.parse_args()
 
