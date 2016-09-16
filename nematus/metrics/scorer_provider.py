@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from scorer_interpolator import ScorerInterpolator
+
 from sentence_bleu import SentenceBleuScorer
 from meteor import MeteorScorer
 
@@ -21,7 +23,17 @@ class ScorerProvider:
 
         Example: ScorerProvider.get("BLEU n=4") returns a SmoothedBleuScorer
                  object that considers n-gram precision up to n=4.
+
+        If more than one metrics are provided (separated by `;`),
+        an interpolated scorer will be returned.
+
+        Example: ScorerProvider.get("INTERPOLATE w=0.5,0.5; SENTENCEBLEU n=4; METEOR meteor_language=fr, meteor_path=/foo/bar/meteor")
+                 returns an InterpolatedScorer object that scores hypotheses
+                 using 0.5 * bleu_score + 0.5 * meteor_score.
         """
+        # interpolation
+        if config_string.startswith("INTERPOLATE"):
+            return ScorerInterpolator(config_string)
         scorer, arguments = config_string.split(" ", 1)
         if scorer == 'SENTENCEBLEU':
             return SentenceBleuScorer(arguments)
