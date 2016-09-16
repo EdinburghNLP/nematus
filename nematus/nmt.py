@@ -948,13 +948,15 @@ def train(dim_word=100,  # word vector dimensionality
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
                 ud_start = time.time()
-                print 'Computing cost...'
-                cost = 0
-                for x_s, y_s in zip(x, y):
-                    if len(x_s) >= maxlen or len(y_s) >= maxlen:
-                        print 'Minibatch with zero sample under length ', maxlen
-                        continue
 
+                xy_pairs = [(x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
+                if not xy_pairs:
+                    print 'Minibatch with zero sample under length ', maxlen
+                    continue
+
+                print 'Computing cost...',
+                cost = 0
+                for x_s, y_s in xy_pairs:
                     # add golden standard
                     samples = [y_s]
                     # create k samples
