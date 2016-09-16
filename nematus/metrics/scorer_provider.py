@@ -27,6 +27,8 @@ class ScorerProvider:
             return SentenceBleuScorer(arguments)
         elif scorer == 'METEOR':
             return MeteorScorer(arguments)
+        elif scorer == 'BEER':
+            return MeteorScorer(arguments)
         # add other scorers here
         else:
             raise NotImplementedError("No such scorer: %s" % scorer)
