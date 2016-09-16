@@ -943,8 +943,9 @@ def train(dim_word=100,  # word vector dimensionality
                 ud = time.time() - ud_start
 
             elif model_options['objective'] == 'MRT':
-                # numberize each single sentence-pair
-                for x_s, y_s in zip(x, y):
+                assert(malen is not None and maxlen > 0)
+                cost = 0
+                for step, (x_s, y_s) in enumerate(zip(x, y)):
                     if len(x_s) >= maxlen or len(y_s) >= maxlen:
                         print 'Minibatch with zero sample under length ', maxlen
                         continue
@@ -954,15 +955,15 @@ def train(dim_word=100,  # word vector dimensionality
                     # create k samples
                     for i in range(model_options['mrt_samples_number']):
                         sample, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=1,
-                                                     maxlen=maxlen, stochastic=True, argmax=False,
+                                                     maxlen=maxlen-1, stochastic=True, argmax=False,
                                                      suppress_unk=False)
                         samples.append(sample)
                     samples.sort()
-                    samples = [s for s, _ in itertools.groupby(samples) if len(s) < maxlen]
+                    samples = [s for s, _ in itertools.groupby(samples)]
 
                     # create mini-batch with masking
                     x_batch, x_mask, y_batch, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
-                                                                    maxlen=maxlen, n_words_src=n_words_src,
+                                                                    maxlen=None, n_words_src=n_words_src,
                                                                     n_words=n_words)
 
                     # get negative smoothed BLEU for samples
@@ -973,7 +974,7 @@ def train(dim_word=100,  # word vector dimensionality
                     ud_start = time.time()
 
                     # compute cost, grads and copy grads to shared variables
-                    cost = f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
+                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
 
                 # do the update on parameters
                 f_update(lrate)
