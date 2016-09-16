@@ -12,6 +12,7 @@ import cPickle as pkl
 from data_iterator import TextIterator
 from util import load_dict
 from alignment_util import *
+from compat import fill_options
 
 from theano_util import (load_params, init_theano_params)
 from nmt import (pred_probs, build_model, prepare_data, init_params)
@@ -111,15 +112,8 @@ def main(models, source_file, nbest_file, saveto, b=80,
         except:
             with open('%s.pkl' % model, 'rb') as f:
                 options.append(pkl.load(f))
-        #hacks for using old models with missing options
-        if not 'dropout_embedding' in options[-1]:
-            options[-1]['dropout_embedding'] = 0
-        if not 'dropout_hidden' in options[-1]:
-            options[-1]['dropout_hidden'] = 0
-        if not 'dropout_source' in options[-1]:
-            options[-1]['dropout_source'] = 0
-        if not 'dropout_target' in options[-1]:
-            options[-1]['dropout_target'] = 0
+
+        fill_options(options[-1])
 
     dictionaries = options[0]['dictionaries']
 

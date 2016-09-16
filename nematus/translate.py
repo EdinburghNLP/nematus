@@ -10,6 +10,7 @@ import cPickle as pkl
 
 from multiprocessing import Process, Queue
 from util import load_dict
+from compat import fill_options
 
 
 def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
@@ -111,19 +112,7 @@ def main(models, source_file, saveto, save_alignment, k=5,
             with open('%s.pkl' % model, 'rb') as f:
                 options.append(pkl.load(f))
 
-        #hacks for using old models with missing options
-        if not 'dropout_embedding' in options[-1]:
-            options[-1]['dropout_embedding'] = 0
-        if not 'dropout_hidden' in options[-1]:
-            options[-1]['dropout_hidden'] = 0
-        if not 'dropout_source' in options[-1]:
-            options[-1]['dropout_source'] = 0
-        if not 'dropout_target' in options[-1]:
-            options[-1]['dropout_target'] = 0
-        if not 'factors' in options[-1]:
-            options[-1]['factors'] = 1
-        if not 'dim_per_factor' in options[-1]:
-            options[-1]['dim_per_factor'] = [options[-1]['dim_word']]
+        fill_options(options[-1])
 
     dictionaries = options[0]['dictionaries']
 
