@@ -64,8 +64,7 @@ class SmoothedBleuReference(Reference):
         """
         Scores @param hypothesis against this reference.
 
-        @return the negative smoothed sentence-level BLEU score:
-                -1.0 is best, -0.0 is worst.
+        @return the smoothed sentence-level BLEU score: 1.0 is best, 0.0 worst.
         """
         def product(iterable):
             return reduce(mul, iterable, 1)

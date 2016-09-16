@@ -969,12 +969,12 @@ def train(dim_word=100,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
                     scorer.set_reference(y_s)
-                    bleu_scores = numpy.array(scorer.score_matrix(samples), dtype='float32')
+                    loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     ud_start = time.time()
 
                     # compute cost, grads and copy grads to shared variables
-                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
+                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
 
                 # do the update on parameters
                 f_update(lrate)
