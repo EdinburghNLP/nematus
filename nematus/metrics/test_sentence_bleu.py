@@ -23,7 +23,12 @@ class TestSentenceBleuReference(unittest.TestCase):
         scorer = SentenceBleuScorer('n=4')
         scorer.set_reference(segment_a)
         self.assertEqual(scorer.score(segment_b), 0.0)
-
+    def test_clipping(self):
+        segment_a = self.tokenize("The very nice man")
+        segment_b = self.tokenize("man man man man")
+        scorer = SentenceBleuScorer('n=1')
+        scorer.set_reference(segment_a)
+        self.assertNotEqual(scorer.score(segment_b), 1.0)
 
 if __name__ == '__main__':
     unittest.main()

@@ -5,6 +5,7 @@ from __future__ import division
 
 from math import exp
 from operator import mul
+from collections import defaultdict
 
 from scorer import Scorer
 from reference import Reference
@@ -56,9 +57,12 @@ class SentenceBleuReference(Reference):
         Extracts all n-grams of order 1 up to (and including) @param max_n from
         a list of @param tokens.
         """
-        def ngrams(tokens, n):
-            return zip(*[tokens[i:] for i in range(n)])
-        return {n: ngrams(tokens, n) for n in range(1, max_n+1)}
+        n_grams = []
+        for n in range(1, max_n+1):
+            n_grams.append(defaultdict(int))
+            for n_gram in zip(*[tokens[i:] for i in range(n)]):
+                n_grams[n-1][n_gram] += 1
+        return n_grams
 
     def score(self, hypothesis_tokens):
         """
@@ -71,8 +75,11 @@ class SentenceBleuReference(Reference):
         def ngram_precisions(ref_ngrams, hyp_ngrams):
             precisions = []
             for n in range(1, self.n+1):
-                overlap = len([ngram for ngram in hyp_ngrams[n] if ngram in ref_ngrams[n]])
-                hyp_length = len(hyp_ngrams[n])
+                overlap = 0
+                for ref_ngram, ref_ngram_count in ref_ngrams[n-1].iteritems():
+                    if ref_ngram in hyp_ngrams[n-1]:
+                        overlap += min(ref_ngram_count, hyp_ngrams[n-1][ref_ngram])
+                hyp_length = len(hypothesis_tokens)-n+1
                 if n >= 2:
                     # smoothing as proposed by Lin and Och (2004),
                     # implemented as described in (Chen and Cherry, 2014)
