@@ -85,7 +85,7 @@ class SentenceBleuReference(Reference):
                     # implemented as described in (Chen and Cherry, 2014)
                     overlap += 1
                     hyp_length += 1
-                precisions.append(overlap/hyp_length)
+                precisions.append(overlap/hyp_length if hyp_length > 0 else 0.0)
             return precisions
         def brevity_penalty(ref_length, hyp_length):
             return min(1.0, exp(1-(ref_length/hyp_length)))
