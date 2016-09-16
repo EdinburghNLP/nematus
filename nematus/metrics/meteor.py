@@ -5,6 +5,12 @@ import subprocess, threading
 from scorer import Scorer
 from reference import Reference
 
+class MeteorError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
 class MeteorScorer(Scorer):
     """
     Python wrapper for the METEOR metric. Starts a METEOR process and keeps it alive, so that the model
@@ -68,17 +74,29 @@ class MeteorReference(Reference):
         self._meteor_scorer.lock.acquire()
         
         #Score hypothesis string against reference string
-        self._meteor_scorer.meteor_process.stdin.write("SCORE ||| "+self._reference_string+" ||| "+hypothesis_string+"\n")
+        try:
+            self._meteor_scorer.meteor_process.stdin.write("SCORE ||| "+self._reference_string+" ||| "+hypothesis_string+"\n")
+        except:
+            raise MeteorError("Meteor returned the following error: "+ self._meteor_scorer.meteor_process.stderr.readline().strip())
         
         #Read feature values from process output
         std_out = self._meteor_scorer.meteor_process.stdout.readline()
         
         #Pass feature values to METEOR process for computation of the final score
-        self._meteor_scorer.meteor_process.stdin.write("EVAL ||| "+std_out)
+        try:
+            self._meteor_scorer.meteor_process.stdin.write("EVAL ||| "+std_out)
+        except:
+            raise MeteorError("Meteor returned the following error: "+ self._meteor_scorer.meteor_process.stderr.readline().strip())
         std_out = self._meteor_scorer.meteor_process.stdout.readline()
         
         #Release the process lock
         self._meteor_scorer.lock.release()
         
+        #Check if Meteor returned a score:
+        try:
+            n = float(std_out)
+        except:
+            raise MeteorError("Meteor returned the following error: "+ self._meteor_scorer.meteor_process.stderr.readline().strip())
+        
         #Return final score
-        return float(std_out)
+        return n

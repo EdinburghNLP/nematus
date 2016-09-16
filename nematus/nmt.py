@@ -945,7 +945,7 @@ def train(dim_word=100,  # word vector dimensionality
                 ud = time.time() - ud_start
 
             elif model_options['objective'] == 'MRT':
-                assert(malen is not None and maxlen > 0)
+                assert maxlen is not None and maxlen > 0
                 cost = 0
                 for step, (x_s, y_s) in enumerate(zip(x, y)):
                     if len(x_s) >= maxlen or len(y_s) >= maxlen:
