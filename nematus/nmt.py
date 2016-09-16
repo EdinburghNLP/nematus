@@ -293,7 +293,7 @@ def build_model(tparams, options):
     y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
     cost = -tensor.log(probs.flatten()[y_flat_idx])
     cost = cost.reshape([y.shape[0], y.shape[1]])
-    cost *= y_mask
+    cost = (cost * y_mask).sum(0)
 
     if options['objective'] == 'MRT':
         cost *= alpha
@@ -307,8 +307,6 @@ def build_model(tparams, options):
         cost = tensor.exp(-cost)
 
         cost *= loss
-
-    cost = cost.sum(0)
 
     #print "Print out in build_model()"
     #print opt_ret
@@ -736,10 +734,10 @@ def train(dim_word=100,  # word vector dimensionality
             worddicts_r[ii][vv] = kk
 
     if n_words_src is None:
-	n_words_src = len(worddicts[0])
+        n_words_src = len(worddicts[0])
         model_options['n_words_src'] = n_words_src
     if n_words is None:
-	n_words = len(worddicts[1])
+        n_words = len(worddicts[1])
         model_options['n_words'] = n_words
 
     # reload options
@@ -947,7 +945,7 @@ def train(dim_word=100,  # word vector dimensionality
             elif model_options['objective'] == 'MRT':
                 # numberize each single sentence-pair
                 for x_s, y_s in zip(x, y):
-                    if len(x_s) >= maxlen:
+                    if len(x_s) >= maxlen or len(y_s) >= maxlen:
                         print 'Minibatch with zero sample under length ', maxlen
                         continue
 
@@ -960,15 +958,12 @@ def train(dim_word=100,  # word vector dimensionality
                                                      suppress_unk=False)
                         samples.append(sample)
                     samples.sort()
-                    samples = [s for s, _ in itertools.groupby(samples)]
+                    samples = [s for s, _ in itertools.groupby(samples) if len(s) < maxlen]
 
                     # create mini-batch with masking
                     x_batch, x_mask, y_batch, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
                                                                     maxlen=maxlen, n_words_src=n_words_src,
                                                                     n_words=n_words)
-                    if x_batch is None:
-                        print 'Minibatch with zero sample under length ', maxlen
-                        continue
 
                     # get negative smoothed BLEU for samples
                     scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
