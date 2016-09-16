@@ -708,7 +708,7 @@ def train(dim_word=100,  # word vector dimensionality
           maxibatch_size=20, #How many minibatches to load at one time
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
-          mrt_samples_number=100,
+          mrt_samples=100,
           mrt_loss="SENTENCEBLEU n=4" # loss function for minimum risk training
     ):
 
@@ -950,7 +950,7 @@ def train(dim_word=100,  # word vector dimensionality
                 ud_start = time.time()
                 print 'Computing cost...',
                 cost = 0
-                for step, (x_s, y_s) in enumerate(zip(x, y)):
+                for x_s, y_s in zip(x, y):
                     if len(x_s) >= maxlen or len(y_s) >= maxlen:
                         print 'Minibatch with zero sample under length ', maxlen
                         continue
@@ -958,7 +958,7 @@ def train(dim_word=100,  # word vector dimensionality
                     # add golden standard
                     samples = [y_s]
                     # create k samples
-                    for i in range(model_options['mrt_samples_number']):
+                    for i in range(model_options['mrt_samples']):
                         sample, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=1,
                                                      maxlen=maxlen-1, stochastic=True, argmax=False,
                                                      suppress_unk=False)
