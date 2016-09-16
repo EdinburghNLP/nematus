@@ -5,6 +5,7 @@ from scorer_interpolator import ScorerInterpolator
 
 from sentence_bleu import SentenceBleuScorer
 from meteor import MeteorScorer
+from beer import BeerScorer
 
 class ScorerProvider:
     """
@@ -40,7 +41,7 @@ class ScorerProvider:
         elif scorer == 'METEOR':
             return MeteorScorer(arguments)
         elif scorer == 'BEER':
-            return MeteorScorer(arguments)
+            return BeerScorer(arguments)
         # add other scorers here
         else:
             raise NotImplementedError("No such scorer: %s" % scorer)
