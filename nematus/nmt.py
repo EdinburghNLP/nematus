@@ -960,10 +960,7 @@ def train(dim_word=100,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
                     scorer.set_reference(y_s)
-                    hypothesis_matrix = []
-                    for sample in samples:
-                        hypothesis_matrix.append(sample)
-                    bleu_scores = numpy.array(scorer.score_matrix(hypothesis_matrix), dtype='float32')
+                    bleu_scores = numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     ud_start = time.time()
 
