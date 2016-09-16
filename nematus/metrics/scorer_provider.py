@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from scorer_interpolator import ScorerInterpolator
+import scorer_interpolator as si
 
 from sentence_bleu import SentenceBleuScorer
 from meteor import MeteorScorer
@@ -34,7 +34,7 @@ class ScorerProvider:
         """
         # interpolation
         if config_string.startswith("INTERPOLATE"):
-            return ScorerInterpolator(config_string)
+            return si.ScorerInterpolator(config_string)
         scorer, arguments = config_string.split(" ", 1)
         if scorer == 'SENTENCEBLEU':
             return SentenceBleuScorer(arguments)
