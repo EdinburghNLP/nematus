@@ -9,7 +9,7 @@ from operator import mul
 from scorer import Scorer
 from reference import Reference
 
-class SmoothedBleuScorer(Scorer):
+class SentenceBleuScorer(Scorer):
     """
     Scores SmoothedBleuReference objects.
     """
@@ -27,12 +27,12 @@ class SmoothedBleuScorer(Scorer):
         """
         Sets the reference against hypotheses are scored.
         """
-        self._reference = SmoothedBleuReference(
+        self._reference = SentenceBleuReference(
             reference_tokens,
             self._arguments['n']
         )
 
-class SmoothedBleuReference(Reference):
+class SentenceBleuReference(Reference):
     """
     Smoothed sentence-level BLEU as as proposed by Lin and Och (2004).
     Implemented as described in (Chen and Cherry, 2014).
@@ -90,4 +90,4 @@ class SmoothedBleuReference(Reference):
         # calculate brevity penalty
         bp = brevity_penalty(self._reference_length, hypothesis_length)
         # compose final BLEU score
-        return -(product(np)**(1/self.n) * bp)
+        return product(np)**(1/self.n) * bp

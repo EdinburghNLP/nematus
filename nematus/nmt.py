@@ -32,7 +32,7 @@ from alignment_util import *
 from layers import *
 from initializers import *
 from optimizers import *
-from metrics.bleu import SmoothedBleuScorer
+from metrics.scorer_provider import ScorerProvider
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
@@ -704,10 +704,12 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_min=0.1,
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
-          maxibatch_size=20,
-          objective="CE",
+          maxibatch_size=20, #How many minibatches to load at one time
+          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
-          mrt_samples_number=100): #How many minibatches to load at one time
+          mrt_samples_number=100,
+          mrt_loss="SENTENCEBLEU n=4" # loss function for minimum risk training
+    ):
 
     # Model options
     model_options = locals().copy()
@@ -967,7 +969,7 @@ def train(dim_word=100,  # word vector dimensionality
                                                                     n_words=n_words)
 
                     # get negative smoothed BLEU for samples
-                    scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
+                    scorer = ScorerProvider().get(scorer_config)
                     scorer.set_reference(y_s)
                     loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
