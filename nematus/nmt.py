@@ -949,7 +949,7 @@ def train(dim_word=100,  # word vector dimensionality
                 assert maxlen is not None and maxlen > 0
                 ud_start = time.time()
 
-                xy_pairs = [(x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
+                xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
                 if not xy_pairs:
                     print 'Minibatch with zero sample under length ', maxlen
                     continue
