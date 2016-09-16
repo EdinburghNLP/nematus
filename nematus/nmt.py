@@ -1003,11 +1003,9 @@ def train(dim_word=100,  # word vector dimensionality
 
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
                 if not xy_pairs:
-                    print 'Minibatch with zero sample under length ', maxlen
                     uidx -= 1
                     continue
 
-                print 'Computing cost...',
                 for x_s, y_s in xy_pairs:
                     # create k samples
                     samples, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=model_options['mrt_samples'],
@@ -1033,7 +1031,6 @@ def train(dim_word=100,  # word vector dimensionality
                     cost = f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
                     # do the update on parameters
                     f_update(lrate)
-                print 'Done'
 
                 ud = time.time() - ud_start
 
