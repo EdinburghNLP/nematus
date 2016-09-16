@@ -946,6 +946,8 @@ def train(dim_word=100,  # word vector dimensionality
 
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
+                ud_start = time.time()
+                print 'Computing cost...',
                 cost = 0
                 for step, (x_s, y_s) in enumerate(zip(x, y)):
                     if len(x_s) >= maxlen or len(y_s) >= maxlen:
@@ -960,6 +962,7 @@ def train(dim_word=100,  # word vector dimensionality
                                                      maxlen=maxlen-1, stochastic=True, argmax=False,
                                                      suppress_unk=False)
                         samples.append(sample)
+                    # remove duplicate samples
                     samples.sort()
                     samples = [s for s, _ in itertools.groupby(samples)]
 
@@ -973,10 +976,9 @@ def train(dim_word=100,  # word vector dimensionality
                     scorer.set_reference(y_s)
                     loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
-                    ud_start = time.time()
-
                     # compute cost, grads and copy grads to shared variables
                     cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
+                print 'Done'
 
                 # do the update on parameters
                 f_update(lrate)
