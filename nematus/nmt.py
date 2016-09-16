@@ -16,6 +16,8 @@ import warnings
 import sys
 import time
 
+import itertools
+
 from subprocess import Popen
 
 from collections import OrderedDict
@@ -151,8 +153,8 @@ def build_model(tparams, options):
     n_samples = x.shape[2]
 
     #only used for MRT
+    loss = tensor.vector('loss', dtype='float32')
     if options["objective"] == "MRT":
-        loss = tensor.vector('loss', dtype='float32')
         alpha = theano.shared(numpy.float32(options['mrt_alpha']))
 
     if options['use_dropout']:
@@ -291,7 +293,7 @@ def build_model(tparams, options):
     y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
     cost = -tensor.log(probs.flatten()[y_flat_idx])
     cost = cost.reshape([y.shape[0], y.shape[1]])
-    cost = (cost * y_mask).sum(0)
+    cost *= y_mask
 
     if options['objective'] == 'MRT':
         cost *= alpha
@@ -305,6 +307,8 @@ def build_model(tparams, options):
         cost = tensor.exp(-cost)
 
         cost *= loss
+
+    cost = cost.sum(0)
 
     #print "Print out in build_model()"
     #print opt_ret
@@ -941,9 +945,12 @@ def train(dim_word=100,  # word vector dimensionality
                 ud = time.time() - ud_start
 
             elif model_options['objective'] == 'MRT':
-                cost = 0
                 # numberize each single sentence-pair
                 for x_s, y_s in zip(x, y):
+                    if len(x_s) >= maxlen:
+                        print 'Minibatch with zero sample under length ', maxlen
+                        continue
+
                     # add golden standard
                     samples = [y_s]
                     # create k samples
@@ -952,11 +959,17 @@ def train(dim_word=100,  # word vector dimensionality
                                                      maxlen=maxlen, stochastic=True, argmax=False,
                                                      suppress_unk=False)
                         samples.append(sample)
-                    samples = numpy.unique(samples)
+                    samples.sort()
+                    samples = [s for s, _ in itertools.groupby(samples)]
+
                     # create mini-batch with masking
-                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s] * len(samples), samples,
+                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
                                                                     maxlen=maxlen, n_words_src=n_words_src,
                                                                     n_words=n_words)
+                    if x_batch is None:
+                        print 'Minibatch with zero sample under length ', maxlen
+                        continue
+
                     # get negative smoothed BLEU for samples
                     scorer = SmoothedBleuScorer('n=4') #TODO: get parameters via nematus config?
                     scorer.set_reference(y_s)
@@ -965,7 +978,7 @@ def train(dim_word=100,  # word vector dimensionality
                     ud_start = time.time()
 
                     # compute cost, grads and copy grads to shared variables
-                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
+                    cost = f_grad_shared(x_batch, x_mask, y_batch, y_mask, bleu_scores)
 
                 # do the update on parameters
                 f_update(lrate)
