@@ -1009,14 +1009,12 @@ def train(dim_word=100,  # word vector dimensionality
 
                 print 'Computing cost...',
                 for x_s, y_s in xy_pairs:
-                    # add golden standard
-                    samples = [y_s]
                     # create k samples
-                    for i in range(model_options['mrt_samples']):
-                        sample, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=1,
+                    samples, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=model_options['mrt_samples'],
                                                      maxlen=maxlen-1, stochastic=True, argmax=False,
                                                      suppress_unk=False)
-                        samples.append(sample)
+                    # add gold translation
+                    samples.append(y_s)
                     # remove duplicate samples
                     samples.sort()
                     samples = [s for s, _ in itertools.groupby(samples)]
