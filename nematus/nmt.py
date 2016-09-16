@@ -455,28 +455,32 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     return f_init, f_next
 
+
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                stochastic=True, argmax=False, return_alignment=False, suppress_unk=False):
 
     # k is the beam size we have
-    if k > 1:
+    if k > 1 and argmax:
         assert not stochastic, \
-            'Beam search does not support stochastic sampling'
+            'Beam search does not support stochastic sampling with argmax'
 
     sample = []
     sample_score = []
     sample_word_probs = []
     alignment = []
     if stochastic:
-        sample_score = 0
+        if argmax:
+            sample_score = 0
+        live_k=k
+    else:
+        live_k = 1
 
-    live_k = 1
     dead_k = 0
 
-    hyp_samples = [[]] * live_k
-    word_probs = [[]] * live_k
+    hyp_samples=[ [] for i in xrange(live_k) ]
+    word_probs=[ [] for i in xrange(live_k) ]
     hyp_scores = numpy.zeros(live_k).astype('float32')
     hyp_states = []
     if return_alignment:
@@ -492,9 +496,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
-        next_state[i] = ret[0]
+        next_state[i] = numpy.tile( ret[0] , (live_k,1))
         ctx0[i] = ret[1]
-    next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
+    next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
     # x is a sequence of word ids followed by 0, eos id
     for ii in xrange(maxlen):
@@ -510,14 +514,55 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
         if stochastic:
+            #batches are not supported with argmax: output data structure is different
             if argmax:
                 nw = sum(next_p)[0].argmax()
+                sample.append(nw)
+                sample_score += numpy.log(next_p[0][0, nw])
+                if nw == 0:
+                    break
             else:
-                nw = next_w_tmp[0]
-            sample.append(nw)
-            sample_score += numpy.log(next_p[0][0, nw])
-            if nw == 0:
-                break
+                #FIXME: sampling is currently performed according to the last model only
+                nws = next_w_tmp
+                cand_scores = numpy.array(hyp_scores)[:, None] - sum(numpy.log(next_p))
+                probs = sum(next_p)/num_models
+
+                for idx,nw in enumerate(nws):
+                    hyp_samples[idx].append(nw)
+
+
+                hyp_states=[]
+                for ti in xrange(live_k):
+                    hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                    hyp_scores[ti]=cand_scores[ti][nws[ti]]
+                    word_probs[ti].append(probs[ti][nws[ti]])
+
+                new_hyp_states=[]
+                new_hyp_samples=[]
+                new_hyp_scores=[]
+                new_word_probs=[]
+                for idx,[hyp_sample,hyp_state, hyp_score, hyp_word_prob] in enumerate(zip(hyp_samples,hyp_states,hyp_scores, word_probs)):
+                    if hyp_sample[-1]  > 0:
+                        new_hyp_samples.append(hyp_sample)
+                        new_hyp_states.append(hyp_state)
+                        new_hyp_scores.append(hyp_score)
+                        new_word_probs.append(hyp_word_prob)
+                    else:
+                        sample.append(hyp_sample)
+                        sample_score.append(hyp_score)
+                        sample_word_probs.append(hyp_word_prob)
+
+                hyp_samples=new_hyp_samples
+                hyp_states=new_hyp_states
+                hyp_scores=new_hyp_scores
+                word_probs=new_word_probs
+
+                live_k=len(hyp_samples)
+                if live_k < 1:
+                    break
+
+                next_w = numpy.array([w[-1] for w in hyp_samples])
+                next_state = [numpy.array(state) for state in zip(*hyp_states)]
         else:
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
             probs = sum(next_p)/num_models
