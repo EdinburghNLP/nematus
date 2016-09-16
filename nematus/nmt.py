@@ -754,6 +754,13 @@ def train(dim_word=100,  # word vector dimensionality
                 loaded_model_options = pkl.load(f)
         model_options.update(loaded_model_options)
 
+    if model_options['objective'] == 'MRT':
+        # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
+        # per pair of train sentences (== per batch of samples), so we set batch_size to 1 to make
+        # model saving, validation, etc trigger after the same number of updates as before
+        print 'Running in MRT mode, minibatch size set to 1 sentence'
+        batch_size = 1
+
     print 'Loading data'
     domain_interpolation_cur = None
     if use_domain_interpolation:
@@ -952,10 +959,10 @@ def train(dim_word=100,  # word vector dimensionality
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
                 if not xy_pairs:
                     print 'Minibatch with zero sample under length ', maxlen
+                    uidx -= 1
                     continue
 
                 print 'Computing cost...',
-                cost = 0
                 for x_s, y_s in xy_pairs:
                     # add golden standard
                     samples = [y_s]
@@ -980,11 +987,10 @@ def train(dim_word=100,  # word vector dimensionality
                     loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     # compute cost, grads and copy grads to shared variables
-                    cost += f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
+                    cost = f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
+                    # do the update on parameters
+                    f_update(lrate)
                 print 'Done'
-
-                # do the update on parameters
-                f_update(lrate)
 
                 ud = time.time() - ud_start
 
