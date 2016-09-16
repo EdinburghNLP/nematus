@@ -541,14 +541,14 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                 new_hyp_samples=[]
                 new_hyp_scores=[]
                 new_word_probs=[]
-                for idx,[hyp_sample,hyp_state, hyp_score, hyp_word_prob] in enumerate(zip(hyp_samples,hyp_states,hyp_scores, word_probs)):
+                for hyp_sample,hyp_state, hyp_score, hyp_word_prob in zip(hyp_samples,hyp_states,hyp_scores, word_probs):
                     if hyp_sample[-1]  > 0:
-                        new_hyp_samples.append(hyp_sample)
-                        new_hyp_states.append(hyp_state)
+                        new_hyp_samples.append(copy.copy(hyp_sample))
+                        new_hyp_states.append(copy.copy(hyp_state))
                         new_hyp_scores.append(hyp_score)
                         new_word_probs.append(hyp_word_prob)
                     else:
-                        sample.append(hyp_sample)
+                        sample.append(copy.copy(hyp_sample))
                         sample_score.append(hyp_score)
                         sample_word_probs.append(hyp_word_prob)
 
@@ -615,7 +615,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
                 if new_hyp_samples[idx][-1] == 0:
-                    sample.append(new_hyp_samples[idx])
+                    sample.append(copy.copy(new_hyp_samples[idx]))
                     sample_score.append(new_hyp_scores[idx])
                     sample_word_probs.append(new_word_probs[idx])
                     if return_alignment:
@@ -623,9 +623,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     dead_k += 1
                 else:
                     new_live_k += 1
-                    hyp_samples.append(new_hyp_samples[idx])
+                    hyp_samples.append(copy.copy(new_hyp_samples[idx]))
                     hyp_scores.append(new_hyp_scores[idx])
-                    hyp_states.append(new_hyp_states[idx])
+                    hyp_states.append(copy.copy(new_hyp_states[idx]))
                     word_probs.append(new_word_probs[idx])
                     if return_alignment:
                         hyp_alignment.append(new_hyp_alignment[idx])
@@ -641,15 +641,14 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             next_w = numpy.array([w[-1] for w in hyp_samples])
             next_state = [numpy.array(state) for state in zip(*hyp_states)]
 
-    if not stochastic:
-        # dump every remaining one
-        if live_k > 0:
-            for idx in xrange(live_k):
-                sample.append(hyp_samples[idx])
-                sample_score.append(hyp_scores[idx])
-                sample_word_probs.append(word_probs[idx])
-                if return_alignment:
-                    alignment.append(hyp_alignment[idx])
+    # dump every remaining one
+    if not argmax and live_k > 0:
+        for idx in xrange(live_k):
+            sample.append(hyp_samples[idx])
+            sample_score.append(hyp_scores[idx])
+            sample_word_probs.append(word_probs[idx])
+            if return_alignment:
+                alignment.append(hyp_alignment[idx])
 
     if not return_alignment:
         alignment = [None for i in range(len(sample))]
