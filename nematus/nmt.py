@@ -1020,7 +1020,7 @@ def train(dim_word=100,  # word vector dimensionality
                     samples = [s for s, _ in itertools.groupby(samples)]
 
                     # create mini-batch with masking
-                    x, x_mask, y_batch, y = prepare_data([x_s for _ in xrange(len(samples))], samples,
+                    x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
                                                                     maxlen=None, n_words_src=n_words_src,
                                                                     n_words=n_words)
 
