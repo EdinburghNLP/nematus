@@ -1020,7 +1020,7 @@ def train(dim_word=100,  # word vector dimensionality
                     samples = [s for s, _ in itertools.groupby(samples)]
 
                     # create mini-batch with masking
-                    x_batch, x_mask, y_batch, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
+                    x, x_mask, y_batch, y = prepare_data([x_s for _ in xrange(len(samples))], samples,
                                                                     maxlen=None, n_words_src=n_words_src,
                                                                     n_words=n_words)
 
@@ -1030,7 +1030,7 @@ def train(dim_word=100,  # word vector dimensionality
                     loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     # compute cost, grads and copy grads to shared variables
-                    cost = f_grad_shared(x_batch, x_mask, y_batch, y_mask, loss)
+                    cost = f_grad_shared(x, x_mask, y, y_mask, loss)
                     # do the update on parameters
                     f_update(lrate)
 
