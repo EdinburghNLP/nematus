@@ -1106,7 +1106,7 @@ def train(dim_word=100,  # word vector dimensionality
                     print
                     print 'Sample ', jj, ': ',
                     if stochastic:
-                        ss = sample
+                        ss = sample[0]
                     else:
                         score = score / numpy.array([len(s) for s in sample])
                         ss = sample[score.argmin()]
