@@ -870,7 +870,10 @@ def train(dim_word=100,  # word vector dimensionality
     f_log_probs = theano.function(inps, cost, profile=profile)
     print 'Done'
 
-    cost = cost.mean()
+    if model_options['objective'] == 'CE':
+        cost = cost.mean()
+    elif model_options['objective'] == 'MRT':
+        cost = cost.sum()
 
     # apply L2 regularization on weights
     if decay_c > 0.:
