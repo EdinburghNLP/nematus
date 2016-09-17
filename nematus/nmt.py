@@ -524,8 +524,8 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             else:
                 #FIXME: sampling is currently performed according to the last model only
                 nws = next_w_tmp
-                cand_scores = numpy.array(hyp_scores)[:, None] - sum(numpy.log(next_p))
-                probs = sum(next_p)/num_models
+                cand_scores = numpy.array(hyp_scores)[:, None] - numpy.log(next_p[-1])
+                probs = next_p[-1]
 
                 for idx,nw in enumerate(nws):
                     hyp_samples[idx].append(nw)
