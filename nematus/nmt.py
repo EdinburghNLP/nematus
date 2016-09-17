@@ -153,11 +153,6 @@ def build_model(tparams, options):
     n_timesteps_trg = y.shape[0]
     n_samples = x.shape[2]
 
-    #only used for MRT
-    loss = tensor.vector('loss', dtype='float32')
-    if options["objective"] == "MRT":
-        alpha = theano.shared(numpy.float32(options['mrt_alpha']))
-
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
@@ -296,22 +291,9 @@ def build_model(tparams, options):
     cost = cost.reshape([y.shape[0], y.shape[1]])
     cost = (cost * y_mask).sum(0)
 
-    if options['objective'] == 'MRT':
-        cost *= alpha
-
-        # numerically stable normalization of probabilities in batch (in log space)
-        mincost = cost.min(0, keepdims=True)
-        total_cost = -tensor.log(tensor.exp(-cost + mincost).sum(0)) + mincost
-        cost -= total_cost
-
-        # back to probability space
-        cost = tensor.exp(-cost)
-
-        cost *= loss
-
     #print "Print out in build_model()"
     #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, loss, opt_ret, cost
+    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
 
 
 # build a sampler
@@ -455,6 +437,24 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     return f_init, f_next
 
+
+def mrt_cost(cost, options):
+    loss = tensor.vector('loss', dtype='float32')
+    alpha = theano.shared(numpy.float32(options['mrt_alpha']))
+
+    cost *= alpha
+
+    # numerically stable normalization of probabilities in batch (in log space)
+    mincost = cost.min(0, keepdims=True)
+    total_cost = -tensor.log(tensor.exp(-cost + mincost).sum(0)) + mincost
+    cost -= total_cost
+
+    # back to probability space
+    cost = tensor.exp(-cost)
+
+    cost *= loss
+
+    return cost, loss
 
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
@@ -851,15 +851,11 @@ def train(dim_word=100,  # word vector dimensionality
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
-        loss, \
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
 
     inps = [x, x_mask, y, y_mask]
-
-    if model_options['objective'] == 'MRT':
-        inps += [loss]
 
     if validFreq or sampleFreq:
         print 'Building sampler'
@@ -873,7 +869,10 @@ def train(dim_word=100,  # word vector dimensionality
     if model_options['objective'] == 'CE':
         cost = cost.mean()
     elif model_options['objective'] == 'MRT':
+        #MRT objective function
+        cost, loss = mrt_cost(cost, model_options)
         cost = cost.sum()
+        inps += [loss]
 
     # apply L2 regularization on weights
     if decay_c > 0.:
