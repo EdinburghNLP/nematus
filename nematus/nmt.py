@@ -299,6 +299,7 @@ def build_model(tparams, options):
 # build a sampler
 def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     x = tensor.tensor3('x', dtype='int64')
+    x.tag.test_value = (numpy.random.rand(1, 5, 1)*100).astype('int64')
     xr = x[:,::-1]
     n_timesteps = x.shape[1]
     n_samples = x.shape[2]
@@ -438,6 +439,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     return f_init, f_next
 
 
+# minimum risk cost
+# assumes cost is the sentence-level log probability
+# and each sentence in the minibatch is a sample of the same source sentence
 def mrt_cost(cost, options):
     loss = tensor.vector('loss', dtype='float32')
     alpha = theano.shared(numpy.float32(options['mrt_alpha']))
@@ -1026,7 +1030,7 @@ def train(dim_word=100,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
-                    loss = -numpy.array(scorer.score_matrix(samples), dtype='float32')
+                    loss = 1-numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask, loss)

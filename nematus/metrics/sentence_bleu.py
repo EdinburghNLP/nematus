@@ -88,7 +88,7 @@ class SentenceBleuReference(Reference):
                 precisions.append(overlap/hyp_length if hyp_length > 0 else 0.0)
             return precisions
         def brevity_penalty(ref_length, hyp_length):
-            return min(1.0, exp(1-(ref_length/hyp_length)))
+            return min(1.0, exp(1-(ref_length/hyp_length if hyp_length > 0 else 0.0)))
         # preprocess hypothesis
         hypothesis_length = len(hypothesis_tokens)
         hypothesis_ngrams = self._get_ngrams(hypothesis_tokens, self.n)
