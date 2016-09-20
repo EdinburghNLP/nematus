@@ -460,6 +460,185 @@ def mrt_cost(cost, options):
 
     return cost, loss
 
+
+# build a sampler that produces samples in one theano function
+def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False):
+    x = tensor.tensor3('x', dtype='int64')
+    x.tag.test_value = (numpy.random.rand(1, 5, 1)*100).astype('int64')
+    xr = x[:,::-1]
+    n_timesteps = x.shape[1]
+    n_samples = x.shape[2]
+
+    # word embedding (source), forward and backward
+    emb = []
+    embr = []
+    for factor in range(options['factors']):
+        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
+        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
+    emb = concatenate(emb, axis=1)
+    embr = concatenate(embr, axis=1)
+    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
+    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
+
+    if options['use_dropout']:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_source = 1-options['dropout_source']
+        retain_probability_target = 1-options['dropout_target']
+        rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+        rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+        rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
+        emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
+        source_dropout = theano.shared(numpy.float32(retain_probability_source))
+        target_dropout = theano.shared(numpy.float32(retain_probability_target))
+        emb *= source_dropout
+        embr *= source_dropout
+    else:
+        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+        target_dropout = theano.shared(numpy.float32(1.))
+
+    # encoder
+    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
+                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile)
+
+
+    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
+                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile)
+
+    # concatenate forward and backward rnn hidden states
+    ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+
+    # get the input for decoder rnn initializer mlp
+    ctx_mean = ctx.mean(0)
+    # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
+
+    if options['use_dropout']:
+        ctx_mean *= retain_probability_hidden
+
+    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
+                                    prefix='ff_state', activ='tanh')
+
+    k = tensor.iscalar("k")
+    k.tag.test_value = 12
+    init_w = tensor.alloc(numpy.int64(-1), k*n_samples)
+
+
+    ctx = tensor.tile(ctx, [k, 1])
+
+    init_state = tensor.tile(init_state, [k, 1])
+
+    # projected context
+    assert ctx.ndim == 3, \
+    'Context must be 3-d: #annotation x #sample x dim'
+    pctx_ = tensor.dot(ctx*ctx_dropout_d[0], tparams[pp('decoder', 'Wc_att')]) +\
+        tparams[pp('decoder', 'b_att')]
+
+    def decoder_step(y, init_state, ctx, pctx_, target_dropout, emb_dropout, rec_dropout, ctx_dropout, *shared_vars):
+
+        # if it's the first word, emb should be all zero and it is indicated by -1
+        emb = tensor.switch(y[:, None] < 0,
+                            tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
+                            tparams['Wemb_dec'][y])
+
+        emb *= target_dropout
+
+        # apply one step of conditional gru with attention
+        proj = get_layer_constr('gru_cond')(tparams, emb, options,
+                                                prefix='decoder',
+                                                mask=None, context=ctx,
+                                                pctx_=pctx_,
+                                                one_step=True,
+                                                init_state=init_state,
+                                                emb_dropout=emb_dropout,
+                                                ctx_dropout=ctx_dropout,
+                                                rec_dropout=rec_dropout,
+                                                shared_vars=shared_vars,
+                                                profile=profile)
+        # get the next hidden state
+        next_state = proj[0]
+
+        # get the weighted averages of context for this target word y
+        ctxs = proj[1]
+
+        # alignment matrix (attention model)
+        dec_alphas = proj[2]
+
+        if options['use_dropout']:
+            next_state_up = next_state * retain_probability_hidden
+            emb *= retain_probability_emb
+            ctxs *= retain_probability_hidden
+        else:
+            next_state_up = next_state
+
+        logit_lstm = get_layer_constr('ff')(tparams, next_state_up, options,
+                                        prefix='ff_logit_lstm', activ='linear')
+        logit_prev = get_layer_constr('ff')(tparams, emb, options,
+                                        prefix='ff_logit_prev', activ='linear')
+        logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
+                                    prefix='ff_logit_ctx', activ='linear')
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
+        if options['use_dropout']:
+            logit *= retain_probability_hidden
+
+        logit = get_layer_constr('ff')(tparams, logit, options,
+                                prefix='ff_logit', activ='linear')
+
+        # compute the softmax probability
+        next_probs = tensor.nnet.softmax(logit)
+
+        # sample from softmax distribution to get the sample
+        next_sample = trng.multinomial(pvals=next_probs).argmax(1)
+
+        # do not produce words after EOS
+        next_sample = tensor.switch(
+                      tensor.eq(y,0),
+                      0,
+                      next_sample)
+
+        return [next_sample, next_state, next_probs[0, next_sample]], \
+               theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
+
+    # symbolic loop for sequence generation
+    shared_vars = [tparams[pp('decoder', 'U')],
+                   tparams[pp('decoder', 'Wc')],
+                   tparams[pp('decoder', 'W_comb_att')],
+                   tparams[pp('decoder', 'U_att')],
+                   tparams[pp('decoder', 'c_tt')],
+                   tparams[pp('decoder', 'Ux')],
+                   tparams[pp('decoder', 'Wcx')],
+                   tparams[pp('decoder', 'U_nl')],
+                   tparams[pp('decoder', 'Ux_nl')],
+                   tparams[pp('decoder', 'b_nl')],
+                   tparams[pp('decoder', 'bx_nl')]]
+
+
+    n_steps = tensor.iscalar("n_steps")
+    n_steps.tag.test_value = 50
+
+    (sample, state, probs), updates = theano.scan(decoder_step,
+                        outputs_info=[init_w, init_state, None],
+                        non_sequences=[ctx, pctx_, target_dropout, emb_dropout_d, rec_dropout_d, ctx_dropout_d]+shared_vars,
+                        n_steps=n_steps)
+
+    print >>sys.stderr, 'Building f_sample...',
+    outs = [sample, probs]
+    f_sample = theano.function([x, k, n_steps], outs, name='f_sample', updates=updates, profile=profile)
+    print >>sys.stderr, 'Done'
+
+    return f_sample
+
+
+
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
@@ -864,6 +1043,9 @@ def train(dim_word=100,  # word vector dimensionality
     if validFreq or sampleFreq:
         print 'Building sampler'
         f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
+    if model_options['objective'] == 'MRT':
+        print 'Building MRT sampler'
+        f_sampler = build_full_sampler(tparams, model_options, use_noise, trng)
 
     # before any regularizer
     print 'Building f_log_probs...',
@@ -1012,10 +1194,12 @@ def train(dim_word=100,  # word vector dimensionality
                     continue
 
                 for x_s, y_s in xy_pairs:
+
                     # create k samples
-                    samples, _, _, _ = gen_sample([f_init], [f_next], [x_s], trng=trng, k=model_options['mrt_samples'],
-                                                     maxlen=maxlen-1, stochastic=True, argmax=False,
-                                                     suppress_unk=False)
+                    samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
+
+                    samples = [numpy.trim_zeros(item) for item in zip(*samples)]
+
                     # add gold translation
                     samples.append(y_s)
                     # remove duplicate samples
