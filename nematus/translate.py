@@ -9,7 +9,7 @@ import json
 import cPickle as pkl
 
 from multiprocessing import Process, Queue
-from util import load_dict
+from util import load_dict, load_config
 from compat import fill_options
 
 
@@ -105,12 +105,7 @@ def main(models, source_file, saveto, save_alignment, k=5,
     # load model model_options
     options = []
     for model in args.models:
-        try:
-            with open('%s.json' % model, 'rb') as f:
-                options.append(json.load(f))
-        except:
-            with open('%s.pkl' % model, 'rb') as f:
-                options.append(pkl.load(f))
+        options.append(load_config(model))
 
         fill_options(options[-1])
 

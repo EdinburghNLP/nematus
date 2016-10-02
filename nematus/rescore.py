@@ -10,7 +10,7 @@ import json
 import cPickle as pkl
 
 from data_iterator import TextIterator
-from util import load_dict
+from util import load_dict, load_config
 from alignment_util import *
 from compat import fill_options
 
@@ -106,12 +106,7 @@ def main(models, source_file, nbest_file, saveto, b=80,
     # load model model_options
     options = []
     for model in args.models:
-        try:
-            with open('%s.json' % model, 'rb') as f:
-                options.append(json.load(f))
-        except:
-            with open('%s.pkl' % model, 'rb') as f:
-                options.append(pkl.load(f))
+        options.append(load_config(model))
 
         fill_options(options[-1])
 
