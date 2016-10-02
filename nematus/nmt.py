@@ -510,8 +510,7 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
     init_state = tensor.tile(init_state, [k, 1])
 
     # projected context
-    assert ctx.ndim == 3, \
-    'Context must be 3-d: #annotation x #sample x dim'
+    assert ctx.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
     pctx_ = tensor.dot(ctx*ctx_dropout_d[0], tparams[pp('decoder', 'Wc_att')]) +\
         tparams[pp('decoder', 'b_att')]
 
