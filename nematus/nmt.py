@@ -129,14 +129,16 @@ def init_params(options):
 
 
 # bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
-def build_encoder(tparams, options, trng, x_mask=None, sampling=False):
+def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
 
     x = tensor.tensor3('x', dtype='int64')
     x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
 
     # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
-    if xr_mask is not None:
+    if x_mask is None:
+        xr_mask = None
+    else:
         xr_mask = x_mask[::-1]
 
     n_timesteps = x.shape[1]
@@ -159,6 +161,7 @@ def build_encoder(tparams, options, trng, x_mask=None, sampling=False):
                 rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
                 emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
                 emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                source_dropout = theano.shared(numpy.float32(1.))
         else:
             if options['model_version'] < 0.1:
                 scaled = False
@@ -200,7 +203,11 @@ def build_encoder(tparams, options, trng, x_mask=None, sampling=False):
     embr = concatenate(embr, axis=1)
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
     if options['use_dropout']:
-        embr *= source_dropout[::-1]
+        if sampling:
+            embr *= source_dropout
+        else:
+            # we drop out the same words in both directions
+            embr *= source_dropout[::-1]
 
     projr = get_layer_constr(options['encoder'])(tparams, embr, options,
                                              prefix='encoder_r',
@@ -229,7 +236,7 @@ def build_model(tparams, options):
     y_mask = tensor.matrix('y_mask', dtype='float32')
     y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
-    x, ctx = build_encoder(tparams, options, trng, x_mask, sampling=False)
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
     n_samples = x.shape[2]
     n_timesteps_trg = y.shape[0]
 
@@ -350,14 +357,14 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
-    x, ctx = build_encoder(tparams, options, trng, None, sampling=True)
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
     n_samples = x.shape[2]
 
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
     # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         ctx_mean *= retain_probability_hidden
 
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
@@ -377,7 +384,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                         tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
                         tparams['Wemb_dec'][y])
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         emb *= target_dropout
 
     # apply one step of conditional gru with attention
@@ -399,7 +406,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         next_state_up = next_state * retain_probability_hidden
         emb *= retain_probability_emb
         ctxs *= retain_probability_hidden
@@ -414,7 +421,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         logit *= retain_probability_hidden
 
     logit = get_layer_constr('ff')(tparams, logit, options,
@@ -480,14 +487,14 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
         target_dropout = theano.shared(numpy.float32(1.))
 
-    x, ctx = build_encoder(tparams, options, trng, None, sampling=True)
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
     n_samples = x.shape[2]
 
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
     # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         ctx_mean *= retain_probability_hidden
 
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
@@ -538,7 +545,7 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         # alignment matrix (attention model)
         dec_alphas = proj[2]
 
-        if options['use_dropout']:
+        if options['use_dropout'] and options['model_version'] < 0.1:
             next_state_up = next_state * retain_probability_hidden
             emb *= retain_probability_emb
             ctxs *= retain_probability_hidden
@@ -553,7 +560,7 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
                                     prefix='ff_logit_ctx', activ='linear')
         logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
-        if options['use_dropout']:
+        if options['use_dropout'] and options['model_version'] < 0.1:
             logit *= retain_probability_hidden
 
         logit = get_layer_constr('ff')(tparams, logit, options,
