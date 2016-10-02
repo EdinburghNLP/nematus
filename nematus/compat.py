@@ -16,3 +16,5 @@ def fill_options(options):
         options['factors'] = 1
     if not 'dim_per_factor' in options:
         options['dim_per_factor'] = [options['dim_word']]
+    if not 'model_version' in options:
+        options['model_version'] = 0

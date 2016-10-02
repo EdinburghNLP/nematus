@@ -148,17 +148,27 @@ def build_encoder(tparams, options, trng, x_mask=None, sampling=False):
         retain_probability_source = 1-options['dropout_source']
         retain_probability_target = 1-options['dropout_target']
         if sampling:
-            rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-            rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-            emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-            emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-            source_dropout = theano.shared(numpy.float32(retain_probability_source))
+            if options['model_version'] < 0.1:
+                rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+                rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+                emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+                emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+                source_dropout = theano.shared(numpy.float32(retain_probability_source))
+            else:
+                rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         else:
-            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-            source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source)
+            if options['model_version'] < 0.1:
+                scaled = False
+            else:
+                scaled = True
+            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+            source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source, scaled)
             source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
@@ -227,10 +237,14 @@ def build_model(tparams, options):
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_target = 1-options['dropout_target']
-        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
-        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target)
+        if options['model_version'] < 0.1:
+            scaled = False
+        else:
+            scaled = True
+        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target, scaled)
         target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
@@ -244,7 +258,7 @@ def build_model(tparams, options):
     # ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
 
     if options['use_dropout']:
-        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
 
     # initial decoder state
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
@@ -282,9 +296,9 @@ def build_model(tparams, options):
     ctxs = proj[1]
 
     if options['use_dropout']:
-        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
 
     # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
@@ -299,7 +313,7 @@ def build_model(tparams, options):
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
     if options['use_dropout']:
-        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden)
+        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden, scaled)
 
     logit = get_layer_constr('ff')(tparams, logit, options,
                                    prefix='ff_logit', activ='linear')
@@ -322,7 +336,7 @@ def build_model(tparams, options):
 # build a sampler
 def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
@@ -452,7 +466,7 @@ def mrt_cost(cost, options):
 # build a sampler that produces samples in one theano function
 def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_target = 1-options['dropout_target']
@@ -889,7 +903,8 @@ def train(dim_word=100,  # word vector dimensionality
           mrt_alpha=0.005,
           mrt_samples=100,
           mrt_reference=False,
-          mrt_loss="SENTENCEBLEU n=4" # loss function for minimum risk training
+          mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
+          model_version=0.1, #store version used for training for compatibility
     ):
 
     # Model options
