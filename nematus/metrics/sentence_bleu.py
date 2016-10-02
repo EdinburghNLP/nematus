@@ -79,7 +79,7 @@ class SentenceBleuReference(Reference):
                 for ref_ngram, ref_ngram_count in ref_ngrams[n-1].iteritems():
                     if ref_ngram in hyp_ngrams[n-1]:
                         overlap += min(ref_ngram_count, hyp_ngrams[n-1][ref_ngram])
-                hyp_length = len(hypothesis_tokens)-n+1
+                hyp_length = max(0, len(hypothesis_tokens)-n+1)
                 if n >= 2:
                     # smoothing as proposed by Lin and Och (2004),
                     # implemented as described in (Chen and Cherry, 2014)
