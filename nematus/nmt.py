@@ -888,6 +888,7 @@ def train(dim_word=100,  # word vector dimensionality
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
           mrt_samples=100,
+          mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4" # loss function for minimum risk training
     ):
 
@@ -1153,7 +1154,9 @@ def train(dim_word=100,  # word vector dimensionality
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
 
                     # add gold translation
-                    samples.append(y_s)
+                    if model_options['mrt_reference']:
+                        samples.append(y_s)
+
                     # remove duplicate samples
                     samples.sort()
                     samples = [s for s, _ in itertools.groupby(samples)]
@@ -1442,6 +1445,8 @@ if __name__ == '__main__':
                          help="samples per source sentence (default: %(default)s)")
     mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
                          help='loss used in MRT (default: %(default)s)')
+    mrt.add_argument('--mrt_reference', action="store_true",
+                         help='add reference to MRT samples.')
 
     args = parser.parse_args()
 
