@@ -128,29 +128,18 @@ def init_params(options):
     return params
 
 
-# build a training model
-def build_model(tparams, options):
-    opt_ret = dict()
+# bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
+def build_encoder(tparams, options, trng, x_mask=None, sampling=False):
 
-    trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.))
-
-    # description string: #words x #samples
     x = tensor.tensor3('x', dtype='int64')
     x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
-    x_mask = tensor.matrix('x_mask', dtype='float32')
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-    y = tensor.matrix('y', dtype='int64')
-    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-    y_mask = tensor.matrix('y_mask', dtype='float32')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
-    # for the backward rnn, we just need to invert x and x_mask
+    # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
-    xr_mask = x_mask[::-1]
+    if xr_mask is not None:
+        xr_mask = x_mask[::-1]
 
     n_timesteps = x.shape[1]
-    n_timesteps_trg = y.shape[0]
     n_samples = x.shape[2]
 
     if options['use_dropout']:
@@ -158,25 +147,24 @@ def build_model(tparams, options):
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
         retain_probability_target = 1-options['dropout_target']
-        rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
-        source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source)
-        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target)
-        source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
-        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
+        if sampling:
+            rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+            rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+            emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+            emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+            source_dropout = theano.shared(numpy.float32(retain_probability_source))
+        else:
+            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+            source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source)
+            source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
         emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     # word embedding for forward rnn (source)
     emb = []
@@ -213,6 +201,41 @@ def build_model(tparams, options):
 
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+
+    return x, ctx
+
+
+# build a training model
+def build_model(tparams, options):
+    opt_ret = dict()
+
+    trng = RandomStreams(1234)
+    use_noise = theano.shared(numpy.float32(0.))
+
+    x_mask = tensor.matrix('x_mask', dtype='float32')
+    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    y = tensor.matrix('y', dtype='int64')
+    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
+    y_mask = tensor.matrix('y_mask', dtype='float32')
+    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+
+    x, ctx = build_encoder(tparams, options, trng, x_mask, sampling=False)
+    n_samples = x.shape[2]
+    n_timesteps_trg = y.shape[0]
+
+    if options['use_dropout']:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_target = 1-options['dropout_target']
+        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
+        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
+        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target)
+        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
+    else:
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     # mean of the context (across time) will be used to initialize decoder rnn
     ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
@@ -298,58 +321,23 @@ def build_model(tparams, options):
 
 # build a sampler
 def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
-    x = tensor.tensor3('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(1, 5, 1)*100).astype('int64')
-    xr = x[:,::-1]
-    n_timesteps = x.shape[1]
-    n_samples = x.shape[2]
-
-    # word embedding (source), forward and backward
-    emb = []
-    embr = []
-    for factor in range(options['factors']):
-        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
-        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
-    emb = concatenate(emb, axis=1)
-    embr = concatenate(embr, axis=1)
-    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
-    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
         retain_probability_target = 1-options['dropout_target']
-        rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
-        source_dropout = theano.shared(numpy.float32(retain_probability_source))
         target_dropout = theano.shared(numpy.float32(retain_probability_target))
-        emb *= source_dropout
-        embr *= source_dropout
     else:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
-    # encoder
-    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile)
-
-
-    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile)
-
-    # concatenate forward and backward rnn hidden states
-    ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+    x, ctx = build_encoder(tparams, options, trng, None, sampling=True)
+    n_samples = x.shape[2]
 
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
@@ -463,59 +451,23 @@ def mrt_cost(cost, options):
 
 # build a sampler that produces samples in one theano function
 def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False):
-    x = tensor.tensor3('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(1, 5, 1)*100).astype('int64')
-    xr = x[:,::-1]
-    n_timesteps = x.shape[1]
-    n_samples = x.shape[2]
-
-    # word embedding (source), forward and backward
-    emb = []
-    embr = []
-    for factor in range(options['factors']):
-        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
-        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
-    emb = concatenate(emb, axis=1)
-    embr = concatenate(embr, axis=1)
-    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
-    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
-        retain_probability_source = 1-options['dropout_source']
         retain_probability_target = 1-options['dropout_target']
-        rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
-        source_dropout = theano.shared(numpy.float32(retain_probability_source))
         target_dropout = theano.shared(numpy.float32(retain_probability_target))
-        emb *= source_dropout
-        embr *= source_dropout
     else:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
         target_dropout = theano.shared(numpy.float32(1.))
 
-    # encoder
-    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile)
-
-
-    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile)
-
-    # concatenate forward and backward rnn hidden states
-    ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+    x, ctx = build_encoder(tparams, options, trng, None, sampling=True)
+    n_samples = x.shape[2]
 
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
