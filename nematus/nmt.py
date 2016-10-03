@@ -148,7 +148,6 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
-        retain_probability_target = 1-options['dropout_target']
         if sampling:
             if options['model_version'] < 0.1:
                 rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
@@ -1162,7 +1161,9 @@ def train(dim_word=100,  # word vector dimensionality
                 for x_s, y_s in xy_pairs:
 
                     # create k samples
+                    use_noise.set_value(0.)
                     samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
+                    use_noise.set_value(1.)
 
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
 
