@@ -11,6 +11,8 @@ The changes to Nematus include:
  - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
+ - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
+ - command line interface for training
  - automatic training set reshuffling between epochs
  - n-best output for decoder
  - more output options (attention weights; word-level probabilities) and visualization scripts

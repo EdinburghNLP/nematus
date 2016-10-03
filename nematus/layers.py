@@ -280,7 +280,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
             return _x[:, :, n*dim:(n+1)*dim]
         return _x[:, n*dim:(n+1)*dim]
 
-    # projected x
+    # state_below is the previous output word embedding
     state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
         tparams[pp(prefix, 'bx')]
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
