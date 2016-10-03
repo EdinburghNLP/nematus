@@ -1022,6 +1022,9 @@ def train(dim_word=100,  # word vector dimensionality
         cost, loss = mrt_cost(cost, model_options)
         cost = cost.sum()
         inps += [loss]
+    else:
+        sys.stderr.write('Error: objective must be one of ["CE", "MRT"]\n')
+        sys.exit(1)
 
     # apply L2 regularization on weights
     if decay_c > 0.:
