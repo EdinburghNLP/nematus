@@ -58,11 +58,14 @@ class CharacterFScoreReference(Reference):
         # Get n-grams from reference:
         self._reference_ngrams, self._reference_ngrams_unique = self._get_ngrams(self._reference_string, self.n)
         
+        #Initialize flag for comparisons where either reference or hypothesis is shorter than n:
+        self._too_short = False
+        
         #Set number of reference n-grams:
         self._reference_n_gram_counter = len(self._reference_ngrams)
         
-        #Initialize flag for comparisons where either reference or hypothesis is shorter than n:
-        self._too_short = False
+        if self._reference_n_gram_counter == 0:
+            self._too_short = True
 
     def _get_ngrams(self, tokens, n):
         """

@@ -35,6 +35,23 @@ class TestCharacterFScoreReference(unittest.TestCase):
         scorer = CharacterFScorer('n=6,beta=3')
         scorer.set_reference(segment_a)
         self.assertEqual(scorer.score(segment_b), 10*((1*0.8)/((9*1)+0.8)))
+    def test_too_short_correct(self):
+        segment_a = self.tokenize("foofo")
+        segment_b = self.tokenize("foofo")     
+        scorer = CharacterFScorer('n=6,beta=3')
+        scorer.set_reference(segment_a)
+        self.assertEqual(scorer.score(segment_b), 1.0)
+    def test_too_short_incorrect_0(self):
+        segment_a = self.tokenize("foofo")
+        segment_b = self.tokenize("foobar")     
+        scorer = CharacterFScorer('n=6,beta=3')
+        scorer.set_reference(segment_a)
+    def test_too_short_incorrect_1(self):
+        segment_a = self.tokenize("foobar")
+        segment_b = self.tokenize("foofo")     
+        scorer = CharacterFScorer('n=6,beta=3')
+        scorer.set_reference(segment_a)
+        self.assertEqual(scorer.score(segment_b), 0.0)    
 
 if __name__ == '__main__':
     unittest.main()
