@@ -104,7 +104,7 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
          normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False):
     # load model model_options
     options = []
-    for model in args.models:
+    for model in models:
         options.append(load_config(model))
 
         fill_options(options[-1])

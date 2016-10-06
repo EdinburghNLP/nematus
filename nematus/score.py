@@ -97,7 +97,7 @@ def main(models, source_file, nbest_file, saveto, b=80,
 
     # load model model_options
     options = []
-    for model in args.models:
+    for model in models:
         options.append(load_config(model))
 
         fill_options(options[-1])
