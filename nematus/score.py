@@ -9,7 +9,6 @@ import tempfile
 
 import numpy
 import json
-import cPickle as pkl
 
 from data_iterator import TextIterator
 from util import load_dict, load_config
@@ -101,36 +100,6 @@ def main(models, source_file, nbest_file, saveto, b=80,
         options.append(load_config(model))
 
         fill_options(options[-1])
-
-    dictionaries = options[0]['dictionaries']
-
-    dictionaries_source = dictionaries[:-1]
-    dictionary_target = dictionaries[-1]
-
-    # load source dictionary and invert
-    word_dicts = []
-    word_idicts = []
-    for dictionary in dictionaries_source:
-        word_dict = load_dict(dictionary)
-        if options[0]['n_words_src']:
-            for key, idx in word_dict.items():
-                if idx >= options[0]['n_words_src']:
-                    del word_dict[key]
-        word_idict = dict()
-        for kk, vv in word_dict.iteritems():
-            word_idict[vv] = kk
-        word_idict[0] = '<eos>'
-        word_idict[1] = 'UNK'
-        word_dicts.append(word_dict)
-        word_idicts.append(word_idict)
-
-    # load target dictionary and invert
-    word_dict_trg = load_dict(dictionary_target)
-    word_idict_trg = dict()
-    for kk, vv in word_dict_trg.iteritems():
-        word_idict_trg[vv] = kk
-    word_idict_trg[0] = '<eos>'
-    word_idict_trg[1] = 'UNK'
 
     rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights)
 
