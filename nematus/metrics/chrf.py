@@ -17,9 +17,9 @@ class CharacterFScorer(Scorer):
         # use character n-gram order of 4 by default
         if not 'n' in self._arguments.keys():
             self._arguments['n'] = 6
-        # use beta = 3 by default
+        # use beta = 1 by default (recommendation by Maja Popovic for generative modelling)
         if not 'beta' in self._arguments.keys():
-            self._arguments['beta'] = 3
+            self._arguments['beta'] = 1
 
     def set_reference(self, reference_tokens):
         """
@@ -36,7 +36,7 @@ class CharacterFScoreReference(Reference):
     References for Character F-Score, as proposed by Popovic (2015): http://www.statmt.org/wmt15/pdf/WMT49.pdf
     """
 
-    def __init__(self, reference_tokens, n=6, beta=3):
+    def __init__(self, reference_tokens, n=6, beta=1):
         """
         @param reference the reference translation that hypotheses shall be
                          scored against.
