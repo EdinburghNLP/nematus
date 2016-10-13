@@ -105,8 +105,9 @@ def init_params(options):
     ctxdim = 2 * options['dim']
 
     # init_state, init_cell
-    params = get_layer_param('ff')(options, params, prefix='ff_state',
-                                nin=ctxdim, nout=options['dim'])
+    params = get_layer_param('lrd_ff')(options, params, prefix='ff_state',
+                                nin=ctxdim, nout=options['dim'], rank=options['context_rank'], plus_diagonal=options['context_plus_diagonal'])
+
     # decoder
     params = get_layer_param(options['decoder'])(options, params,
                                               prefix='decoder',
@@ -235,7 +236,7 @@ def build_model(tparams, options):
         ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
 
     # initial decoder state
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
+    init_state = get_layer_constr('lrd_ff')(tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
     # word embedding (target), we will shift the target sequence one time step
@@ -377,7 +378,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if options['use_dropout']:
         ctx_mean *= retain_probability_hidden
 
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
+    init_state = get_layer_constr('lrd_ff')(tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
     print >>sys.stderr, 'Building f_init...',
@@ -717,6 +718,9 @@ def train(dim_word=100,  # word vector dimensionality
           decoder_rank='full', # 'full' or integer. If it is integer enables low-rank or low-rank plus diagonal parametrization (Miceli Barone 2016) arXiv:1603.03116
           decoder_share_proj_matrix=False, # in low-rank or low-rank plus diagonal mode, control whether the projection matrices are shared between the proposal, reset and update gates of the GRU
           decoder_plus_diagonal=True, # switch between low-rank and low-rank plus diagonal
+          context_rank='full', # 'full' or integer. If it is integer enables low-rank or low-rank plus diagonal parametrization
+          context_plus_diagonal=True, # switch between low-rank and low-rank plus diagonal
+          context_share_proj_matrix=False, # in low-rank or low-rank plus diagonal mode, control whether the projection matrices are shared between the proposal, reset and update gates of the GRU
           return_option_dict=False # Ugly hack used to initialize model option defaults during translation
 ): 
 
