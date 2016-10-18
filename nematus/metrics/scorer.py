@@ -19,16 +19,17 @@ class Scorer:
         # parse arguments
         self._reference = None # to be set via `self.set_reference()`
         self._arguments = {}
-        argument_strings = argument_string.split(",")
-        for a in argument_strings:
-            argument, value = a.split("=")
-            argument = argument.strip()
-            value = value.strip()
-            try:
-                value = int(value) # change type to int if applicable
-            except ValueError:
-                value = value
-            self._arguments[argument] = value
+        if argument_string:
+            argument_strings = argument_string.split(",")
+            for a in argument_strings:
+                argument, value = a.split("=")
+                argument = argument.strip()
+                value = value.strip()
+                try:
+                    value = int(value) # change type to int if applicable
+                except ValueError:
+                    value = value
+                self._arguments[argument] = value
 
     @abstractmethod
     def set_reference(self, reference_tokens):

@@ -35,7 +35,11 @@ class ScorerProvider:
         # interpolation
         if config_string.startswith("INTERPOLATE"):
             return si.ScorerInterpolator(config_string)
-        scorer, arguments = config_string.split(" ", 1)
+        try:
+            scorer, arguments = config_string.split(" ", 1)
+        except ValueError:
+            scorer = config_string
+            arguments = ''
         if scorer == 'SENTENCEBLEU':
             return SentenceBleuScorer(arguments)
         elif scorer == 'METEOR':
