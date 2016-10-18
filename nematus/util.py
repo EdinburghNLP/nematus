@@ -30,3 +30,15 @@ def load_config(basename):
         except:
             sys.stderr.write('Error: config file {0}.json is missing\n'.format(basename))
             sys.exit(1)
+
+
+def seqs2words(seq, inverse_target_dictionary):
+    words = []
+    for w in seq:
+        if w == 0:
+            break
+        if w in inverse_target_dictionary:
+            words.append(inverse_target_dictionary[w])
+        else:
+            words.append('UNK')
+    return ' '.join(words)

@@ -1194,6 +1194,10 @@ def train(dim_word=100,  # word vector dimensionality
                                                                     maxlen=None, n_words_src=n_words_src,
                                                                     n_words=n_words)
 
+                    # map integers to words (for character-level metrics)
+                    samples = [seqs2words(sample, worddicts_r) for sample in samples]
+                    y_s = seqs2words(y_s, worddicts_r)
+
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
