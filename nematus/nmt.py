@@ -448,11 +448,14 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
 
 # minimum risk cost
-# assumes cost is the sentence-level log probability
+# assumes cost is the negative sentence-level log probability
 # and each sentence in the minibatch is a sample of the same source sentence
-def mrt_cost(cost, options):
+def mrt_cost(cost, y_mask, options):
     loss = tensor.vector('loss', dtype='float32')
     alpha = theano.shared(numpy.float32(options['mrt_alpha']))
+
+    if options['mrt_ml_mix'] > 0:
+        ml_cost = cost[0]
 
     cost *= alpha
 
@@ -465,6 +468,14 @@ def mrt_cost(cost, options):
     cost = tensor.exp(-cost)
 
     cost *= loss
+
+    cost = cost.sum()
+
+    if options['mrt_ml_mix'] > 0:
+        #normalize ML by length (because MRT is length-invariant)
+        ml_cost /= y_mask[:,0].sum(0)
+        ml_cost *= options['mrt_ml_mix']
+        cost += ml_cost
 
     return cost, loss
 
@@ -909,6 +920,7 @@ def train(dim_word=100,  # word vector dimensionality
           mrt_samples=100,
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
+          mrt_ml_mix=0, # interpolate mrt loss with ML loss
           model_version=0.1, #store version used for training for compatibility
     ):
 
@@ -1018,8 +1030,10 @@ def train(dim_word=100,  # word vector dimensionality
         cost = cost.mean()
     elif model_options['objective'] == 'MRT':
         #MRT objective function
-        cost, loss = mrt_cost(cost, model_options)
-        cost = cost.sum()
+        if model_options['mrt_ml_mix'] > 0 and not model_options['mrt_reference']:
+            sys.stderr.write('Error: mrt_reference must be enabled to mix MRT and ML objective\n')
+            sys.exit(1)
+        cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
         sys.stderr.write('Error: objective must be one of ["CE", "MRT"]\n')
@@ -1167,13 +1181,13 @@ def train(dim_word=100,  # word vector dimensionality
 
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
 
-                    # add gold translation
-                    if model_options['mrt_reference']:
-                        samples.append(y_s)
-
                     # remove duplicate samples
                     samples.sort()
                     samples = [s for s, _ in itertools.groupby(samples)]
+
+                    # add gold translation [always in first position]
+                    if model_options['mrt_reference']:
+                        samples = [y_s] + [s for s in samples if s != y_s]
 
                     # create mini-batch with masking
                     x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
@@ -1461,6 +1475,8 @@ if __name__ == '__main__':
                          help='loss used in MRT (default: %(default)s)')
     mrt.add_argument('--mrt_reference', action="store_true",
                          help='add reference to MRT samples.')
+    mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
+                     help="Mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
     args = parser.parse_args()
 
