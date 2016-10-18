@@ -141,6 +141,8 @@ class TextIterator:
 
                 if len(ss) > self.maxlen and len(tt) > self.maxlen:
                     continue
+                if not ss or not tt:
+                    continue
 
                 source.append(ss)
                 target.append(tt)
