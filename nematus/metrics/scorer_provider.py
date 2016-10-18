@@ -6,6 +6,7 @@ import scorer_interpolator as si
 from sentence_bleu import SentenceBleuScorer
 from meteor import MeteorScorer
 from beer import BeerScorer
+from chrf import CharacterFScorer
 
 class ScorerProvider:
     """
@@ -46,6 +47,8 @@ class ScorerProvider:
             return MeteorScorer(arguments)
         elif scorer == 'BEER':
             return BeerScorer(arguments)
+        elif scorer == 'CHRF':
+            return CharacterFScorer(arguments)
         # add other scorers here
         else:
             raise NotImplementedError("No such scorer: %s" % scorer)
