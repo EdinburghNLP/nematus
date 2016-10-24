@@ -153,9 +153,8 @@ class TextIterator:
         except IOError:
             self.end_of_data = True
 
-        if len(source) <= 0 or len(target) <= 0:
-            self.end_of_data = False
-            self.reset()
-            raise StopIteration
+        # all sentence pairs in maxibatch filtered out because of length
+        if len(source) == 0 or len(target) == 0:
+            source, target = self.next()
 
         return source, target
