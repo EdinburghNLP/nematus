@@ -110,7 +110,8 @@ if __name__ == "__main__":
     parser.add_argument('-n', action="store_true",
                         help="Normalize scores by sentence length")
     parser.add_argument('-v', action="store_true", help="verbose mode.")
-    parser.add_argument('--models', '-m', type=str, nargs = '+', required=True)
+    parser.add_argument('--models', '-m', type=str, nargs = '+', required=True,
+                        help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
     parser.add_argument('--source', '-s', type=argparse.FileType('r'),
                         required=True, metavar='PATH',
                         help="Source text file")

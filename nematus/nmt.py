@@ -1383,7 +1383,7 @@ if __name__ == '__main__':
     data.add_argument('--reload_', action='store_true',
                          help="load existing model (if '--model' points to existing model)")
     data.add_argument('--overwrite', action='store_true',
-                         help="write all models to same ")
+                         help="write all models to same file")
 
     network = parser.add_argument_group('network parameters')
     network.add_argument('--dim_word', type=int, default=512, metavar='INT',
