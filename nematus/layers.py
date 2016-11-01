@@ -31,22 +31,21 @@ def get_layer_constr(name):
     param_fn, constr_fn = layers[name]
     return eval(constr_fn)
 
-# dropout
-def dropout_layer(state_before, use_noise, trng):
-    proj = tensor.switch(
-        use_noise,
-        state_before * trng.binomial(state_before.shape, p=0.5, n=1,
-                                     dtype=state_before.dtype),
-        state_before * 0.5)
-    return proj
-
 # dropout that will be re-used at different time steps
-def shared_dropout_layer(shape, use_noise, trng, value):
-    proj = tensor.switch(
-        use_noise,
-        trng.binomial(shape, p=value, n=1,
-                                     dtype='float32'),
-        theano.shared(numpy.float32(value)))
+def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
+    #re-scale dropout at training time, so we don't need to at test time
+    if scaled:
+        proj = tensor.switch(
+            use_noise,
+            trng.binomial(shape, p=value, n=1,
+                                        dtype='float32')/value,
+            theano.shared(numpy.float32(1.)))
+    else:
+        proj = tensor.switch(
+            use_noise,
+            trng.binomial(shape, p=value, n=1,
+                                        dtype='float32'),
+            theano.shared(numpy.float32(value)))
     return proj
 
 # feedforward layer: affine transformation + point-wise nonlinearity
