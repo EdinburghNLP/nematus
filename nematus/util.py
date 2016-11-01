@@ -2,6 +2,7 @@
 Utility functions
 '''
 
+import sys
 import json
 import cPickle as pkl
 
@@ -18,3 +19,26 @@ def load_dict(filename):
             return pkl.load(f)
 
 
+def load_config(basename):
+    try:
+        with open('%s.json' % basename, 'rb') as f:
+            return json.load(f)
+    except:
+        try:
+            with open('%s.pkl' % basename, 'rb') as f:
+                return pkl.load(f)
+        except:
+            sys.stderr.write('Error: config file {0}.json is missing\n'.format(basename))
+            sys.exit(1)
+
+
+def seqs2words(seq, inverse_target_dictionary):
+    words = []
+    for w in seq:
+        if w == 0:
+            break
+        if w in inverse_target_dictionary:
+            words.append(inverse_target_dictionary[w])
+        else:
+            words.append('UNK')
+    return ' '.join(words)

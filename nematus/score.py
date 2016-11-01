@@ -9,11 +9,11 @@ import tempfile
 
 import numpy
 import json
-import cPickle as pkl
 
 from data_iterator import TextIterator
-from util import load_dict
+from util import load_dict, load_config
 from alignment_util import *
+from compat import fill_options
 
 from theano_util import (load_params, init_theano_params)
 from nmt import (pred_probs, build_model, prepare_data, init_params)
@@ -96,52 +96,10 @@ def main(models, source_file, nbest_file, saveto, b=80,
 
     # load model model_options
     options = []
-    for model in args.models:
-        try:
-            with open('%s.json' % model, 'rb') as f:
-                options.append(json.load(f))
-        except:
-            with open('%s.pkl' % model, 'rb') as f:
-                options.append(pkl.load(f))
-        #hacks for using old models with missing options
-        if not 'dropout_embedding' in options[-1]:
-            options[-1]['dropout_embedding'] = 0
-        if not 'dropout_hidden' in options[-1]:
-            options[-1]['dropout_hidden'] = 0
-        if not 'dropout_source' in options[-1]:
-            options[-1]['dropout_source'] = 0
-        if not 'dropout_target' in options[-1]:
-            options[-1]['dropout_target'] = 0
+    for model in models:
+        options.append(load_config(model))
 
-    dictionaries = options[0]['dictionaries']
-
-    dictionaries_source = dictionaries[:-1]
-    dictionary_target = dictionaries[-1]
-
-    # load source dictionary and invert
-    word_dicts = []
-    word_idicts = []
-    for dictionary in dictionaries_source:
-        word_dict = load_dict(dictionary)
-        if options[0]['n_words_src']:
-            for key, idx in word_dict.items():
-                if idx >= options[0]['n_words_src']:
-                    del word_dict[key]
-        word_idict = dict()
-        for kk, vv in word_dict.iteritems():
-            word_idict[vv] = kk
-        word_idict[0] = '<eos>'
-        word_idict[1] = 'UNK'
-        word_dicts.append(word_dict)
-        word_idicts.append(word_idict)
-
-    # load target dictionary and invert
-    word_dict_trg = load_dict(dictionary_target)
-    word_idict_trg = dict()
-    for kk, vv in word_dict_trg.iteritems():
-        word_idict_trg[vv] = kk
-    word_idict_trg[0] = '<eos>'
-    word_idict_trg[1] = 'UNK'
+        fill_options(options[-1])
 
     rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights)
 
