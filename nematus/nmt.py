@@ -10,6 +10,7 @@ import json
 import ipdb
 import numpy
 import copy
+import argparse
 
 import os
 import warnings
@@ -1071,4 +1072,106 @@ def train(dim_word=100,  # word vector dimensionality
 
 
 if __name__ == '__main__':
-    pass
+    parser = argparse.ArgumentParser()
+
+    data = parser.add_argument_group('data sets; model loading and saving')
+    data.add_argument('--datasets', type=str, required=True, metavar='PATH', nargs=2,
+                         help="parallel training corpus (source and target)")
+    data.add_argument('--dictionaries', type=str, required=True, metavar='PATH', nargs="+",
+                         help="network vocabularies (one per source factor, plus target vocabulary)")
+    data.add_argument('--model', type=str, default='model.npz', metavar='PATH', dest='saveto',
+                         help="model file name (default: %(default)s)")
+    data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
+                         help="save frequency (default: %(default)s)")
+    data.add_argument('--reload_', action='store_true',
+                         help="load existing model (if '--model' points to existing model)")
+    data.add_argument('--overwrite', action='store_true',
+                         help="write all models to same file")
+
+    network = parser.add_argument_group('network parameters')
+    network.add_argument('--dim_word', type=int, default=512, metavar='INT',
+                         help="embedding layer size (default: %(default)s)")
+    network.add_argument('--dim', type=int, default=1000, metavar='INT',
+                         help="hidden layer size (default: %(default)s)")
+    network.add_argument('--n_words_src', type=int, default=None, metavar='INT',
+                         help="source vocabulary size (default: %(default)s)")
+    network.add_argument('--n_words', type=int, default=None, metavar='INT',
+                         help="target vocabulary size (default: %(default)s)")
+
+    network.add_argument('--factors', type=int, default=1, metavar='INT',
+                         help="number of input factors (default: %(default)s)")
+    network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
+                         help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
+    network.add_argument('--use_dropout', action="store_true",
+                         help="use dropout layer (default: %(default)s)")
+    network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
+                         help="dropout source words (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
+                         help="dropout target words (0: no dropout) (default: %(default)s)")
+    #network.add_argument('--encoder', type=str, default='gru',
+                         #choices=['gru'],
+                         #help='encoder recurrent layer')
+    #network.add_argument('--decoder', type=str, default='gru_cond',
+                         #choices=['gru_cond'],
+                         #help='decoder recurrent layer')
+
+    training = parser.add_argument_group('training parameters')
+    training.add_argument('--maxlen', type=int, default=100, metavar='INT',
+                         help="maximum sequence length (default: %(default)s)")
+    training.add_argument('--optimizer', type=str, default="adam",
+                         choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
+                         help="optimizer (default: %(default)s)")
+    training.add_argument('--batch_size', type=int, default=80, metavar='INT',
+                         help="minibatch size (default: %(default)s)")
+    training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
+                         help="maximum number of epochs (default: %(default)s)")
+    training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
+                         help="maximum number of updates (minibatches) (default: %(default)s)")
+    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
+                         help="L2 regularization penalty (default: %(default)s)")
+    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
+                         help="L2 regularization penalty towards original weights (default: %(default)s)")
+    training.add_argument('--alpha_c', type=float, default=0, metavar='FLOAT',
+                         help="alignment regularization (default: %(default)s)")
+    training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
+                         help="gradient clipping threshold (default: %(default)s)")
+    training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
+                         help="learning rate (default: %(default)s)")
+    training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
+                         help="disable shuffling of training data (for each epoch)")
+    training.add_argument('--no_sort_by_length', action="store_false", dest="sort_by_length",
+                         help='do not sort sentences in maxibatch by length')
+    training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
+                         help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    finetune = training.add_mutually_exclusive_group()
+    finetune.add_argument('--finetune', action="store_true",
+                        help="train with fixed embedding layer")
+    finetune.add_argument('--finetune_only_last', action="store_true",
+                        help="train with all layers except output layer fixed")
+
+    validation = parser.add_argument_group('validation parameters')
+    validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
+                         help="parallel validation corpus (source and target) (default: %(default)s)")
+    validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
+                         help="validation minibatch size (default: %(default)s)")
+    validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
+                         help="validation frequency (default: %(default)s)")
+    validation.add_argument('--patience', type=int, default=10, metavar='INT',
+                         help="early stopping patience (default: %(default)s)")
+    validation.add_argument('--external_validation_script', type=str, default=None, metavar='PATH',
+                         help="location of validation script (to run your favorite metric for validation) (default: %(default)s)")
+
+    display = parser.add_argument_group('display parameters')
+    display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
+                         help="display loss after INT updates (default: %(default)s)")
+    display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
+                         help="display some samples after INT updates (default: %(default)s)")
+
+
+    args = parser.parse_args()
+
+    train(**vars(args))

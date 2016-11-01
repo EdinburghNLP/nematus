@@ -265,7 +265,8 @@ if __name__ == "__main__":
                         help="Normalize scores by sentence length")
     parser.add_argument('-c', action="store_true", help="Character-level")
     parser.add_argument('-v', action="store_true", help="verbose mode.")
-    parser.add_argument('--models', '-m', type=str, nargs = '+', required=True)
+    parser.add_argument('--models', '-m', type=str, nargs = '+', required=True,
+                        help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
     parser.add_argument('--input', '-i', type=argparse.FileType('r'),
                         default=sys.stdin, metavar='PATH',
                         help="Input file (default: standard input)")
