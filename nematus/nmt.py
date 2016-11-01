@@ -728,16 +728,6 @@ def train(dim_word=100,  # word vector dimensionality
         n_words = len(worddicts[1])
         model_options['n_words'] = n_words
 
-    # reload options
-    if reload_ and os.path.exists(saveto):
-        print 'Reloading model options'
-        try:
-            with open('%s.json' % saveto, 'rb') as f:
-                loaded_model_options = json.load(f)
-        except:
-            with open('%s.pkl' % saveto, 'rb') as f:
-                loaded_model_options = pkl.load(f)
-        model_options.update(loaded_model_options)
 
     print 'Loading data'
     domain_interpolation_cur = None
