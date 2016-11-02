@@ -146,7 +146,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --json_alignment     | Output alignment in json format |
 | --n-best             | Write n-best list (of size k) |
 | --suppress-unk       | Suppress hypotheses containing UNK. |
-| --print-word-probabilities, -wp | Print probabilities of each world |
+| --print-word-probabilities, -wp | Print probabilities of each word |
 
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus
