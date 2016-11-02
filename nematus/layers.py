@@ -406,7 +406,7 @@ def param_init_gru_cond_sa(options, params, prefix='gru_cond',
 
 def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
                    mask=None, context=None, one_step=False,
-                   init_memory=None, init_state=None,
+                   init_memory=None, init_state=None, state_history=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
                    profile=False,
@@ -416,6 +416,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
 
     if one_step:
         assert init_state, 'previous state must be provided'
+        assert state_history, 'all previous states must be provided'
 
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
@@ -430,8 +431,10 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
     dim = tparams[pp(prefix, 'Wcx')].shape[1]
 
     # initial/previous state
-    if init_state is None:
+    if init_state is None or state_history is None:
+        assert init_state is None and state_history, 'either provide both init_state and state_history or neither'
         init_state = tensor.alloc(0., n_samples, dim)
+        state_history = tensor.alloc(0., nsteps, n_samples, dim)
 
     # projected context
     assert context.ndim == 3, \
@@ -450,7 +453,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
         tparams[pp(prefix, 'b')]
 
-    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
+    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, state_history_, pctx_, cc_, rec_dropout, ctx_dropout,
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
                     U_nl, Ux_nl, b_nl, bx_nl):
 
@@ -501,7 +504,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
 
         return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
 
-    seqs = [mask, state_below_, state_belowx]
+    seqs = [mask, state_below_, state_belowx, T.arange(nsteps)]
     #seqs = [mask, state_below_, state_belowx, state_belowc]
     _step = _step_slice
 
@@ -518,7 +521,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
                    tparams[pp(prefix, 'bx_nl')]]
 
     if one_step:
-        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
+        rval = _step(*(seqs + [init_state, None, None, state_history, pctx_, context, rec_dropout, ctx_dropout] +
                        shared_vars))
     else:
         rval, updates = theano.scan(_step,
@@ -527,7 +530,8 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
                                                   tensor.alloc(0., n_samples,
                                                                context.shape[2]),
                                                   tensor.alloc(0., n_samples,
-                                                               context.shape[0])],
+                                                               context.shape[0]),
+                                                  state_history],
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
