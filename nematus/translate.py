@@ -265,7 +265,7 @@ if __name__ == "__main__":
     parser.add_argument('--n-best', action="store_true",
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
-    parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each world")
+    parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
 
     args = parser.parse_args()
 
