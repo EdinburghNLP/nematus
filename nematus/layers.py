@@ -20,6 +20,7 @@ from alignment_util import *
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
+          'gru_cond_sa': ('param_init_gru_cond_sa', 'gru_cond_layer_sa'),
           }
 
 
@@ -402,4 +403,135 @@ def param_init_gru_cond_sa(options, params, prefix='gru_cond',
 
     return params
 
+
+def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
+                   mask=None, context=None, one_step=False,
+                   init_memory=None, init_state=None,
+                   context_mask=None, emb_dropout=None,
+                   rec_dropout=None, ctx_dropout=None,
+                   profile=False,
+                   **kwargs):
+
+    assert context, 'Context must be provided'
+
+    if one_step:
+        assert init_state, 'previous state must be provided'
+
+    nsteps = state_below.shape[0]
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+    else:
+        n_samples = 1
+
+    # mask
+    if mask is None:
+        mask = tensor.alloc(1., state_below.shape[0], 1)
+
+    dim = tparams[pp(prefix, 'Wcx')].shape[1]
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.alloc(0., n_samples, dim)
+
+    # projected context
+    assert context.ndim == 3, \
+        'Context must be 3-d: #annotation x #sample x dim'
+    pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
+        tparams[pp(prefix, 'b_att')]
+
+    def _slice(_x, n, dim):
+        if _x.ndim == 3:
+            return _x[:, :, n*dim:(n+1)*dim]
+        return _x[:, n*dim:(n+1)*dim]
+
+    # projected x
+    state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
+        tparams[pp(prefix, 'bx')]
+    state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
+        tparams[pp(prefix, 'b')]
+
+    def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
+                    U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
+                    U_nl, Ux_nl, b_nl, bx_nl):
+
+        preact1 = tensor.dot(h_*rec_dropout[0], U)
+        preact1 += x_
+        preact1 = tensor.nnet.sigmoid(preact1)
+
+        r1 = _slice(preact1, 0, dim)
+        u1 = _slice(preact1, 1, dim)
+
+        preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
+        preactx1 *= r1
+        preactx1 += xx_
+
+        h1 = tensor.tanh(preactx1)
+
+        h1 = u1 * h_ + (1. - u1) * h1
+        h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
+
+        # attention
+        pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
+        pctx__ = pctx_ + pstate_[None, :, :]
+        #pctx__ += xc_
+        pctx__ = tensor.tanh(pctx__)
+        alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
+        alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
+        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
+        if context_mask:
+            alpha = alpha * context_mask
+        alpha = alpha / alpha.sum(0, keepdims=True)
+        ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
+
+        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
+        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
+        preact2 = tensor.nnet.sigmoid(preact2)
+
+        r2 = _slice(preact2, 0, dim)
+        u2 = _slice(preact2, 1, dim)
+
+        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
+        preactx2 *= r2
+        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
+
+        h2 = tensor.tanh(preactx2)
+
+        h2 = u2 * h1 + (1. - u2) * h2
+        h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
+
+        return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
+
+    seqs = [mask, state_below_, state_belowx]
+    #seqs = [mask, state_below_, state_belowx, state_belowc]
+    _step = _step_slice
+
+    shared_vars = [tparams[pp(prefix, 'U')],
+                   tparams[pp(prefix, 'Wc')],
+                   tparams[pp(prefix, 'W_comb_att')],
+                   tparams[pp(prefix, 'U_att')],
+                   tparams[pp(prefix, 'c_tt')],
+                   tparams[pp(prefix, 'Ux')],
+                   tparams[pp(prefix, 'Wcx')],
+                   tparams[pp(prefix, 'U_nl')],
+                   tparams[pp(prefix, 'Ux_nl')],
+                   tparams[pp(prefix, 'b_nl')],
+                   tparams[pp(prefix, 'bx_nl')]]
+
+    if one_step:
+        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
+                       shared_vars))
+    else:
+        rval, updates = theano.scan(_step,
+                                    sequences=seqs,
+                                    outputs_info=[init_state,
+                                                  tensor.alloc(0., n_samples,
+                                                               context.shape[2]),
+                                                  tensor.alloc(0., n_samples,
+                                                               context.shape[0])],
+                                    non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
+                                    name=pp(prefix, '_layers'),
+                                    n_steps=nsteps,
+                                    profile=profile,
+                                    strict=True)
+    return rval
 
