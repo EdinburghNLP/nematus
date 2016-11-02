@@ -795,6 +795,7 @@ def train(dim_word=100,  # word vector dimensionality
         decay_c = theano.shared(numpy.float32(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in tparams.iteritems():
+            # L2 regularization on bias?
             weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
         cost += weight_decay
@@ -845,6 +846,7 @@ def train(dim_word=100,  # word vector dimensionality
             g2 += (g**2).sum()
         new_grads = []
         for g in grads:
+        # gradient clipped based on sum of all gradients?
             new_grads.append(tensor.switch(g2 > (clip_c**2),
                                            g / tensor.sqrt(g2) * clip_c,
                                            g))

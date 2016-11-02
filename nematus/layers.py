@@ -239,6 +239,36 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
 
     return params
 
+def param_init_gru_cond_sa(options, params, prefix='gru_cond',
+                        nin=None, dim=None, dimctx=None,
+                        nin_nonlin=None, dim_nonlin=None):
+
+    # get params from standard attentional gru layer
+    params = param_init_gru_cond(options, params, prefix=prefix,
+                                 nin=nin, dim=dim, dimctx=dimctx,
+                                 nin_nonlin=nin_nonlin, dim_nonlin=dim_nonlin)
+
+    # self-attention parameters
+    # current state -> hidden
+    W_comb_sa = norm_weight(dim)
+    params[pp(prefix, 'W_comb_sa')] = W_comb_sa
+    # previous state -> hidden
+    Wc_sa = norm_weight(dim)
+    b_sa = numpy.zeros((dim,)).astype('float32')
+    params[pp(prefix, 'Wc_sa')] = Wc_sa
+    params[pp(prefix, 'b_sa')] = b_sa
+    # hidden -> previous state score 
+    U_sa = norm_weight(dim, 1)
+    params[pp(prefix, 'U_sa')] = U_sa
+    # weighted history -> hidden for gates
+    Wh = norm_weight(dim, 2*dim)
+    params[pp(prefix, 'Wh')] = Wh
+    # weighted history -> hidden for state proposal
+    Whx = norm_weight(dim)
+    params[pp(prefix, 'Whx')] = Whx
+
+    return params
+
 
 def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    mask=None, context=None, one_step=False,
