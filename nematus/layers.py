@@ -20,7 +20,7 @@ from alignment_util import *
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
-          'gru_cond_sa': ('param_init_gru_cond_sa', 'gru_cond_layer_sa'),
+          'gru_cond_sa': ('param_init_gru_cond_sa', 'gru_cond_sa_layer'),
           }
 
 
@@ -372,8 +372,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                                     strict=True)
     return rval
 
-
-def param_init_gru_cond_sa(options, params, prefix='gru_cond',
+def param_init_gru_cond_sa(options, params, prefix='gru_cond_sa',
                         nin=None, dim=None, dimctx=None,
                         nin_nonlin=None, dim_nonlin=None):
 
@@ -404,15 +403,16 @@ def param_init_gru_cond_sa(options, params, prefix='gru_cond',
     return params
 
 
-def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
+def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
                    mask=None, context=None, one_step=False,
-                   init_memory=None, timestep=0, state_history=None,
+                   timestep=0, init_state=None, state_history=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
                    profile=False,
                    **kwargs):
 
     assert context, 'Context must be provided'
+    assert init_state, 'Initial hidden state must be provided'
 
     if one_step:
         assert state_history, 'all previous states must be provided'
@@ -433,8 +433,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
     if state_history is None:
         assert timestep == 0, 'without previous states timestep should be zero'
         state_history = tensor.alloc(0., nsteps, n_samples, dim)
-    init_state = state_history[0]
-
+    
     # projected context
     assert context.ndim == 3, \
         'Context must be 3-d: #annotation x #sample x dim'
@@ -458,7 +457,7 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
                     W_comb_sa, Wc_sa, b_sa, U_sa, Wh, Whx):
 
         #Update state_history
-        state_history = tensor.set_subtensor(state_history[step], h_)
+        state_history_ = tensor.set_subtensor(state_history_[step], h_)
 
         preact1 = tensor.dot(h_*rec_dropout[0], U)
         preact1 += x_
@@ -492,15 +491,16 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
         # self attention
         state_activation = tensor.dot(h1, W_comb_sa)
         # TODO: Maybe store the activations instead of recomputing?
-        prev_states_activation = tensor.dot(state_history[:step+1], Wc_sa)
+        prev_states_activation = tensor.dot(state_history_[:step+1], Wc_sa)
         hidden = state_activation[None, :, :] + prev_states_activation + b_sa 
         hidden = tensor.tanh(hidden)
         beta = tensor.dot(hidden, U_sa) # beta.shape should now be (step, batch_size, 1)
         beta = beta.reshape([beta.shape[0], beta.shape[1]]) # beta.shape should now be (step, batch_size)
         beta = tensor.exp(beta - beta.max(0, keepdims=True))
-        # TODO: We need full mask here!
+        # We don't need to full mask here because we only attend
+        # to 'padded' (fake) states when we are past the EOS tag
         beta = beta / beta.sum(0, keepdims=True)
-        mh = (state_history[:step + 1] * beta[:, :, None]).sum(0) # merged history
+        mh = (state_history_[:step + 1] * beta[:, :, None]).sum(0) # merged history
 
         preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
         preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
@@ -520,12 +520,12 @@ def gru_cond_layer_sa(tparams, state_below, options, prefix='gru',
         h2 = u2 * h1 + (1. - u2) * h2
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
-        return h2, ctx_, alpha.T, state_history  # pstate_, preact, preactx, r, u
+        return h2, ctx_, alpha.T, state_history_  # pstate_, preact, preactx, r, u
 
     if one_step:
         timestep_to_use = timestep
     else:
-        timestep_to_use = T.arange(nsteps)
+        timestep_to_use = tensor.arange(nsteps)
     seqs = [mask, state_below_, state_belowx, timestep_to_use]
     #seqs = [mask, state_below_, state_belowx, state_belowc]
     _step = _step_slice

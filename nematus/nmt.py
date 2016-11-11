@@ -361,7 +361,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     f_init = theano.function([x], outs, name='f_init', profile=profile)
     print >>sys.stderr, 'Done'
 
-    # x: 1 x 1
+    # y: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
     init_state = tensor.matrix('init_state', dtype='float32')
 
@@ -639,7 +639,7 @@ def train(dim_word=100,  # word vector dimensionality
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
-          decoder='gru_cond',
+          decoder='gru_cond_sa',
           patience=10,  # early stopping patience
           max_epochs=5000,
           finish_after=10000000,  # finish after this many updates
