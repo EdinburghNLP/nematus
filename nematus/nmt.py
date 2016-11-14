@@ -10,6 +10,7 @@ import json
 import ipdb
 import numpy
 import copy
+import argparse
 
 import os
 import warnings
@@ -124,55 +125,55 @@ def init_params(options):
     return params
 
 
-# build a training model
-def build_model(tparams, options):
-    opt_ret = dict()
+# bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
+def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
 
-    trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.))
-
-    # description string: #words x #samples
     x = tensor.tensor3('x', dtype='int64')
     x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
-    x_mask = tensor.matrix('x_mask', dtype='float32')
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-    y = tensor.matrix('y', dtype='int64')
-    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-    y_mask = tensor.matrix('y_mask', dtype='float32')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
-    # for the backward rnn, we just need to invert x and x_mask
+    # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
-    xr_mask = x_mask[::-1]
+    if x_mask is None:
+        xr_mask = None
+    else:
+        xr_mask = x_mask[::-1]
 
     n_timesteps = x.shape[1]
-    n_timesteps_trg = y.shape[0]
     n_samples = x.shape[2]
 
     if options['use_dropout']:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
-        retain_probability_target = 1-options['dropout_target']
-        rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
-        source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source)
-        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target)
-        source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
-        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
+        if sampling:
+            if options['model_version'] < 0.1:
+                rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+                rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
+                emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+                emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+                source_dropout = theano.shared(numpy.float32(retain_probability_source))
+            else:
+                rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                source_dropout = theano.shared(numpy.float32(1.))
+        else:
+            if options['model_version'] < 0.1:
+                scaled = False
+            else:
+                scaled = True
+            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+            source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source, scaled)
+            source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
         emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     # word embedding for forward rnn (source)
     emb = []
@@ -198,7 +199,11 @@ def build_model(tparams, options):
     embr = concatenate(embr, axis=1)
     embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
     if options['use_dropout']:
-        embr *= source_dropout[::-1]
+        if sampling:
+            embr *= source_dropout
+        else:
+            # we drop out the same words in both directions
+            embr *= source_dropout[::-1]
 
     projr = get_layer_constr(options['encoder'])(tparams, embr, options,
                                              prefix='encoder_r',
@@ -210,6 +215,45 @@ def build_model(tparams, options):
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
 
+    return x, ctx
+
+
+# build a training model
+def build_model(tparams, options):
+    opt_ret = dict()
+
+    trng = RandomStreams(1234)
+    use_noise = theano.shared(numpy.float32(0.))
+
+    x_mask = tensor.matrix('x_mask', dtype='float32')
+    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    y = tensor.matrix('y', dtype='int64')
+    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
+    y_mask = tensor.matrix('y_mask', dtype='float32')
+    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
+    n_samples = x.shape[2]
+    n_timesteps_trg = y.shape[0]
+
+    if options['use_dropout']:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_target = 1-options['dropout_target']
+        if options['model_version'] < 0.1:
+            scaled = False
+        else:
+            scaled = True
+        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target, scaled)
+        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
+    else:
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+
     # mean of the context (across time) will be used to initialize decoder rnn
     ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
 
@@ -217,7 +261,7 @@ def build_model(tparams, options):
     # ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
 
     if options['use_dropout']:
-        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
 
     # initial decoder state
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
@@ -255,9 +299,9 @@ def build_model(tparams, options):
     ctxs = proj[1]
 
     if options['use_dropout']:
-        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden)
-        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb)
-        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden)
+        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
+        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
 
     # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
@@ -272,10 +316,10 @@ def build_model(tparams, options):
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
     if options['use_dropout']:
-        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden)
+        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden, scaled)
 
     logit = get_layer_constr('ff')(tparams, logit, options,
-                               prefix='ff_logit', activ='linear')
+                                   prefix='ff_logit', activ='linear')
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
                                                logit_shp[2]]))
@@ -294,63 +338,29 @@ def build_model(tparams, options):
 
 # build a sampler
 def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
-    x = tensor.tensor3('x', dtype='int64')
-    xr = x[:,::-1]
-    n_timesteps = x.shape[1]
-    n_samples = x.shape[2]
 
-    # word embedding (source), forward and backward
-    emb = []
-    embr = []
-    for factor in range(options['factors']):
-        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
-        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
-    emb = concatenate(emb, axis=1)
-    embr = concatenate(embr, axis=1)
-    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
-    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
-
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
         retain_probability_target = 1-options['dropout_target']
-        rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
-        source_dropout = theano.shared(numpy.float32(retain_probability_source))
         target_dropout = theano.shared(numpy.float32(retain_probability_target))
-        emb *= source_dropout
-        embr *= source_dropout
     else:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
-    # encoder
-    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder', emb_dropout=emb_dropout, rec_dropout=rec_dropout, profile=profile)
-
-
-    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r', emb_dropout=emb_dropout_r, rec_dropout=rec_dropout_r, profile=profile)
-
-    # concatenate forward and backward rnn hidden states
-    ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
+    n_samples = x.shape[2]
 
     # get the input for decoder rnn initializer mlp
     ctx_mean = ctx.mean(0)
     # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         ctx_mean *= retain_probability_hidden
 
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
@@ -370,7 +380,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                         tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
                         tparams['Wemb_dec'][y])
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         emb *= target_dropout
 
     # apply one step of conditional gru with attention
@@ -392,7 +402,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         next_state_up = next_state * retain_probability_hidden
         emb *= retain_probability_emb
         ctxs *= retain_probability_hidden
@@ -407,7 +417,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
-    if options['use_dropout']:
+    if options['use_dropout'] and options['model_version'] < 0.1:
         logit *= retain_probability_hidden
 
     logit = get_layer_constr('ff')(tparams, logit, options,
@@ -683,7 +693,9 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_min=0.1,
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
-          maxibatch_size=20): #How many minibatches to load at one time
+          maxibatch_size=20, #How many minibatches to load at one time
+          model_version=0.1, #store version used for training for compatibility
+    ):
 
     # Model options
     model_options = locals().copy()
@@ -710,22 +722,12 @@ def train(dim_word=100,  # word vector dimensionality
             worddicts_r[ii][vv] = kk
 
     if n_words_src is None:
-	n_words_src = len(worddicts[0])
+        n_words_src = len(worddicts[0])
         model_options['n_words_src'] = n_words_src
     if n_words is None:
-	n_words = len(worddicts[1])
+        n_words = len(worddicts[1])
         model_options['n_words'] = n_words
 
-    # reload options
-    if reload_ and os.path.exists(saveto):
-        print 'Reloading model options'
-        try:
-            with open('%s.json' % saveto, 'rb') as f:
-                loaded_model_options = json.load(f)
-        except:
-            with open('%s.pkl' % saveto, 'rb') as f:
-                loaded_model_options = pkl.load(f)
-        model_options.update(loaded_model_options)
 
     print 'Loading data'
     domain_interpolation_cur = None
@@ -1071,4 +1073,106 @@ def train(dim_word=100,  # word vector dimensionality
 
 
 if __name__ == '__main__':
-    pass
+    parser = argparse.ArgumentParser()
+
+    data = parser.add_argument_group('data sets; model loading and saving')
+    data.add_argument('--datasets', type=str, required=True, metavar='PATH', nargs=2,
+                         help="parallel training corpus (source and target)")
+    data.add_argument('--dictionaries', type=str, required=True, metavar='PATH', nargs="+",
+                         help="network vocabularies (one per source factor, plus target vocabulary)")
+    data.add_argument('--model', type=str, default='model.npz', metavar='PATH', dest='saveto',
+                         help="model file name (default: %(default)s)")
+    data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
+                         help="save frequency (default: %(default)s)")
+    data.add_argument('--reload_', action='store_true',
+                         help="load existing model (if '--model' points to existing model)")
+    data.add_argument('--overwrite', action='store_true',
+                         help="write all models to same file")
+
+    network = parser.add_argument_group('network parameters')
+    network.add_argument('--dim_word', type=int, default=512, metavar='INT',
+                         help="embedding layer size (default: %(default)s)")
+    network.add_argument('--dim', type=int, default=1000, metavar='INT',
+                         help="hidden layer size (default: %(default)s)")
+    network.add_argument('--n_words_src', type=int, default=None, metavar='INT',
+                         help="source vocabulary size (default: %(default)s)")
+    network.add_argument('--n_words', type=int, default=None, metavar='INT',
+                         help="target vocabulary size (default: %(default)s)")
+
+    network.add_argument('--factors', type=int, default=1, metavar='INT',
+                         help="number of input factors (default: %(default)s)")
+    network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
+                         help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
+    network.add_argument('--use_dropout', action="store_true",
+                         help="use dropout layer (default: %(default)s)")
+    network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
+                         help="dropout source words (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
+                         help="dropout target words (0: no dropout) (default: %(default)s)")
+    #network.add_argument('--encoder', type=str, default='gru',
+                         #choices=['gru'],
+                         #help='encoder recurrent layer')
+    #network.add_argument('--decoder', type=str, default='gru_cond',
+                         #choices=['gru_cond'],
+                         #help='decoder recurrent layer')
+
+    training = parser.add_argument_group('training parameters')
+    training.add_argument('--maxlen', type=int, default=100, metavar='INT',
+                         help="maximum sequence length (default: %(default)s)")
+    training.add_argument('--optimizer', type=str, default="adam",
+                         choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
+                         help="optimizer (default: %(default)s)")
+    training.add_argument('--batch_size', type=int, default=80, metavar='INT',
+                         help="minibatch size (default: %(default)s)")
+    training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
+                         help="maximum number of epochs (default: %(default)s)")
+    training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
+                         help="maximum number of updates (minibatches) (default: %(default)s)")
+    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
+                         help="L2 regularization penalty (default: %(default)s)")
+    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
+                         help="L2 regularization penalty towards original weights (default: %(default)s)")
+    training.add_argument('--alpha_c', type=float, default=0, metavar='FLOAT',
+                         help="alignment regularization (default: %(default)s)")
+    training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
+                         help="gradient clipping threshold (default: %(default)s)")
+    training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
+                         help="learning rate (default: %(default)s)")
+    training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
+                         help="disable shuffling of training data (for each epoch)")
+    training.add_argument('--no_sort_by_length', action="store_false", dest="sort_by_length",
+                         help='do not sort sentences in maxibatch by length')
+    training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
+                         help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    finetune = training.add_mutually_exclusive_group()
+    finetune.add_argument('--finetune', action="store_true",
+                        help="train with fixed embedding layer")
+    finetune.add_argument('--finetune_only_last', action="store_true",
+                        help="train with all layers except output layer fixed")
+
+    validation = parser.add_argument_group('validation parameters')
+    validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
+                         help="parallel validation corpus (source and target) (default: %(default)s)")
+    validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
+                         help="validation minibatch size (default: %(default)s)")
+    validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
+                         help="validation frequency (default: %(default)s)")
+    validation.add_argument('--patience', type=int, default=10, metavar='INT',
+                         help="early stopping patience (default: %(default)s)")
+    validation.add_argument('--external_validation_script', type=str, default=None, metavar='PATH',
+                         help="location of validation script (to run your favorite metric for validation) (default: %(default)s)")
+
+    display = parser.add_argument_group('display parameters')
+    display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
+                         help="display loss after INT updates (default: %(default)s)")
+    display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
+                         help="display some samples after INT updates (default: %(default)s)")
+
+
+    args = parser.parse_args()
+
+    train(**vars(args))
