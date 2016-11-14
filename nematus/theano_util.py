@@ -6,6 +6,7 @@ import json
 import cPickle as pkl
 import numpy
 from collections import OrderedDict
+import warnings
 
 import theano
 import theano.tensor as tensor
@@ -46,12 +47,14 @@ def init_theano_params(params):
 # load parameters
 def load_params(path, params, with_prefix=''):
     pp = numpy.load(path)
+    new_params = OrderedDict()
     for kk, vv in params.iteritems():
         if kk not in pp:
             warnings.warn('%s is not in the archive' % kk)
             continue
-        params[with_prefix+kk] = pp[kk]
+        new_params[with_prefix+kk] = pp[kk]
 
+    params.update(new_params)
     return params
 
 def tanh(x):
@@ -116,6 +119,6 @@ def embedding_name(i):
 
 # Zero out all parameters
 def zero_all(params):
-    for kk, vv in params:
+    for kk, vv in params.iteritems():
         vv[:] = numpy.zeros_like(vv)
 

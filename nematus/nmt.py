@@ -146,6 +146,9 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_source = 1-options['dropout_source']
+        prior_retain_probability_emb = 1-options['tuneout_prior_dropout_embedding']
+        prior_retain_probability_hidden = 1-options['tuneout_prior_dropout_hidden']
+        prior_retain_probability_source = 1-options['tuneout_prior_dropout_source']
         if sampling:
             if options['model_version'] < 0.1:
                 rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
@@ -159,6 +162,11 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
                 emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
                 emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
                 source_dropout = theano.shared(numpy.float32(1.))
+                prior_rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                prior_rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                prior_emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                prior_emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+                prior_source_dropout = theano.shared(numpy.float32(1.))
         else:
             if options['model_version'] < 0.1:
                 scaled = False
@@ -170,11 +178,22 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
             emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
             source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source, scaled)
             source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
+            prior_rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            prior_rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            prior_emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
+            prior_emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
+            prior_source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, prior_retain_probability_source, scaled)
+            prior_source_dropout = tensor.tile(prior_source_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
         emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        
 
     # word embedding for forward rnn (source)
     emb = get_layer_constr('embedding')(tparams, x, suffix='', factors= options['factors'])
@@ -182,6 +201,7 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         emb *= source_dropout
     if options['use_tuneout']:
         prior_emb = get_layer_constr('embedding')(tparams, x, suffix='', factors= options['factors'], prefix='prior_')
+        prior_emb *= prior_source_dropout
         emb += prior_emb
 
     proj = get_layer_constr(options['encoder'])(tparams, emb, options,
@@ -189,6 +209,8 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
                                             mask=x_mask,
                                             emb_dropout=emb_dropout,
                                             rec_dropout=rec_dropout,
+                                            prior_emb_dropout=prior_emb_dropout,
+                                            prior_rec_dropout=prior_rec_dropout,
                                             profile=profile)
 
 
@@ -202,6 +224,11 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
             embr *= source_dropout[::-1]
     if options['use_tuneout']:
         prior_embr = get_layer_constr('embedding')(tparams, xr, suffix='', factors= options['factors'], prefix='prior_')
+        if sampling:
+            prior_embr *= source_dropout
+        else:
+            # we drop out the same words in both directions
+            prior_embr *= source_dropout[::-1]
         embr += prior_embr
 
     projr = get_layer_constr(options['encoder'])(tparams, embr, options,
@@ -209,6 +236,8 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
                                              mask=xr_mask,
                                              emb_dropout=emb_dropout_r,
                                              rec_dropout=rec_dropout_r,
+                                             prior_emb_dropout=prior_emb_dropout_r,
+                                             prior_rec_dropout=prior_rec_dropout_r,
                                              profile=profile)
 
     # context will be the concatenation of forward and backward rnns
@@ -239,6 +268,9 @@ def build_model(tparams, options):
         retain_probability_emb = 1-options['dropout_embedding']
         retain_probability_hidden = 1-options['dropout_hidden']
         retain_probability_target = 1-options['dropout_target']
+        prior_retain_probability_emb = 1-options['tuneout_prior_dropout_embedding']
+        prior_retain_probability_hidden = 1-options['tuneout_prior_dropout_hidden']
+        prior_retain_probability_target = 1-options['tuneout_prior_dropout_target']
         if options['model_version'] < 0.1:
             scaled = False
         else:
@@ -248,10 +280,18 @@ def build_model(tparams, options):
         ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
         target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target, scaled)
         target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
+        prior_rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
+        prior_ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, prior_retain_probability_target, scaled)
+        prior_target_dropout = tensor.tile(prior_target_dropout, (1,1,options['dim_word']))
     else:
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+        prior_rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        prior_emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     # mean of the context (across time) will be used to initialize decoder rnn
     ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
@@ -268,6 +308,7 @@ def build_model(tparams, options):
                                     prefix='ff_state', activ='linear')
 
     if options['use_tuneout']:
+        prior_ctx_mean = prior_ctx_mean * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
         pre_init_state += get_layer_constr('ff')(tparams, prior_ctx_mean, options,
                                     prefix='prior_ff_state', activ='linear')
     init_state = tensor.tanh(pre_init_state)
@@ -281,6 +322,7 @@ def build_model(tparams, options):
         emb *= target_dropout
     if options['use_tuneout']:
         prior_emb = get_layer_constr('embedding')(tparams, y, suffix='_dec', prefix='prior_')
+        prior_emb *= prior_target_dropout
         emb += prior_emb
 
     emb_shifted = tensor.zeros_like(emb)
@@ -297,6 +339,9 @@ def build_model(tparams, options):
                                             emb_dropout=emb_dropout_d,
                                             ctx_dropout=ctx_dropout_d,
                                             rec_dropout=rec_dropout_d,
+                                            prior_emb_dropout=prior_emb_dropout_d,
+                                            prior_ctx_dropout=prior_ctx_dropout_d,
+                                            prior_rec_dropout=prior_rec_dropout_d,
                                             profile=profile)
     # hidden states of the decoder gru
     proj_h = proj[0]
@@ -321,6 +366,9 @@ def build_model(tparams, options):
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
     if options['use_tuneout']:
+        prior_proj_h = prior_proj_h * shared_dropout_layer((n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_emb = prior_emb * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
+        prior_ctxs = prior_ctxs * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
         logit_lstm += get_layer_constr('ff')(tparams, prior_proj_h, options,
                                     prefix='prior_ff_logit_lstm', activ='linear')
         logit_prev += get_layer_constr('ff')(tparams, prior_emb, options,
@@ -337,6 +385,7 @@ def build_model(tparams, options):
     logit2 = get_layer_constr('ff')(tparams, logit, options,
                                    prefix='ff_logit', activ='linear')
     if options['use_tuneout']:
+        prior_logit = prior_logit * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_hidden, scaled)
         logit2 += get_layer_constr('ff')(tparams, prior_logit, options,
                                    prefix='prior_ff_logit', activ='linear')
 
@@ -372,6 +421,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+        prior_rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        prior_emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
 
     x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
     n_samples = x.shape[2]
@@ -380,11 +432,17 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     ctx_mean = ctx.mean(0)
     # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
 
+    prior_ctx_mean = ctx_mean
     if options['use_dropout'] and options['model_version'] < 0.1:
-        ctx_mean *= retain_probability_hidden
+        ctx_mean = ctx_mean * retain_probability_hidden
 
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
-                                    prefix='ff_state', activ='tanh')
+    # initial decoder state
+    pre_init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
+                                    prefix='ff_state', activ='linear')
+    if options['use_tuneout']:
+        pre_init_state += get_layer_constr('ff')(tparams, prior_ctx_mean, options,
+                                    prefix='prior_ff_state', activ='linear')
+    init_state = tensor.tanh(pre_init_state)
 
     print >>sys.stderr, 'Building f_init...',
     outs = [init_state, ctx]
@@ -397,12 +455,15 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # if it's the first word, emb should be all zero and it is indicated by -1
     emb = get_layer_constr('embedding')(tparams, y, suffix='_dec')
+    if options['use_dropout'] and options['model_version'] < 0.1:
+        emb = emb * target_dropout
+    if options['use_tuneout']:
+        prior_emb = get_layer_constr('embedding')(tparams, y, suffix='_dec', prefix='prior_')
+        emb += prior_emb
     emb = tensor.switch(y[:, None] < 0,
                         tensor.zeros((1, options['dim_word'])),
                         emb)
 
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        emb *= target_dropout
 
     # apply one step of conditional gru with attention
     proj = get_layer_constr(options['decoder'])(tparams, emb, options,
@@ -413,6 +474,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                             emb_dropout=emb_dropout_d,
                                             ctx_dropout=ctx_dropout_d,
                                             rec_dropout=rec_dropout_d,
+                                            prior_emb_dropout=prior_emb_dropout_d,
+                                            prior_ctx_dropout=prior_ctx_dropout_d,
+                                            prior_rec_dropout=prior_rec_dropout_d,
                                             profile=profile)
     # get the next hidden state
     next_state = proj[0]
@@ -423,10 +487,11 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
+    prior_state_up, prior_emb, prior_ctxs = next_state, emb, ctxs
     if options['use_dropout'] and options['model_version'] < 0.1:
         next_state_up = next_state * retain_probability_hidden
-        emb *= retain_probability_emb
-        ctxs *= retain_probability_hidden
+        emb = emb * retain_probability_emb
+        ctxs = ctxs * retain_probability_hidden
     else:
         next_state_up = next_state
 
@@ -436,16 +501,27 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                     prefix='ff_logit_prev', activ='linear')
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
+    if options['use_tuneout']:
+        logit_lstm += get_layer_constr('ff')(tparams, next_state_up, options,
+                                    prefix='prior_ff_logit_lstm', activ='linear')
+        logit_prev += get_layer_constr('ff')(tparams, prior_emb, options,
+                                    prefix='prior_ff_logit_prev', activ='linear')
+        logit_ctx += get_layer_constr('ff')(tparams, prior_ctxs, options,
+                                   prefix='prior_ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
+    prior_logit = logit
     if options['use_dropout'] and options['model_version'] < 0.1:
-        logit *= retain_probability_hidden
+        logit = logit * retain_probability_hidden
 
-    logit = get_layer_constr('ff')(tparams, logit, options,
-                              prefix='ff_logit', activ='linear')
+    logit2 = get_layer_constr('ff')(tparams, logit, options,
+                                   prefix='ff_logit', activ='linear')
+    if options['use_tuneout']:
+        logit2 += get_layer_constr('ff')(tparams, prior_logit, options,
+                                   prefix='prior_ff_logit', activ='linear')
 
     # compute the softmax probability
-    next_probs = tensor.nnet.softmax(logit)
+    next_probs = tensor.nnet.softmax(logit2)
 
     # sample from softmax distribution to get the sample
     next_sample = trng.multinomial(pvals=next_probs).argmax(1)
@@ -503,6 +579,10 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
         target_dropout = theano.shared(numpy.float32(1.))
+        prior_rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        prior_emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        prior_ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+        prior_target_dropout = theano.shared(numpy.float32(1.))
 
     x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
     n_samples = x.shape[2]
@@ -550,6 +630,9 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
                                                 emb_dropout=emb_dropout,
                                                 ctx_dropout=ctx_dropout,
                                                 rec_dropout=rec_dropout,
+                                                prior_emb_dropout=prior_emb_dropout,
+                                                prior_ctx_dropout=prior_ctx_dropout,
+                                                prior_rec_dropout=prior_rec_dropout,
                                                 shared_vars=shared_vars,
                                                 profile=profile)
         # get the next hidden state
@@ -930,6 +1013,11 @@ def train(dim_word=100,  # word vector dimensionality
           model_version=0.1, #store version used for training for compatibility
           prior_model=None, # Prior model file, used for MAP and tuneout
           use_tuneout=False, # Enable tuneout
+          tuneout_prior_dropout_embedding=0, # tuneout prior dropout for input embeddings (0: no dropout)
+          tuneout_prior_dropout_hidden=0, # tuneout prior dropout for hidden layers (0: no dropout)
+          tuneout_prior_dropout_source=0, # tuneout prior dropout source words (0: no dropout)
+          tuneout_prior_dropout_target=0, # tuneout prior dropout target words (0: no dropout)
+          #tuneout_trainable_mixing_weights=False, # Use trainable tuneout mixing weights between prior and novel paramers
     ):
 
     # Model options
@@ -946,7 +1034,7 @@ def train(dim_word=100,  # word vector dimensionality
     assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
-    assert(os.path.exists(prior_model) or ((map_decay_c==0.0) and (use_tuneout==False))) # MAP training and Tuneout require a prior model file
+    assert(prior_model != None and (os.path.exists(prior_model)) or ((map_decay_c==0.0) and (use_tuneout==False))) # MAP training and Tuneout require a prior model file
     assert(use_tuneout==False or use_dropout==True) # If Tuneout is enabled then Dropout must be enabled as well
 
     # load dictionaries and invert them
@@ -1010,11 +1098,6 @@ def train(dim_word=100,  # word vector dimensionality
     print 'Building model'
     params = init_params(model_options)
 
-    # load prior model if specified
-    if prior_model:
-        print 'Loading prior model parameters'
-        params = load_params(prior_model, params, with_prefix='prior_')
-
     # prepare parameters
     if reload_ and os.path.exists(saveto):
         print 'Reloading model parameters'
@@ -1025,6 +1108,11 @@ def train(dim_word=100,  # word vector dimensionality
     elif use_tuneout:
         print 'Zeroing out model parameters for tuneout'
         zero_all(params)
+
+    # load prior model if specified
+    if prior_model:
+        print 'Loading prior model parameters'
+        params = load_params(prior_model, params, with_prefix='prior_')
 
     tparams = init_theano_params(params)
 

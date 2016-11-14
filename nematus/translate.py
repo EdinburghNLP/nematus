@@ -8,6 +8,7 @@ import numpy
 import json
 import cPickle as pkl
 
+from collections import OrderedDict
 from multiprocessing import Process, Queue
 from util import load_dict, load_config
 from compat import fill_options
@@ -33,6 +34,21 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
         # load model parameters and set theano shared variables
         params = load_params(model, params)
+        
+        # tuneout
+        if (option.get('prior_model') != None) and (option.get('use_tuneout')):
+            print >> sys.stderr, 'Loading prior model params for tuneout'
+            params = load_params(option['prior_model'], params, with_prefix='prior_')
+            #prior_params = load_params(option['prior_model'], params)
+            #new_params = OrderedDict(params)
+            #for kk, vv in params.iteritems():
+            #    if kk in prior_params:
+            #        #print >> sys.stderr, 'Tuneout param found:', kk
+            #        new_params[kk] = vv + prior_params[kk]
+            #params = new_params
+            #option['use_tuneout'] = False
+
+        # create theano params
         tparams = init_theano_params(params)
 
         # word index
