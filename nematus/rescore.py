@@ -26,11 +26,9 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
     fs_log_probs = []
 
     for model, option in zip(models, options):
-        # allocate model parameters
-        params = init_params(option)
 
         # load model parameters and set theano shared variables
-        params = load_params(model, params)
+        params = numpy.load(model)
         tparams = init_theano_params(params)
 
         trng, use_noise, \
