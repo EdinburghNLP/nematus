@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 '''
 Build a neural machine translation model with soft attention
 '''
@@ -1086,7 +1088,7 @@ if __name__ == '__main__':
                          help="model file name (default: %(default)s)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
-    data.add_argument('--reload_', action='store_true',
+    data.add_argument('--reload', action='store_true',  dest='reload_',
                          help="load existing model (if '--model' points to existing model)")
     data.add_argument('--overwrite', action='store_true',
                          help="write all models to same file")

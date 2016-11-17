@@ -43,11 +43,11 @@ class TestTranslate(unittest.TestCase):
         self.assertEqual(open('en-de/ref').read(), open('en-de/out').read())
 
     # English-Romanian WMT16 system, dropout
-    def test_enro(self):
-        os.chdir('models/en-ro/')
-        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
-        os.chdir('../..')
-        self.assertEqual(open('en-ro/ref').read(), open('en-ro/out').read())
+#    def test_enro(self):
+#        os.chdir('models/en-ro/')
+#        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
+#        os.chdir('../..')
+#        self.assertEqual(open('en-ro/ref').read(), open('en-ro/out').read())
 
 
 
