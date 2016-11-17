@@ -764,6 +764,8 @@ def train(dim_word=100,  # word vector dimensionality
     else:
         valid = None
 
+    comp_start = time.time()
+
     print 'Building model'
     params = init_params(model_options)
     # reload parameters
@@ -819,11 +821,6 @@ def train(dim_word=100,  # word vector dimensionality
         weight_map_decay *= map_decay_c
         cost += weight_map_decay
 
-    # after all regularizers - compile the computational graph for cost
-    print 'Building f_cost...',
-    f_cost = theano.function(inps, cost, profile=profile)
-    print 'Done'
-
     # allow finetuning with fixed embeddings
     if finetune:
         updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if not key.startswith('Wemb')])
@@ -859,6 +856,8 @@ def train(dim_word=100,  # word vector dimensionality
     f_grad_shared, f_update = eval(optimizer)(lr, updated_params, grads, inps, cost, profile=profile)
     print 'Done'
 
+    print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
+
     print 'Optimization'
 
     best_p = None
@@ -882,11 +881,14 @@ def train(dim_word=100,  # word vector dimensionality
 
     valid_err = None
 
+    last_disp_samples = 0
+    ud_start = time.time()
     for eidx in xrange(max_epochs):
         n_samples = 0
 
         for x, y in train:
             n_samples += len(x)
+            last_disp_samples += len(x)
             uidx += 1
             use_noise.set_value(1.)
 
@@ -904,15 +906,11 @@ def train(dim_word=100,  # word vector dimensionality
                 uidx -= 1
                 continue
 
-            ud_start = time.time()
-
             # compute cost, grads and copy grads to shared variables
             cost = f_grad_shared(x, x_mask, y, y_mask)
 
             # do the update on parameters
             f_update(lrate)
-
-            ud = time.time() - ud_start
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
@@ -922,7 +920,11 @@ def train(dim_word=100,  # word vector dimensionality
 
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud
+                ud = time.time() - ud_start
+                wps = (last_disp_samples) / float(ud)
+                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} sentences/s".format(wps)
+                ud_start = time.time()
+                last_disp_samples = 0
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
