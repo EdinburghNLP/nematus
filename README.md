@@ -57,6 +57,39 @@ For GPU you need to have nvidia-docker installed and run:
 
 ``nvidia-docker run -v `pwd`:/playground -it nematus-docker``
 
+TRAINING SPEED
+--------------
+
+Training speed depends heavily on having appropriate hardware (ideally a recent NVIDIA GPU),
+and having installed the appropriate software packages.
+
+To test your setup, we provide some speed benchmarks with `test/test_train.sh',
+on an Intel Xeon CPU E5-2620 v3, with a Nvidia GeForce GTX 1080 GPU and CUDA 8.0:
+
+CPU, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cpu ./test_train.sh
+
+>> 2.37 sentences/s
+
+GPU, no CuDNN, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 71.62 sentences/s
+
+GPU, CuDNN 5.1, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 139.73 sentences/s
+
+GPU, CuDNN 5.1, theano dev:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 173.15 sentences/s
+
 USAGE INSTRUCTIONS
 ------------------
 
@@ -72,7 +105,7 @@ execute nematus/nmt.py to train a model.
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
 | --model PATH         |  model file name (default: model.npz) |
 | --saveFreq INT       |  save frequency (default: 30000) |
-| --reload_            |  load existing model (if '--model' points to existing model) |
+| --reload             |  load existing model (if '--model' points to existing model) |
 | --overwrite          |  write all models to same file |
 
 #### network parameters
