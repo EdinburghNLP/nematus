@@ -885,6 +885,7 @@ def train(dim_word=100,  # word vector dimensionality
 
     last_disp_samples = 0
     ud_start = time.time()
+    p_validation = None
     for eidx in xrange(max_epochs):
         n_samples = 0
 
@@ -1035,12 +1036,18 @@ def train(dim_word=100,  # word vector dimensionality
 
                 if external_validation_script:
                     print "Calling external validation script"
+                    if p_validation is not None and p_validation.poll() is None:
+                        print "Waiting for previous validation run to finish"
+                        print "If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes"
+                        valid_wait_start = time.time()
+                        p_validation.wait()
+                        print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams)
                     numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
-                    p = Popen([external_validation_script])
+                    p_validation = Popen([external_validation_script])
 
             # finish after this many updates
             if uidx >= finish_after:
