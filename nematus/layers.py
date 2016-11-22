@@ -405,34 +405,31 @@ def param_init_gru_cond_sa(options, params, prefix='gru_cond_sa',
 
 def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
                    mask=None, context=None, one_step=False,
-                   timestep=0, init_state=None, state_history=None,
+                   init_state=None, 
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
                    profile=False,
                    **kwargs):
 
     assert context, 'Context must be provided'
-    assert init_state, 'Initial hidden state must be provided'
+    assert init_state, 'Please provide the initial hidden state'
+    assert init_state.ndim==3, 'init_state should be of shape (number of previous states x n_samples x dim)'
+
+    nsteps = state_below.shape[0] # length of target sequence
+    dim = tparams[pp(prefix, 'Wcx')].shape[1] # size of state vector
+    n_samples = init_state.shape[1]
+    timestep = init_state.shape[0] 
 
     if one_step:
-        assert state_history, 'all previous states must be provided'
-
-    nsteps = state_below.shape[0]
-    if state_below.ndim == 3:
-        n_samples = state_below.shape[1]
+        state_history = tensor.zeros(shape=(timestep+1, n_samples, dim))
     else:
-        n_samples = 1
-
+        state_history = tensor.zeros(shape=(nsteps + timestep, n_samples, dim))
+    # inc_subtensor is preferred over set_subtensor and state_history is zeros, so they do same thing
+    state_history = tensor.inc_subtensor(state_history[:timestep], init_state) 
+        
     # mask
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
-
-    dim = tparams[pp(prefix, 'Wcx')].shape[1]
-
-    # initial/previous state
-    if state_history is None:
-        assert timestep == 0, 'without previous states timestep should be zero'
-        state_history = tensor.alloc(0., nsteps, n_samples, dim)
     
     # projected context
     assert context.ndim == 3, \
@@ -451,13 +448,12 @@ def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
         tparams[pp(prefix, 'b')]
 
-    def _step_slice(m_, x_, xx_, step, h_, ctx_, alpha_, state_history_, pctx_, cc_, rec_dropout, ctx_dropout,
+    def _step_slice(m_, x_, xx_, step, state_history_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
                     U_nl, Ux_nl, b_nl, bx_nl,
                     W_comb_sa, Wc_sa, b_sa, U_sa, Wh, Whx):
 
-        #Update state_history
-        state_history_ = tensor.set_subtensor(state_history_[step], h_)
+        h_ = state_history_[step-1]
 
         preact1 = tensor.dot(h_*rec_dropout[0], U)
         preact1 += x_
@@ -491,7 +487,7 @@ def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
         # self attention
         state_activation = tensor.dot(h1, W_comb_sa)
         # TODO: Maybe store the activations instead of recomputing?
-        prev_states_activation = tensor.dot(state_history_[:step+1], Wc_sa)
+        prev_states_activation = tensor.dot(state_history_[:step], Wc_sa)
         hidden = state_activation[None, :, :] + prev_states_activation + b_sa 
         hidden = tensor.tanh(hidden)
         beta = tensor.dot(hidden, U_sa) # beta.shape should now be (step, batch_size, 1)
@@ -500,7 +496,7 @@ def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
         # We don't need to full mask here because we only attend
         # to 'padded' (fake) states when we are past the EOS tag
         beta = beta / beta.sum(0, keepdims=True)
-        mh = (state_history_[:step + 1] * beta[:, :, None]).sum(0) # merged history
+        mh = (state_history_[:step] * beta[:, :, None]).sum(0) # merged history
 
         preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
         preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
@@ -520,12 +516,16 @@ def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
         h2 = u2 * h1 + (1. - u2) * h2
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
 
-        return h2, ctx_, alpha.T, state_history_  # pstate_, preact, preactx, r, u
+        #Update state_history -- inc_subtensor is preferred over set_subtensor and state_history_[step]
+        # is assumed to be zero so set_subtensor would do the same thing
+        state_history_ = tensor.inc_subtensor(state_history_[step], h2) 
+
+        return state_history_, ctx_, alpha.T  # pstate_, preact, preactx, r, u
 
     if one_step:
         timestep_to_use = timestep
     else:
-        timestep_to_use = tensor.arange(nsteps)
+        timestep_to_use = tensor.arange(1, nsteps+1)
     seqs = [mask, state_below_, state_belowx, timestep_to_use]
     #seqs = [mask, state_below_, state_belowx, state_belowc]
     _step = _step_slice
@@ -549,17 +549,14 @@ def gru_cond_sa_layer(tparams, state_below, options, prefix='gru_cond_sa',
                    tparams[pp(prefix, 'Whx')]]
 
     if one_step:
-        rval = _step(*(seqs + [init_state, None, None, state_history, pctx_, context, rec_dropout, ctx_dropout] +
+        rval = _step(*(seqs + [state_history, None, None, pctx_, context, rec_dropout, ctx_dropout] +
                        shared_vars))
     else:
         rval, updates = theano.scan(_step,
                                     sequences=seqs,
-                                    outputs_info=[init_state,
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[2]),
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[0]),
-                                                  state_history],
+                                    outputs_info=[state_history,
+                                                  tensor.alloc(0., n_samples, context.shape[2]),
+                                                  tensor.alloc(0., n_samples, context.shape[0])],
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
