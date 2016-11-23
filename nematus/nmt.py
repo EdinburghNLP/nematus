@@ -874,6 +874,9 @@ def train(dim_word=100,  # word vector dimensionality
         if 'uidx' in rmodel:
             uidx = rmodel['uidx']
 
+    #save model options
+    json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
+
     if validFreq == -1:
         validFreq = len(train[0])/batch_size
     if saveFreq == -1:
@@ -938,7 +941,6 @@ def train(dim_word=100,  # word vector dimensionality
                 else:
                     params = unzip_from_theano(tparams)
                 numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
-                json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
                 print 'Done'
 
                 # save with uidx
