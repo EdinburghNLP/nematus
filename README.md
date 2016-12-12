@@ -21,6 +21,11 @@ The changes to Nematus include:
  - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
 
 
+SUPPORT
+-------
+
+For general support requests, there is a Google Groups mailing list at https://groups.google.com/d/forum/nematus-support . You can also send an e-mail to nematus-support@googlegroups.com .
+
 INSTALLATION
 ------------
 
