@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Translates a source file using a translation model.
 '''
@@ -11,9 +12,10 @@ import cPickle as pkl
 from multiprocessing import Process, Queue
 from util import load_dict, load_config
 from compat import fill_options
+from hypgraph import HypGraphRenderer
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph):
 
     from theano_util import (load_params, init_theano_params)
     from nmt import (build_sampler, gen_sample, init_params)
@@ -41,20 +43,21 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
     def _translate(seq):
         # sample given an input sequence and obtain scores
-        sample, score, word_probs, alignment = gen_sample(fs_init, fs_next,
+        sample, score, word_probs, alignment, hyp_graph = gen_sample(fs_init, fs_next,
                                    numpy.array(seq).T.reshape([len(seq[0]), len(seq), 1]),
                                    trng=trng, k=k, maxlen=200,
-                                   stochastic=False, argmax=False, return_alignment=return_alignment, suppress_unk=suppress_unk)
+                                   stochastic=False, argmax=False, return_alignment=return_alignment,
+                                   suppress_unk=suppress_unk, return_hyp_graph=return_hyp_graph)
 
         # normalize scores according to sequence lengths
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
         if nbest:
-            return sample, score, word_probs, alignment
+            return sample, score, word_probs, alignment, hyp_graph
         else:
             sidx = numpy.argmin(score)
-            return sample[sidx], score[sidx], word_probs[sidx], alignment[sidx]
+            return sample[sidx], score[sidx], word_probs[sidx], alignment[sidx], hyp_graph
 
     while True:
         req = queue.get()
@@ -99,7 +102,7 @@ def print_matrices(mm, file):
 
 
 def main(models, source_file, saveto, save_alignment=None, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False):
     # load model model_options
     options = []
     for model in models:
@@ -144,7 +147,7 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     for midx in xrange(n_process):
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph))
         processes[midx].start()
 
     # utility function
@@ -201,7 +204,11 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
 
     for i, trans in enumerate(_retrieve_jobs(n_samples)):
         if nbest:
-            samples, scores, word_probs, alignment = trans
+            samples, scores, word_probs, alignment, hyp_graph = trans
+            if return_hyp_graph:
+                renderer = HypGraphRenderer(hyp_graph)
+		renderer.wordify(word_idict_trg)
+                renderer.save_png(return_hyp_graph, detailed=True, highlight_best=True)
             order = numpy.argsort(scores)
             for j in order:
                 if print_word_probabilities:
@@ -219,8 +226,11 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                                         i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
                     print_matrix(alignment[j], save_alignment)
         else:
-            samples, scores, word_probs, alignment = trans
-    
+            samples, scores, word_probs, alignment, hyp_graph = trans
+            if return_hyp_graph:
+                renderer = HypGraphRenderer(hyp_graph)
+		renderer.wordify(word_idict_trg)
+                renderer.save_png(return_hyp_graph, detailed=True, highlight_best=True)
             saveto.write(_seqs2words(samples) + "\n")
             if print_word_probabilities:
                 for prob in word_probs:
@@ -264,10 +274,11 @@ if __name__ == "__main__":
                         help="Write n-best list (of size k)")
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
     parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
+    parser.add_argument('--search_graph', '-sg', help="Output file for search graph rendered as PNG image")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, 
-         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment)
+         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph)

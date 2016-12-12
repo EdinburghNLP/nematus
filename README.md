@@ -185,6 +185,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --n-best             | Write n-best list (of size k) |
 | --suppress-unk       | Suppress hypotheses containing UNK. |
 | --print-word-probabilities, -wp | Print probabilities of each word |
+| --search_graph, -sg  | Output file for search graph rendered as PNG image |
 
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus

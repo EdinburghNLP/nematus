@@ -448,7 +448,8 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
-               stochastic=True, argmax=False, return_alignment=False, suppress_unk=False):
+               stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
+               return_hyp_graph=False):
 
     # k is the beam size we have
     if k > 1:
@@ -459,8 +460,12 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     sample_score = []
     sample_word_probs = []
     alignment = []
+    hyp_graph = None
     if stochastic:
         sample_score = 0
+    if return_hyp_graph:
+        from hypgraph import HypGraph
+        hyp_graph = HypGraph()
 
     live_k = 1
     dead_k = 0
@@ -559,6 +564,11 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
             # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
+                if return_hyp_graph:
+                    word, history = new_hyp_samples[idx][-1], new_hyp_samples[idx][:-1]
+                    score = new_hyp_scores[idx]
+                    word_prob = new_word_probs[idx][-1]
+                    hyp_graph.add(word, history, word_prob=word_prob, cost=score)
                 if new_hyp_samples[idx][-1] == 0:
                     sample.append(new_hyp_samples[idx])
                     sample_score.append(new_hyp_scores[idx])
@@ -599,7 +609,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     if not return_alignment:
         alignment = [None for i in range(len(sample))]
 
-    return sample, sample_score, sample_word_probs, alignment
+    return sample, sample_score, sample_word_probs, alignment, hyp_graph
 
 
 # calculate the log probablities on a given corpus using translation model
@@ -969,7 +979,8 @@ def train(dim_word=100,  # word vector dimensionality
                                                maxlen=30,
                                                stochastic=stochastic,
                                                argmax=False,
-                                               suppress_unk=False)
+                                               suppress_unk=False,
+                                               return_hyp_graph=False)
                     print 'Source ', jj, ': ',
                     for pos in range(x.shape[1]):
                         if x[0, pos, jj] == 0:

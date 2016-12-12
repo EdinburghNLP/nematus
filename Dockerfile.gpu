@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
   python-nose \
   python-numpy \
   python-scipy \
+  python-pygraphviz \
   xml-twig-tools
 
 RUN pip install --upgrade pip
