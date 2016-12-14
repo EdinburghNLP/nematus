@@ -153,9 +153,9 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 
     # state_below is the input word embeddings
     # input to the gates, concatenated
-    state_below_ = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'W')]) + tparams[pp(prefix, 'b')]
+    state_below_ = tensor.dot(state_below*emb_dropout[0]*prior_emb_dropout[0], tparams[pp(prefix, 'W')]) + tparams[pp(prefix, 'b')]
     # input to compute the hidden state proposal
-    state_belowx = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'Wx')]) + tparams[pp(prefix, 'bx')]
+    state_belowx = tensor.dot(state_below*emb_dropout[1]*prior_emb_dropout[1], tparams[pp(prefix, 'Wx')]) + tparams[pp(prefix, 'bx')]
     if options['use_tuneout']:
         state_below_ += tensor.dot(state_below*prior_emb_dropout[0], tparams[pp('prior_'+prefix, 'W')]) + tparams[pp('prior_'+prefix, 'b')]
         state_belowx += tensor.dot(state_below*prior_emb_dropout[1], tparams[pp('prior_'+prefix, 'Wx')]) + tparams[pp('prior_'+prefix, 'bx')]
@@ -164,7 +164,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     # arguments    | sequences |outputs-info| non-seqs
     def _step_slice(m_, x_, xx_, h_, U, Ux, rec_dropout, prior_rec_dropout):
 
-        preact = tensor.dot(h_*rec_dropout[0], U)
+        preact = tensor.dot(h_*rec_dropout[0]*prior_rec_dropout[0], U)
         if options['use_tuneout']:
             preact += tensor.dot(h_*prior_rec_dropout[0], tparams[pp('prior_'+prefix, 'U')])
         preact += x_
@@ -174,7 +174,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
         u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
 
         # compute the hidden state proposal
-        preactx = tensor.dot(h_*rec_dropout[1], Ux)
+        preactx = tensor.dot(h_*rec_dropout[1]*prior_rec_dropout[1], Ux)
         if options['use_tuneout']:
             preactx += tensor.dot(h_*prior_rec_dropout[1], tparams[pp('prior_'+prefix, 'Ux')])
         preactx = preactx * r
@@ -310,7 +310,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
     # projected context
     assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
     if pctx_ is None:
-        pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) + tparams[pp(prefix, 'b_att')]
+        pctx_ = tensor.dot(context*ctx_dropout[0]*prior_ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) + tparams[pp(prefix, 'b_att')]
         if options['use_tuneout']:
             pctx_ += tensor.dot(context*prior_ctx_dropout[0], tparams[pp('prior_'+prefix, 'Wc_att')]) + tparams[pp('prior_'+prefix, 'b_att')]
 
@@ -320,8 +320,8 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         return _x[:, n*dim:(n+1)*dim]
 
     # state_below is the previous output word embedding
-    state_below_ = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'W')]) + tparams[pp(prefix, 'b')]
-    state_belowx = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'Wx')]) + tparams[pp(prefix, 'bx')]
+    state_below_ = tensor.dot(state_below*emb_dropout[0]*prior_emb_dropout[0], tparams[pp(prefix, 'W')]) + tparams[pp(prefix, 'b')]
+    state_belowx = tensor.dot(state_below*emb_dropout[1]*prior_emb_dropout[1], tparams[pp(prefix, 'Wx')]) + tparams[pp(prefix, 'bx')]
     if options['use_tuneout']:
         state_below_ += tensor.dot(state_below*prior_emb_dropout[0], tparams[pp('prior_'+prefix, 'W')]) + tparams[pp('prior_'+prefix, 'b')]
         state_belowx += tensor.dot(state_below*prior_emb_dropout[1], tparams[pp('prior_'+prefix, 'Wx')]) + tparams[pp('prior_'+prefix, 'bx')]
@@ -330,7 +330,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
                     U_nl, Ux_nl, b_nl, bx_nl):
 
-        preact1 = tensor.dot(h_*rec_dropout[0], U)
+        preact1 = tensor.dot(h_*rec_dropout[0]*prior_rec_dropout[0], U)
         if options['use_tuneout']:
             preact1 += tensor.dot(h_*prior_rec_dropout[0], tparams[pp('prior_'+prefix, 'U')])
         preact1 += x_
@@ -339,7 +339,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         r1 = _slice(preact1, 0, dim)
         u1 = _slice(preact1, 1, dim)
 
-        preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
+        preactx1 = tensor.dot(h_*rec_dropout[1]*prior_rec_dropout[1], Ux)
         if options['use_tuneout']:
             preactx1 += tensor.dot(h_*prior_rec_dropout[1], tparams[pp('prior_'+prefix, 'Ux')])
         preactx1 *= r1
@@ -351,13 +351,13 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
         # attention
-        pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
+        pstate_ = tensor.dot(h1*rec_dropout[2]*prior_rec_dropout[2], W_comb_att)
         if options['use_tuneout']:
             pstate_ += tensor.dot(h1*prior_rec_dropout[2], tparams[pp('prior_'+prefix, 'W_comb_att')])
         pctx__ = pctx_ + pstate_[None, :, :]
         #pctx__ += xc_
         pctx__ = tensor.tanh(pctx__)
-        alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
+        alpha = tensor.dot(pctx__*ctx_dropout[1]*prior_ctx_dropout[1], U_att)+c_tt
         if options['use_tuneout']:
             alpha += tensor.dot(pctx__*prior_ctx_dropout[1], tparams[pp('prior_'+prefix, 'U_att')])+tparams[pp('prior_'+prefix, 'c_tt')]
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
@@ -367,8 +367,8 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         alpha = alpha / alpha.sum(0, keepdims=True)
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
-        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
-        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
+        preact2 = tensor.dot(h1*rec_dropout[3]*prior_rec_dropout[3], U_nl)+b_nl
+        preact2 += tensor.dot(ctx_*ctx_dropout[2]*prior_ctx_dropout[2], Wc)
         if options['use_tuneout']:
             preact2 += tensor.dot(h1*prior_rec_dropout[3], tparams[pp('prior_'+prefix, 'U_nl')])+tparams[pp('prior_'+prefix, 'b_nl')]
             preact2 += tensor.dot(ctx_*prior_ctx_dropout[2], tparams[pp('prior_'+prefix, 'Wc')])
@@ -377,11 +377,11 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         r2 = _slice(preact2, 0, dim)
         u2 = _slice(preact2, 1, dim)
 
-        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
+        preactx2 = tensor.dot(h1*rec_dropout[4]*prior_rec_dropout[4], Ux_nl)+bx_nl
         if options['use_tuneout']:
             preactx2 += tensor.dot(h1*prior_rec_dropout[4],tparams[pp('prior_'+prefix, 'Ux_nl')])+tparams[pp('prior_'+prefix, 'bx_nl')]
         preactx2 *= r2
-        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
+        preactx2 += tensor.dot(ctx_*ctx_dropout[3]*prior_ctx_dropout[3], Wcx)
         if options['use_tuneout']:
             preactx2 += tensor.dot(ctx_*prior_ctx_dropout[3], tparams[pp('prior_'+prefix, 'Wcx')])
 

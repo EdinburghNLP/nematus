@@ -202,6 +202,7 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
     if options['use_tuneout']:
         prior_emb = get_layer_constr('embedding')(tparams, x, suffix='', factors= options['factors'], prefix='prior_')
         prior_emb *= prior_source_dropout
+        emb *= prior_source_dropout
         emb += prior_emb
 
     proj = get_layer_constr(options['encoder'])(tparams, emb, options,
@@ -225,10 +226,12 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
     if options['use_tuneout']:
         prior_embr = get_layer_constr('embedding')(tparams, xr, suffix='', factors= options['factors'], prefix='prior_')
         if sampling:
-            prior_embr *= source_dropout
+            prior_embr *= prior_source_dropout
+            embr *= prior_source_dropout
         else:
             # we drop out the same words in both directions
-            prior_embr *= source_dropout[::-1]
+            prior_embr *= prior_source_dropout[::-1]
+            embr *= prior_source_dropout[::-1]
         embr += prior_embr
 
     projr = get_layer_constr(options['encoder'])(tparams, embr, options,
@@ -302,13 +305,16 @@ def build_model(tparams, options):
     if options['use_dropout']:
         prior_ctx_mean = ctx_mean
         ctx_mean = ctx_mean * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        if options['use_tuneout']:
+            prior_ctx_mean_dropout = shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            ctx_mean = ctx_mean * prior_ctx_mean_dropout
 
     # initial decoder state
     pre_init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
                                     prefix='ff_state', activ='linear')
 
     if options['use_tuneout']:
-        prior_ctx_mean = prior_ctx_mean * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_ctx_mean = prior_ctx_mean * prior_ctx_mean_dropout
         pre_init_state += get_layer_constr('ff')(tparams, prior_ctx_mean, options,
                                     prefix='prior_ff_state', activ='linear')
     init_state = tensor.tanh(pre_init_state)
@@ -323,6 +329,7 @@ def build_model(tparams, options):
     if options['use_tuneout']:
         prior_emb = get_layer_constr('embedding')(tparams, y, suffix='_dec', prefix='prior_')
         prior_emb *= prior_target_dropout
+        emb *= prior_target_dropout
         emb += prior_emb
 
     emb_shifted = tensor.zeros_like(emb)
@@ -354,6 +361,13 @@ def build_model(tparams, options):
         proj_h = proj_h * shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
         emb = emb * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
         ctxs = ctxs * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
+        if options['use_tuneout']:
+            prior_proj_h_dropout = shared_dropout_layer((n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            prior_emb_dropout = shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
+            prior_ctxs_dropout = shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            proj_h *= prior_proj_h_dropout
+            prior_emb *= prior_emb_dropout
+            prior_ctxs *= prior_ctxs_dropout
 
     # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
@@ -366,9 +380,9 @@ def build_model(tparams, options):
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
                                    prefix='ff_logit_ctx', activ='linear')
     if options['use_tuneout']:
-        prior_proj_h = prior_proj_h * shared_dropout_layer((n_samples, options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
-        prior_emb = prior_emb * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
-        prior_ctxs = prior_ctxs * shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_proj_h = prior_proj_h * prior_proj_h_dropout
+        prior_emb = prior_emb * prior_emb_dropout
+        prior_ctxs = prior_ctxs * prior_ctxs_dropout
         logit_lstm += get_layer_constr('ff')(tparams, prior_proj_h, options,
                                     prefix='prior_ff_logit_lstm', activ='linear')
         logit_prev += get_layer_constr('ff')(tparams, prior_emb, options,
@@ -381,11 +395,14 @@ def build_model(tparams, options):
     if options['use_dropout']:
         prior_logit = logit
         logit = logit * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden, scaled)
+        if options['use_tuneout']:
+            prior_logit_dropout = shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_hidden, scaled)
+            logit *= prior_logit_dropout
 
     logit2 = get_layer_constr('ff')(tparams, logit, options,
                                    prefix='ff_logit', activ='linear')
     if options['use_tuneout']:
-        prior_logit = prior_logit * shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_hidden, scaled)
+        prior_logit = prior_logit * prior_logit_dropout
         logit2 += get_layer_constr('ff')(tparams, prior_logit, options,
                                    prefix='prior_ff_logit', activ='linear')
 
@@ -1152,6 +1169,8 @@ def train(dim_word=100,  # word vector dimensionality
         decay_c = theano.shared(numpy.float32(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in tparams.iteritems():
+            if kk.startswith('prior_'):
+                continue
             weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
         cost += weight_decay
@@ -1169,6 +1188,8 @@ def train(dim_word=100,  # word vector dimensionality
         map_decay_c = theano.shared(numpy.float32(map_decay_c), name="map_decay_c")
         weight_map_decay = 0.
         for kk, vv in tparams.iteritems():
+            if kk.startswith('prior_'):
+                continue
             init_value = tparams['prior_' + kk]
             weight_map_decay += ((vv -init_value) ** 2).sum()
         weight_map_decay *= map_decay_c
@@ -1238,7 +1259,7 @@ def train(dim_word=100,  # word vector dimensionality
         sampleFreq = len(train[0])/batch_size
 
     valid_err = None
-
+    p_validation = None
     for eidx in xrange(max_epochs):
         n_samples = 0
 
@@ -1433,12 +1454,18 @@ def train(dim_word=100,  # word vector dimensionality
 
                 if external_validation_script:
                     print "Calling external validation script"
+                    if p_validation is not None and p_validation.poll() is None:
+                        print "Waiting for previous validation run to finish"
+                        print "If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes"
+                        valid_wait_start = time.time()
+                        p_validation.wait()
+                        print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
-                    p = Popen([external_validation_script])
+                    p_validation = Popen([external_validation_script])
 
             # finish after this many updates
             if uidx >= finish_after:

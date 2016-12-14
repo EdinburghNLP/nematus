@@ -139,7 +139,7 @@ class TextIterator:
                 if self.n_words_target > 0:
                     tt = [w if w < self.n_words_target else 1 for w in tt]
 
-                if len(ss) > self.maxlen and len(tt) > self.maxlen:
+                if (len(ss) > self.maxlen and len(tt) > self.maxlen) or len(ss) < 1 or len(tt) < 1:
                     continue
 
                 source.append(ss)
