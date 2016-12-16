@@ -1,6 +1,7 @@
 '''
 Build a neural machine translation model with soft attention
 '''
+
 import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -366,8 +367,8 @@ def build_model(tparams, options):
             prior_emb_dropout = shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, prior_retain_probability_emb, scaled)
             prior_ctxs_dropout = shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, prior_retain_probability_hidden, scaled)
             proj_h *= prior_proj_h_dropout
-            prior_emb *= prior_emb_dropout
-            prior_ctxs *= prior_ctxs_dropout
+            emb *= prior_emb_dropout
+            ctxs *= prior_ctxs_dropout
 
     # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
@@ -1132,6 +1133,7 @@ def train(dim_word=100,  # word vector dimensionality
         params = load_params(prior_model, params, with_prefix='prior_')
 
     tparams = init_theano_params(params)
+    #ipdb.set_trace()
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
@@ -1213,6 +1215,8 @@ def train(dim_word=100,  # word vector dimensionality
     # allow finetuning of only last layer (becomes a linear model training problem)
     if finetune_only_last:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
+
+    #ipdb.set_trace()
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1355,6 +1359,7 @@ def train(dim_word=100,  # word vector dimensionality
                     params = best_p
                 else:
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
+                #ipdb.set_trace()
                 numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
                 json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
                 print 'Done'
