@@ -84,7 +84,6 @@ def print_matrix(hyp, file):
     print >> file, ""
   print >> file, ""
 
-import json, io
 def print_matrix_json(hyp, source, target, sid, tid, file):
   source.append("</s>")
   target.append("</s>")
@@ -92,7 +91,7 @@ def print_matrix_json(hyp, source, target, sid, tid, file):
   for ti, target_word_alignment in enumerate(hyp):
     for si,w in enumerate(target_word_alignment):
       links.append((target[ti], source[si], str(w), sid, tid))
-  json.dump(links,file, ensure_ascii=False)
+  json.dump(links,file, ensure_ascii=False, indent=2)
 
 
 def print_matrices(mm, file):
@@ -238,11 +237,11 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                 saveto.write('\n')
             if save_alignment is not None:
               if a_json:
-                print_matrix_json(trans[1], source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
+                print_matrix_json(alignment, source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
               else:
                 save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
                                       i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
-                print_matrix(trans[3], save_alignment)
+                print_matrix(alignment, save_alignment)
 
     sys.stderr.write('Done\n')
 
