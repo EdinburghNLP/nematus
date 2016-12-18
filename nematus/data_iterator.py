@@ -18,6 +18,7 @@ class TextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
+                 skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
                  maxibatch_size=20):
@@ -35,6 +36,7 @@ class TextIterator:
 
         self.batch_size = batch_size
         self.maxlen = maxlen
+        self.skip_empty = skip_empty
 
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
@@ -139,7 +141,7 @@ class TextIterator:
 
                 if len(ss) > self.maxlen and len(tt) > self.maxlen:
                     continue
-                if not ss or not tt:
+                if self.skip_empty and (not ss or not tt):
                     continue
 
                 source.append(ss)

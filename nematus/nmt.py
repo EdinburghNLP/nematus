@@ -763,6 +763,7 @@ def train(dim_word=100,  # word vector dimensionality
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
+                         skip_empty=True,
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          maxibatch_size=maxibatch_size)
