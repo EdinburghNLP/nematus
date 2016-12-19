@@ -22,6 +22,11 @@ The changes to Nematus include:
  - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
 
 
+SUPPORT
+-------
+
+For general support requests, there is a Google Groups mailing list at https://groups.google.com/d/forum/nematus-support . You can also send an e-mail to nematus-support@googlegroups.com .
+
 INSTALLATION
 ------------
 
@@ -38,7 +43,7 @@ we recommend executing the following command in a Python virtual environment:
 the following packages are optional, but *highly* recommended
 
  - CUDA >= 7  (only GPU training is sufficiently fast)
- - cuDNN >= 3 (speeds up training substantially)
+ - cuDNN >= 4 (speeds up training substantially)
 
 
 you can run Nematus locally. To install it, execute `python setup.py install`
@@ -58,9 +63,45 @@ For GPU you need to have nvidia-docker installed and run:
 
 ``nvidia-docker run -v `pwd`:/playground -it nematus-docker``
 
+TRAINING SPEED
+--------------
+
+Training speed depends heavily on having appropriate hardware (ideally a recent NVIDIA GPU),
+and having installed the appropriate software packages.
+
+To test your setup, we provide some speed benchmarks with `test/test_train.sh',
+on an Intel Xeon CPU E5-2620 v3, with a Nvidia GeForce GTX 1080 GPU and CUDA 8.0:
+
+CPU, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cpu ./test_train.sh
+
+>> 2.37 sentences/s
+
+<<<<<<< HEAD
+=======
+GPU, no CuDNN, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 71.62 sentences/s
+
+GPU, CuDNN 5.1, theano 0.8.2:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 139.73 sentences/s
+
+GPU, CuDNN 5.1, theano dev:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
+
+>> 173.15 sentences/s
+
 USAGE INSTRUCTIONS
 ------------------
 
+>>>>>>> master
 ### TRAINING
 
 execute nematus/nmt.py to train a model.
@@ -73,7 +114,11 @@ execute nematus/nmt.py to train a model.
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
 | --model PATH         |  model file name (default: model.npz) |
 | --saveFreq INT       |  save frequency (default: 30000) |
+<<<<<<< HEAD
 | --reload_            |  load existing model (if '--model' points to existing model) |
+=======
+| --reload             |  load existing model (if '--model' points to existing model) |
+>>>>>>> master
 | --overwrite          |  write all models to same file |
 
 #### network parameters
@@ -107,7 +152,10 @@ execute nematus/nmt.py to train a model.
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
+<<<<<<< HEAD
 | --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
+=======
+>>>>>>> master
 | --finetune           |  train with fixed embedding layer |
 | --finetune_only_last |  train with all layers except output layer fixed |
 
@@ -126,6 +174,7 @@ execute nematus/nmt.py to train a model.
 | --dispFreq INT       | display loss after INT updates (default: 1000) |
 | --sampleFreq INT     | display some samples after INT updates (default: 10000) |
 
+<<<<<<< HEAD
 #### minimum risk training parameters
 | parameter            | description |
 |---                   |--- |
@@ -134,6 +183,8 @@ execute nematus/nmt.py to train a model.
 | --mrt_loss STR       | loss used in MRT (default: SENTENCEBLEU n=4) |
 | --mrt_reference      | add reference to MRT samples. |
 
+=======
+>>>>>>> master
 
 
 more instructions to train a model, including a sample configuration and
@@ -156,7 +207,8 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --json_alignment     | Output alignment in json format |
 | --n-best             | Write n-best list (of size k) |
 | --suppress-unk       | Suppress hypotheses containing UNK. |
-| --print-word-probabilities, -wp | Print probabilities of each world |
+| --print-word-probabilities, -wp | Print probabilities of each word |
+| --search_graph, -sg  | Output file for search graph rendered as PNG image |
 
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus

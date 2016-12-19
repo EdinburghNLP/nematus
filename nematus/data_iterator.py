@@ -18,13 +18,14 @@ class TextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
+                 skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
                  maxibatch_size=20):
         if shuffle_each_epoch:
-            shuffle.main([source, target])
-            self.source = fopen(source+'.shuf', 'r')
-            self.target = fopen(target+'.shuf', 'r')
+            self.source_orig = source
+            self.target_orig = target
+            self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
         else:
             self.source = fopen(source, 'r')
             self.target = fopen(target, 'r')
@@ -35,6 +36,7 @@ class TextIterator:
 
         self.batch_size = batch_size
         self.maxlen = maxlen
+        self.skip_empty = skip_empty
 
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
@@ -65,9 +67,7 @@ class TextIterator:
 
     def reset(self):
         if self.shuffle:
-            shuffle.main([self.source.name.replace('.shuf',''), self.target.name.replace('.shuf','')])
-            self.source = fopen(self.source.name, 'r')
-            self.target = fopen(self.target.name, 'r')
+            self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
         else:
             self.source.seek(0)
             self.target.seek(0)
@@ -141,6 +141,8 @@ class TextIterator:
 
                 if len(ss) > self.maxlen and len(tt) > self.maxlen:
                     continue
+                if self.skip_empty and (not ss or not tt):
+                    continue
 
                 source.append(ss)
                 target.append(tt)
@@ -151,9 +153,8 @@ class TextIterator:
         except IOError:
             self.end_of_data = True
 
-        if len(source) <= 0 or len(target) <= 0:
-            self.end_of_data = False
-            self.reset()
-            raise StopIteration
+        # all sentence pairs in maxibatch filtered out because of length
+        if len(source) == 0 or len(target) == 0:
+            source, target = self.next()
 
         return source, target

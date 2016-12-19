@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 	nano \
 	python-dev \
 	python-pip \
+	python-pygraphviz \
 	xml-twig-tools
 
 RUN pip install --upgrade pip

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 '''
 Build a neural machine translation model with soft attention
 '''
@@ -624,7 +626,8 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
-               stochastic=True, argmax=False, return_alignment=False, suppress_unk=False):
+               stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
+               return_hyp_graph=False):
 
     # k is the beam size we have
     if k > 1 and argmax:
@@ -635,12 +638,17 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     sample_score = []
     sample_word_probs = []
     alignment = []
+    hyp_graph = None
     if stochastic:
         if argmax:
             sample_score = 0
         live_k=k
     else:
         live_k = 1
+
+    if return_hyp_graph:
+        from hypgraph import HypGraph
+        hyp_graph = HypGraph()
 
     dead_k = 0
 
@@ -779,6 +787,11 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
             # sample and sample_score hold the k-best translations and their scores
             for idx in xrange(len(new_hyp_samples)):
+                if return_hyp_graph:
+                    word, history = new_hyp_samples[idx][-1], new_hyp_samples[idx][:-1]
+                    score = new_hyp_scores[idx]
+                    word_prob = new_word_probs[idx][-1]
+                    hyp_graph.add(word, history, word_prob=word_prob, cost=score)
                 if new_hyp_samples[idx][-1] == 0:
                     sample.append(copy.copy(new_hyp_samples[idx]))
                     sample_score.append(new_hyp_scores[idx])
@@ -818,7 +831,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     if not return_alignment:
         alignment = [None for i in range(len(sample))]
 
-    return sample, sample_score, sample_word_probs, alignment
+    return sample, sample_score, sample_word_probs, alignment, hyp_graph
 
 
 # calculate the log probablities on a given corpus using translation model
@@ -984,6 +997,7 @@ def train(dim_word=100,  # word vector dimensionality
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
+                         skip_empty=True,
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          maxibatch_size=maxibatch_size)
@@ -996,6 +1010,8 @@ def train(dim_word=100,  # word vector dimensionality
                             maxlen=maxlen)
     else:
         valid = None
+
+    comp_start = time.time()
 
     print 'Building model'
     params = init_params(model_options)
@@ -1066,11 +1082,6 @@ def train(dim_word=100,  # word vector dimensionality
         weight_map_decay *= map_decay_c
         cost += weight_map_decay
 
-    # after all regularizers - compile the computational graph for cost
-    print 'Building f_cost...',
-    f_cost = theano.function(inps, cost, profile=profile)
-    print 'Done'
-
     # allow finetuning with fixed embeddings
     if finetune:
         updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if not key.startswith('Wemb')])
@@ -1106,6 +1117,8 @@ def train(dim_word=100,  # word vector dimensionality
     f_grad_shared, f_update = eval(optimizer)(lr, updated_params, grads, inps, cost, profile=profile)
     print 'Done'
 
+    print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
+
     print 'Optimization'
 
     best_p = None
@@ -1120,6 +1133,9 @@ def train(dim_word=100,  # word vector dimensionality
         if 'uidx' in rmodel:
             uidx = rmodel['uidx']
 
+    #save model options
+    json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
+
     if validFreq == -1:
         validFreq = len(train[0])/batch_size
     if saveFreq == -1:
@@ -1129,11 +1145,15 @@ def train(dim_word=100,  # word vector dimensionality
 
     valid_err = None
 
+    last_disp_samples = 0
+    ud_start = time.time()
+    p_validation = None
     for eidx in xrange(max_epochs):
         n_samples = 0
 
         for x, y in train:
             n_samples += len(x)
+            last_disp_samples += len(x)
             uidx += 1
             use_noise.set_value(1.)
 
@@ -1153,19 +1173,14 @@ def train(dim_word=100,  # word vector dimensionality
                     uidx -= 1
                     continue
 
-                ud_start = time.time()
-
                 # compute cost, grads and copy grads to shared variables
                 cost = f_grad_shared(x, x_mask, y, y_mask)
 
                 # do the update on parameters
                 f_update(lrate)
 
-                ud = time.time() - ud_start
-
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
-                ud_start = time.time()
 
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
                 if not xy_pairs:
@@ -1208,8 +1223,6 @@ def train(dim_word=100,  # word vector dimensionality
                     # do the update on parameters
                     f_update(lrate)
 
-                ud = time.time() - ud_start
-
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
             if numpy.isnan(cost) or numpy.isinf(cost):
@@ -1218,7 +1231,11 @@ def train(dim_word=100,  # word vector dimensionality
 
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud
+                ud = time.time() - ud_start
+                wps = (last_disp_samples) / float(ud)
+                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} sentences/s".format(wps)
+                ud_start = time.time()
+                last_disp_samples = 0
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
@@ -1229,7 +1246,6 @@ def train(dim_word=100,  # word vector dimensionality
                 else:
                     params = unzip_from_theano(tparams)
                 numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
-                json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
                 print 'Done'
 
                 # save with uidx
@@ -1247,13 +1263,19 @@ def train(dim_word=100,  # word vector dimensionality
                 # FIXME: random selection?
                 for jj in xrange(numpy.minimum(5, x.shape[2])):
                     stochastic = True
+                    x_current = x[:, :, jj][:, :, None]
+
+                    # remove padding
+                    x_current = x_current[:,:x_mask[:, jj].sum(),:]
+
                     sample, score, sample_word_probs, alignment = gen_sample([f_init], [f_next],
-                                               x[:, :, jj][:, :, None],
+                                               x_current,
                                                trng=trng, k=1,
                                                maxlen=30,
                                                stochastic=stochastic,
                                                argmax=False,
-                                               suppress_unk=False)
+                                               suppress_unk=False,
+                                               return_hyp_graph=False)
                     print 'Source ', jj, ': ',
                     for pos in range(x.shape[1]):
                         if x[0, pos, jj] == 0:
@@ -1327,12 +1349,18 @@ def train(dim_word=100,  # word vector dimensionality
 
                 if external_validation_script:
                     print "Calling external validation script"
+                    if p_validation is not None and p_validation.poll() is None:
+                        print "Waiting for previous validation run to finish"
+                        print "If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes"
+                        valid_wait_start = time.time()
+                        p_validation.wait()
+                        print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams)
                     numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
-                    p = Popen([external_validation_script])
+                    p_validation = Popen([external_validation_script])
 
             # finish after this many updates
             if uidx >= finish_after:
@@ -1380,7 +1408,7 @@ if __name__ == '__main__':
                          help="model file name (default: %(default)s)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
-    data.add_argument('--reload_', action='store_true',
+    data.add_argument('--reload', action='store_true',  dest='reload_',
                          help="load existing model (if '--model' points to existing model)")
     data.add_argument('--overwrite', action='store_true',
                          help="write all models to same file")
@@ -1446,6 +1474,7 @@ if __name__ == '__main__':
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
     training.add_argument('--objective', choices=['CE', 'MRT'],
                          help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
+
     finetune = training.add_mutually_exclusive_group()
     finetune.add_argument('--finetune', action="store_true",
                         help="train with fixed embedding layer")
