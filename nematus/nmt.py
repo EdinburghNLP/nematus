@@ -483,7 +483,7 @@ def mrt_cost(cost, y_mask, options):
 
 
 # build a sampler that produces samples in one theano function
-def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False):
+def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
     if options['use_dropout'] and options['model_version'] < 0.1:
         retain_probability_emb = 1-options['dropout_embedding']
@@ -499,12 +499,19 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
         target_dropout = theano.shared(numpy.float32(1.))
 
-    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
+    if greedy:
+        x_mask = tensor.matrix('x_mask', dtype='float32')
+        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    else:
+        x_mask = None
+
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=True)
     n_samples = x.shape[2]
 
-    # get the input for decoder rnn initializer mlp
-    ctx_mean = ctx.mean(0)
-    # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
+    if x_mask:
+        ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+    else:
+        ctx_mean = ctx.mean(0)
 
     if options['use_dropout'] and options['model_version'] < 0.1:
         ctx_mean *= retain_probability_hidden
@@ -512,14 +519,16 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    k = tensor.iscalar("k")
-    k.tag.test_value = 12
-    init_w = tensor.alloc(numpy.int64(-1), k*n_samples)
+    if greedy:
+        init_w = tensor.alloc(numpy.int64(-1), n_samples)
+    else:
+        k = tensor.iscalar("k")
+        k.tag.test_value = 12
+        init_w = tensor.alloc(numpy.int64(-1), k*n_samples)
 
+        ctx = tensor.tile(ctx, [k, 1])
 
-    ctx = tensor.tile(ctx, [k, 1])
-
-    init_state = tensor.tile(init_state, [k, 1])
+        init_state = tensor.tile(init_state, [k, 1])
 
     # projected context
     assert ctx.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
@@ -538,7 +547,9 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         # apply one step of conditional gru with attention
         proj = get_layer_constr('gru_cond')(tparams, emb, options,
                                                 prefix='decoder',
-                                                mask=None, context=ctx,
+                                                mask=None,
+                                                context=ctx,
+                                                context_mask=x_mask,
                                                 pctx_=pctx_,
                                                 one_step=True,
                                                 init_state=init_state,
@@ -580,8 +591,11 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
         # compute the softmax probability
         next_probs = tensor.nnet.softmax(logit)
 
-        # sample from softmax distribution to get the sample
-        next_sample = trng.multinomial(pvals=next_probs).argmax(1)
+        if greedy:
+            next_sample = next_probs.argmax(1)
+        else:
+            # sample from softmax distribution to get the sample
+            next_sample = trng.multinomial(pvals=next_probs).argmax(1)
 
         # do not produce words after EOS
         next_sample = tensor.switch(
@@ -589,7 +603,7 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
                       0,
                       next_sample)
 
-        return [next_sample, next_state, next_probs[0, next_sample]], \
+        return [next_sample, next_state, next_probs[:, next_sample].diagonal()], \
                theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
 
     # symbolic loop for sequence generation
@@ -615,8 +629,12 @@ def build_full_sampler(tparams, options, use_noise, trng, return_alignment=False
                         n_steps=n_steps)
 
     print >>sys.stderr, 'Building f_sample...',
+    if greedy:
+        inps = [x, x_mask, n_steps]
+    else:
+        inps = [x, k, n_steps]
     outs = [sample, probs]
-    f_sample = theano.function([x, k, n_steps], outs, name='f_sample', updates=updates, profile=profile)
+    f_sample = theano.function(inps, outs, name='f_sample', updates=updates, profile=profile)
     print >>sys.stderr, 'Done'
 
     return f_sample
