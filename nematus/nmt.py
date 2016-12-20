@@ -461,14 +461,10 @@ def mrt_cost(cost, y_mask, options):
 
     cost *= alpha
 
-    # numerically stable normalization of probabilities in batch (in log space)
-    mincost = cost.min(0, keepdims=True)
-    total_cost = -tensor.log(tensor.exp(-cost + mincost).sum(0)) + mincost
-    cost -= total_cost
+    #get normalized probability
+    cost = tensor.nnet.softmax(-cost)[0]
 
-    # back to probability space
-    cost = tensor.exp(-cost)
-
+    # risk: expected loss
     cost *= loss
 
     cost = cost.sum()
