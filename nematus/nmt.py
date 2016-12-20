@@ -1227,6 +1227,10 @@ def train(dim_word=100,  # word vector dimensionality
                     samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
                     y_s = seqs2words(y_s, worddicts_r[-1])
 
+                    #scorers expect tokenized hypotheses/references
+                    y_s = y_s.split(" ")
+                    samples = [sample.split(" ") for sample in samples]
+
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
