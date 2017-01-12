@@ -459,13 +459,21 @@ def mrt_cost(cost, y_mask, options):
     if options['mrt_ml_mix'] > 0:
         ml_cost = cost[0]
 
+        # remove reference for MRT objective unless enabled
+        if not options['mrt_reference']:
+            cost = cost[1:]
+
     cost *= alpha
 
     #get normalized probability
     cost = tensor.nnet.softmax(-cost)[0]
 
     # risk: expected loss
-    cost *= loss
+    if options['mrt_ml_mix'] > 0 and not options['mrt_reference']:
+        cost *= loss[1:]
+    else:
+        cost *= loss
+
 
     cost = cost.sum()
 
@@ -1060,9 +1068,6 @@ def train(dim_word=100,  # word vector dimensionality
         cost = cost.mean()
     elif model_options['objective'] == 'MRT':
         #MRT objective function
-        if model_options['mrt_ml_mix'] > 0 and not model_options['mrt_reference']:
-            sys.stderr.write('Error: mrt_reference must be enabled to mix MRT and ML objective\n')
-            sys.exit(1)
         cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
@@ -1215,7 +1220,7 @@ def train(dim_word=100,  # word vector dimensionality
                     samples = [s for s, _ in itertools.groupby(samples)]
 
                     # add gold translation [always in first position]
-                    if model_options['mrt_reference']:
+                    if model_options['mrt_reference'] or model_options['mrt_ml_mix']:
                         samples = [y_s] + [s for s in samples if s != y_s]
 
                     # create mini-batch with masking
