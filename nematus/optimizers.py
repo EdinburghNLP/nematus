@@ -31,6 +31,7 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, profile=
     lr_t = lr * tensor.sqrt(1. - beta2**t) / (1. - beta1**t)
 
     for p, g in zip(tparams.values(), gshared):
+        print p.name, 'will be optimized'
         m = theano.shared(p.get_value() * 0., p.name + '_mean')
         v = theano.shared(p.get_value() * 0., p.name + '_variance')
         m_t = beta1 * m + (1. - beta1) * g

@@ -3,6 +3,7 @@
 '''
 Build a neural machine translation model with soft attention
 '''
+print 'Starting to import'
 import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -128,10 +129,11 @@ def init_params(options):
 
 
 # bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
-def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
+def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False, x=None):
 
-    x = tensor.tensor3('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
+    if x is None:
+        x = tensor.tensor3('x', dtype='int64') 
+        x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64') 
 
     # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
@@ -221,20 +223,23 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
 
 
 # build a training model
-def build_model(tparams, options):
+def build_model(tparams, options, x=None, x_mask=None, y=None, y_mask=None, trng=None, use_noise=None):
     opt_ret = dict()
 
-    trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.))
+    trng = RandomStreams(1234) if trng is None else trng
+    use_noise = theano.shared(numpy.float32(0.)) if use_noise is None else use_noise
 
-    x_mask = tensor.matrix('x_mask', dtype='float32')
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-    y = tensor.matrix('y', dtype='int64')
-    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-    y_mask = tensor.matrix('y_mask', dtype='float32')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+    if x_mask is None:
+        x_mask = tensor.matrix('x_mask', dtype='float32') 
+        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32') 
+    if y is None:
+        y = tensor.matrix('y', dtype='int64') 
+        y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64') 
+    if y_mask is None:
+        y_mask = tensor.matrix('y_mask', dtype='float32') 
+        y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32') 
 
-    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False, x=x)
     n_samples = x.shape[2]
     n_timesteps_trg = y.shape[0]
 
@@ -707,6 +712,7 @@ def train(dim_word=100,  # word vector dimensionality
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
           maxibatch_size=20, #How many minibatches to load at one time
           model_version=0.1, #store version used for training for compatibility
+          train_ensemble=None,
     ):
 
     # Model options
@@ -723,6 +729,7 @@ def train(dim_word=100,  # word vector dimensionality
     assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
+    assert((not train_ensemble) or len(train_ensemble) > 1) # if finetuning ensembles, provide at least one model
 
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
@@ -780,30 +787,64 @@ def train(dim_word=100,  # word vector dimensionality
     comp_start = time.time()
 
     print 'Building model'
-    params = init_params(model_options)
+    if not train_ensemble:
+        params = init_params(model_options)
+    else:
+        print 'Initializing params for ensemble'
+        ensemble_params = []
+        for i in range(len(train_ensemble)):
+            ensemble_params.append(init_params(model_options))
+
     # reload parameters
-    if reload_ and os.path.exists(saveto):
+    if reload_ and os.path.exists(saveto) and not train_ensemble:
         print 'Reloading model parameters'
         params = load_params(saveto, params)
+    elif train_ensemble:
+        ensemble_tparams = []
+        for i, model_path in enumerate(train_ensemble):
+            print 'Loading params for', model_path
+            assert(os.path.exists(model_path)), ('%s does not exists' % model_path)
+            ensemble_params[i] = load_params(model_path, ensemble_params[i])
+            ensemble_tparams.append(init_theano_params(ensemble_params[i]))
 
-    tparams = init_theano_params(params)
-
-    trng, use_noise, \
+    if not train_ensemble:
+        tparams = init_theano_params(params)
+        trng, use_noise, \
+            x, x_mask, y, y_mask, \
+            opt_ret, \
+            cost = \
+            build_model(tparams, model_options)
+        inps = [x, x_mask, y, y_mask]
+        # before any regularizer
+        print 'Building f_log_probs...',
+        f_log_probs = theano.function(inps, cost, profile=profile)
+        print 'Done'
+    else:
+        print 'Building model', train_ensemble[0], '...',
+        trng, use_noise, \
         x, x_mask, y, y_mask, \
-        opt_ret, \
+        _, \
         cost = \
-        build_model(tparams, model_options)
+            build_model(ensemble_tparams[0], model_options)
+        print 'Done'
+        inps = [x, x_mask, y, y_mask]
+        for i, tparams in enumerate(ensemble_tparams[1:]):
+            print 'Building model', train_ensemble[1], '...',
+            _, _, \
+            _, _, _, _, \
+            _, cost_new = \
+                build_model(tparams, model_options, x, x_mask, y, y_mask)
+            print 'Done'
 
-    inps = [x, x_mask, y, y_mask]
+            cost += cost_new
+        print 'Building f_log_probs for ensemble...',
+        f_log_probs = theano.function(inps, cost, profile=profile)
+        print 'Done'
 
-    if validFreq or sampleFreq:
+    if sampleFreq:
         print 'Building sampler'
         f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
 
-    # before any regularizer
-    print 'Building f_log_probs...',
-    f_log_probs = theano.function(inps, cost, profile=profile)
-    print 'Done'
 
     cost = cost.mean()
 
@@ -847,7 +888,15 @@ def train(dim_word=100,  # word vector dimensionality
         updated_params = tparams
 
     print 'Computing gradient...',
-    grads = tensor.grad(cost, wrt=itemlist(updated_params))
+    if not train_ensemble:
+        grads = tensor.grad(cost, wrt=itemlist(updated_params))
+    else:
+        #extract with itemlist and flatten
+        print 'for ensemble...',
+        updated_params_list=[param for params in ensemble_tparams for param in itemlist(params)]
+        # updated_params need to be in a dictionary for the optimizer, the key is not important, but order is!
+        updated_params = OrderedDict([(i, param) for i, param in enumerate(updated_params_list)])
+        grads = tensor.grad(cost, wrt=updated_params_list)
     print 'Done'
 
     # apply gradient clipping here
@@ -950,8 +999,16 @@ def train(dim_word=100,  # word vector dimensionality
                 if best_p is not None:
                     params = best_p
                 else:
-                    params = unzip_from_theano(tparams)
-                numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
+                    if not train_ensemble:
+                        params = unzip_from_theano(tparams)
+                        numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
+                    else:
+                        for i, tparams in enumerate(ensemble_tparams):
+                            print 'Saving ensemble model', i,
+                            params = unzip_from_theano(tparams)
+                            numpy.savez(saveto+'.ensemble.'+str(i), history_errs=history_errs, uidx=uidx, **params)
+                            print 'Done'
+
                 print 'Done'
 
                 # save with uidx
@@ -959,8 +1016,15 @@ def train(dim_word=100,  # word vector dimensionality
                     print 'Saving the model at iteration {}...'.format(uidx),
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], uidx)
-                    numpy.savez(saveto_uidx, history_errs=history_errs,
-                                uidx=uidx, **unzip_from_theano(tparams))
+                    if not train_ensemble:
+                        numpy.savez(saveto_uidx, history_errs=history_errs,
+                                    uidx=uidx, **unzip_from_theano(tparams))
+                    else:
+                        for i, tparams in enumerate(ensemble_tparams):
+                            print 'Saving ensemble model', i,
+                            numpy.savez(saveto_uidx+'.ensemble.'+str(i), history_errs=history_errs,
+                                        uidx=uidx, **unzip_from_theano(tparams))
+                            print 'Done'
                     print 'Done'
 
 
@@ -1030,7 +1094,10 @@ def train(dim_word=100,  # word vector dimensionality
                 history_errs.append(valid_err)
 
                 if uidx == 0 or valid_err <= numpy.array(history_errs).min():
-                    best_p = unzip_from_theano(tparams)
+                    if not train_ensemble:
+                        best_p = unzip_from_theano(tparams)
+                    else:
+                        best_p = [unzip_from_theano(tparams) for tparams in ensemble_tparams]
                     bad_counter = 0
                 if len(history_errs) > patience and valid_err >= \
                         numpy.array(history_errs)[:-patience].min():
@@ -1080,7 +1147,10 @@ def train(dim_word=100,  # word vector dimensionality
             break
 
     if best_p is not None:
-        zip_to_theano(best_p, tparams)
+        if not train_ensemble:
+            zip_to_theano(best_p, tparams)
+        for bestparam, tparam in zip(best_p, ensemble_tparams):
+            zip_to_theano(bestparam, tparam)
 
     if valid:
         use_noise.set_value(0.)
@@ -1093,16 +1163,28 @@ def train(dim_word=100,  # word vector dimensionality
     if best_p is not None:
         params = copy.copy(best_p)
     else:
-        params = unzip_from_theano(tparams)
-    numpy.savez(saveto, zipped_params=best_p,
-                history_errs=history_errs,
-                uidx=uidx,
-                **params)
+        if not train_ensemble:
+            params = unzip_from_theano(tparams)
+        else:
+            ensemble_params = [unzip_from_theano(tparams) for tparams in ensemble_tparams]
+    if not train_ensemble:
+        numpy.savez(saveto, zipped_params=best_p,
+                    history_errs=history_errs,
+                    uidx=uidx,
+                    **params)
+    else:
+        for i, bestparam, param in enumerate(zip(best_p, ensemble_params)):
+            numpy.savez(saveto+'.ensemble.'+str(i), zipped_params=bestparam,
+                        history_errs=history_errs,
+                        uidx=uidx,
+                        **param)
+
 
     return valid_err
 
 
 if __name__ == '__main__':
+    print 'In main'
     parser = argparse.ArgumentParser()
 
     data = parser.add_argument_group('data sets; model loading and saving')
@@ -1178,6 +1260,8 @@ if __name__ == '__main__':
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    training.add_argument('--train_ensemble', type=str, default=None, nargs='+', metavar='PATH',
+                          help='Paths to pre-trained models that should be finetuned together')
     finetune = training.add_mutually_exclusive_group()
     finetune.add_argument('--finetune', action="store_true",
                         help="train with fixed embedding layer")
