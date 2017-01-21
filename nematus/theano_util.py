@@ -52,6 +52,15 @@ def load_params(path, params):
 
     return params
 
+# load parameters of the optimizer
+def load_optimizer_params(path, optimizer_name):
+    params = {}
+    pp = numpy.load(path)
+    for kk in pp:
+        if kk.startswith(optimizer_name):
+            params[kk] = pp[kk]
+    return params
+
 def tanh(x):
     return tensor.tanh(x)
 

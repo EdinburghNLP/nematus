@@ -781,10 +781,13 @@ def train(dim_word=100,  # word vector dimensionality
 
     print 'Building model'
     params = init_params(model_options)
+    optimizer_params = {}
     # reload parameters
     if reload_ and os.path.exists(saveto):
         print 'Reloading model parameters'
         params = load_params(saveto, params)
+        print 'Reloading optimizer parameters'
+        optimizer_params = load_optimizer_params(saveto, optimizer)
 
     tparams = init_theano_params(params)
 
@@ -866,7 +869,10 @@ def train(dim_word=100,  # word vector dimensionality
     lr = tensor.scalar(name='lr')
 
     print 'Building optimizers...',
-    f_grad_shared, f_update = eval(optimizer)(lr, updated_params, grads, inps, cost, profile=profile)
+    f_grad_shared, f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
+                                                                 grads, inps, cost,
+                                                                 profile=profile,
+                                                                 optimizer_params=optimizer_params)
     print 'Done'
 
     print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
@@ -874,6 +880,7 @@ def train(dim_word=100,  # word vector dimensionality
     print 'Optimization'
 
     best_p = None
+    best_opt_p = None
     bad_counter = 0
     uidx = 0
     estop = False
@@ -949,9 +956,13 @@ def train(dim_word=100,  # word vector dimensionality
                 print 'Saving the best model...',
                 if best_p is not None:
                     params = best_p
+                    optimizer_params = best_opt_p
                 else:
                     params = unzip_from_theano(tparams)
-                numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
+                    optimizer_params = unzip_from_theano(optimizer_tparams)
+
+                both_params = dict(params, **optimizer_params)
+                numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **both_params)
                 print 'Done'
 
                 # save with uidx
@@ -959,8 +970,10 @@ def train(dim_word=100,  # word vector dimensionality
                     print 'Saving the model at iteration {}...'.format(uidx),
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], uidx)
+
+                    both_params = dict(unzip_from_theano(tparams), **unzip_from_theano(optimizer_tparams))
                     numpy.savez(saveto_uidx, history_errs=history_errs,
-                                uidx=uidx, **unzip_from_theano(tparams))
+                                uidx=uidx, **both_params)
                     print 'Done'
 
 
@@ -1031,6 +1044,7 @@ def train(dim_word=100,  # word vector dimensionality
 
                 if uidx == 0 or valid_err <= numpy.array(history_errs).min():
                     best_p = unzip_from_theano(tparams)
+                    best_opt_p = unzip_from_theano(optimizer_tparams)
                     bad_counter = 0
                 if len(history_errs) > patience and valid_err >= \
                         numpy.array(history_errs)[:-patience].min():
@@ -1042,6 +1056,7 @@ def train(dim_word=100,  # word vector dimensionality
                             train.adjust_domain_interpolation_rate(domain_interpolation_cur)
                             if best_p is not None:
                                 zip_to_theano(best_p, tparams)
+                                zip_to_theano(best_opt_p, optimizer_tparams)
                             bad_counter = 0
                         else:
                             print 'Early Stop!'
@@ -1063,7 +1078,9 @@ def train(dim_word=100,  # word vector dimensionality
                         print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams)
-                    numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
+                    optimizer_params = unzip_from_theano(optimizer_tparams)
+                    both_params = dict(params, **optimizer_params)
+                    numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **both_params)
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
                     p_validation = Popen([external_validation_script])
@@ -1081,6 +1098,7 @@ def train(dim_word=100,  # word vector dimensionality
 
     if best_p is not None:
         zip_to_theano(best_p, tparams)
+        zip_to_theano(best_opt_p, optimizer_tparams)
 
     if valid:
         use_noise.set_value(0.)
@@ -1092,12 +1110,17 @@ def train(dim_word=100,  # word vector dimensionality
 
     if best_p is not None:
         params = copy.copy(best_p)
+        optimizer_params = copy.copy(best_opt_p)
+
     else:
         params = unzip_from_theano(tparams)
+        optimizer_params = unzip_from_theano(optimizer_tparams)
+
+    both_params = dict(params, **optimizer_params)
     numpy.savez(saveto, zipped_params=best_p,
                 history_errs=history_errs,
                 uidx=uidx,
-                **params)
+                **both_params)
 
     return valid_err
 
