@@ -32,7 +32,9 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 
 
         # load model parameters and set theano shared variables
-        params = numpy.load(model)
+        param_list = numpy.load(model).files
+        param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
+        params = load_params(model, param_list)
         tparams = init_theano_params(params)
 
         # word index

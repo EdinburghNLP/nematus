@@ -28,7 +28,9 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
     for model, option in zip(models, options):
 
         # load model parameters and set theano shared variables
-        params = numpy.load(model)
+        param_list = numpy.load(model).files
+        param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
+        params = load_params(model, param_list)
         tparams = init_theano_params(params)
 
         trng, use_noise, \
