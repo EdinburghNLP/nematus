@@ -930,11 +930,14 @@ def train(dim_word=100,  # word vector dimensionality
                 uidx -= 1
                 continue
 
-            # compute cost, grads and copy grads to shared variables
-            cost = f_grad_shared(x, x_mask, y, y_mask)
-
-            # do the update on parameters
-            f_update(lrate)
+            if optimizer != 'adam':
+                # compute cost, grads and copy grads to shared variables 
+                cost = f_grad_shared(x, x_mask, y, y_mask)
+                # do the update on parameters
+                f_update(lrate)
+            else:
+                # compute cost, grads and update parameters
+                cost = f_update(lrate, x, x_mask, y, y_mask)
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
