@@ -62,7 +62,7 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
         updates.append((p, p_t))
     updates.append((t_prev, t))
 
-    f_update = theano.function([lr]+inp, [cost], updates=updates,
+    f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return None, f_update, optimizer_tparams
