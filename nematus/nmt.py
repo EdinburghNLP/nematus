@@ -656,7 +656,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
-def train(dim_word=100,  # word vector dimensionality
+def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
@@ -665,22 +665,22 @@ def train(dim_word=100,  # word vector dimensionality
           patience=10,  # early stopping patience
           max_epochs=5000,
           finish_after=10000000,  # finish after this many updates
-          dispFreq=100,
+          dispFreq=1000,
           decay_c=0.,  # L2 regularization penalty
           map_decay_c=0., # L2 regularization penalty towards original weights
           alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
-          lrate=0.01,  # learning rate
+          lrate=0.0001,  # learning rate
           n_words_src=None,  # source vocabulary size
           n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
-          optimizer='rmsprop',
+          optimizer='adam',
           batch_size=16,
           valid_batch_size=16,
           saveto='model.npz',
-          validFreq=1000,
-          saveFreq=1000,   # save the parameters after every saveFreq updates
-          sampleFreq=100,   # generate some samples after every sampleFreq
+          validFreq=10000,
+          saveFreq=30000,   # save the parameters after every saveFreq updates
+          sampleFreq=10000,   # generate some samples after every sampleFreq
           datasets=[
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
@@ -691,7 +691,7 @@ def train(dim_word=100,  # word vector dimensionality
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
-          dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
+          dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
           dropout_source=0, # dropout source words (0: no dropout)
           dropout_target=0, # dropout target words (0: no dropout)
           reload_=False,
