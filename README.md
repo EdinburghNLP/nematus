@@ -89,11 +89,17 @@ GPU, CuDNN 5.1, theano 0.8.2:
 
 >> 139.73 sentences/s
 
-GPU, CuDNN 5.1, theano dev:
+GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e:
 
   THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
 
 >> 173.15 sentences/s
+
+GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e, new GPU backend:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cuda ./test_train.sh
+
+>> 209.21 sentences/s
 
 USAGE INSTRUCTIONS
 ------------------
