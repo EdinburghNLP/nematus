@@ -40,7 +40,14 @@ class TestTranslate(unittest.TestCase):
         os.chdir('models/en-de/')
         translate(['model.npz'], open('../../en-de/in'), open('../../en-de/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
         os.chdir('../..')
-        self.assertEqual(open('en-de/ref').read(), open('en-de/out').read())
+        for i, (line, line2) in enumerate(zip(open('en-de/ref').readlines(), open('en-de/out').readlines())):
+        if not i % 2:
+            self.assertEqual(line, line2)
+        else:
+            probs = map(float, line.split())
+            probs2 = map(float, line.split())
+            for p, p2 in zip(probs, probs2):
+                self.assertAlmostEqual(p, p2, 5)
 
     # English-Romanian WMT16 system, dropout
 #    def test_enro(self):
