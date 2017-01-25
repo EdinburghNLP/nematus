@@ -79,6 +79,37 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
 
     return x, x_mask, y, y_mask
 
+def init_attn_mask(win, maxlen):
+    # return a maxlen * maxlen matrix
+    # first dimension is middle point
+    # second dimension is sentence length (middle point always less than sentence length, and sentence length == 0 is all 0)
+    # last dimension is index
+    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype='float32')
+    for i in xrange(maxlen):
+        start = i - win
+        end = i + win
+        for k in xrange(maxlen):
+            idx = 0
+            for j in xrange(start, end + 1):
+                if j in xrange(k):
+                    if i < k:
+                        mask[i][k][idx] = 1
+                idx += 1
+    return mask
+
+def init_index_mask(win, maxlen):
+    # return a maxlen * window-size matrix
+    winsize = 2 * win + 1
+    mask = -1 * numpy.ones((maxlen, winsize), dtype='float32')
+    for i in xrange(maxlen):
+        start = i - win
+        end = i + win
+        idx = 0
+        for j in xrange(start, end + 1):
+            if j in xrange(maxlen):
+                mask[i][idx] = j
+            idx += 1
+    return mask
 
 # initialize all parameters
 def init_params(options):
@@ -89,6 +120,10 @@ def init_params(options):
         params[embedding_name(factor)] = norm_weight(options['n_words_src'], options['dim_per_factor'][factor])
 
     params['Wemb_dec'] = norm_weight(options['n_words'], options['dim_word'])
+
+    if options['decoder'] == 'gru_local':
+        params['Attention_mask'] = init_attn_mask(options['pos_win'], options['src_maxlen'])
+        params['Indices_mask'] = init_index_mask(options['pos_win'], options['src_maxlen'])
 
     # encoder: bidirectional RNN
     params = get_layer_param(options['encoder'])(options, params,
@@ -656,7 +691,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
-def train(dim_word=512,  # word vector dimensionality
+def train(dim_word=100,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
@@ -665,22 +700,24 @@ def train(dim_word=512,  # word vector dimensionality
           patience=10,  # early stopping patience
           max_epochs=5000,
           finish_after=10000000,  # finish after this many updates
-          dispFreq=1000,
+          dispFreq=100,
           decay_c=0.,  # L2 regularization penalty
           map_decay_c=0., # L2 regularization penalty towards original weights
           alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
-          lrate=0.0001,  # learning rate
+          lrate=0.01,  # learning rate
           n_words_src=None,  # source vocabulary size
           n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
-          optimizer='adam',
+          src_maxlen=100, # maximum length of the source sentence
+          pos_win=10, # half window size of local attenton
+          optimizer='rmsprop',
           batch_size=16,
           valid_batch_size=16,
           saveto='model.npz',
-          validFreq=10000,
-          saveFreq=30000,   # save the parameters after every saveFreq updates
-          sampleFreq=10000,   # generate some samples after every sampleFreq
+          validFreq=1000,
+          saveFreq=1000,   # save the parameters after every saveFreq updates
+          sampleFreq=100,   # generate some samples after every sampleFreq
           datasets=[
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
@@ -691,7 +728,7 @@ def train(dim_word=512,  # word vector dimensionality
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
-          dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
+          dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
           dropout_source=0, # dropout source words (0: no dropout)
           dropout_target=0, # dropout target words (0: no dropout)
           reload_=False,
@@ -1176,6 +1213,10 @@ if __name__ == '__main__':
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
+    training.add_argument('--src_maxlen', type=int, default=100, metavar='INT',
+                         help="maximum source sequence length (default: %(default)s)")
+    training.add_argument('--pos_win', type=int, default=10, metavar='INT',
+                         help="half window size of local attention (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
                          help="optimizer (default: %(default)s)")
