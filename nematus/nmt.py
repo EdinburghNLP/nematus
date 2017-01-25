@@ -468,7 +468,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next..',
+    print >>sys.stderr, 'Building f_next...',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
 
@@ -1206,9 +1206,9 @@ if __name__ == '__main__':
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
-    #network.add_argument('--decoder', type=str, default='gru_cond',
-                         #choices=['gru_cond'],
-                         #help='decoder recurrent layer')
+    network.add_argument('--decoder', type=str, default='gru_cond',
+                         choices=['gru_cond', 'gru_local'],
+                         help='decoder recurrent layer')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',

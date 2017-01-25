@@ -387,62 +387,62 @@ def param_init_gru_local(options, params, prefix='gru_local',
 
     W = numpy.concatenate([norm_weight(nin, dim),
                            norm_weight(nin, dim)], axis=1)
-    params[_p(prefix, 'W')] = W
-    params[_p(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
+    params[pp(prefix, 'W')] = W
+    params[pp(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
     U = numpy.concatenate([ortho_weight(dim_nonlin),
                            ortho_weight(dim_nonlin)], axis=1)
-    params[_p(prefix, 'U')] = U
+    params[pp(prefix, 'U')] = U
 
     Wx = norm_weight(nin_nonlin, dim_nonlin)
-    params[_p(prefix, 'Wx')] = Wx
+    params[pp(prefix, 'Wx')] = Wx
     Ux = ortho_weight(dim_nonlin)
-    params[_p(prefix, 'Ux')] = Ux
-    params[_p(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
+    params[pp(prefix, 'Ux')] = Ux
+    params[pp(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
 
     U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
                               ortho_weight(dim_nonlin)], axis=1)
-    params[_p(prefix, 'U_nl')] = U_nl
-    params[_p(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
+    params[pp(prefix, 'U_nl')] = U_nl
+    params[pp(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
 
     Ux_nl = ortho_weight(dim_nonlin)
-    params[_p(prefix, 'Ux_nl')] = Ux_nl
-    params[_p(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
+    params[pp(prefix, 'Ux_nl')] = Ux_nl
+    params[pp(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
 
     # context to LSTM
     Wc = norm_weight(dimctx, dim*2)
-    params[_p(prefix, 'Wc')] = Wc
+    params[pp(prefix, 'Wc')] = Wc
 
     Wcx = norm_weight(dimctx, dim)
-    params[_p(prefix, 'Wcx')] = Wcx
+    params[pp(prefix, 'Wcx')] = Wcx
 
     # attention: combined -> hidden
     W_comb_att = norm_weight(dim, dimctx)
-    params[_p(prefix, 'W_comb_att')] = W_comb_att
+    params[pp(prefix, 'W_comb_att')] = W_comb_att
 
     # attention: context -> hidden
     Wc_att = norm_weight(dimctx)
-    params[_p(prefix, 'Wc_att')] = Wc_att
+    params[pp(prefix, 'Wc_att')] = Wc_att
 
     # attention: hidden bias
     b_att = numpy.zeros((dimctx,)).astype('float32')
-    params[_p(prefix, 'b_att')] = b_att
+    params[pp(prefix, 'b_att')] = b_att
 
     # attention:
     U_att = norm_weight(dimctx, 1)
-    params[_p(prefix, 'U_att')] = U_att
+    params[pp(prefix, 'U_att')] = U_att
 
     c_att = numpy.zeros((1,)).astype('float32')
-    params[_p(prefix, 'c_tt')] = c_att
+    params[pp(prefix, 'c_tt')] = c_att
 
     # local attention
     W_p = norm_weight(dim, dim)
-    params[_p(prefix, 'W_p')] = W_p
+    params[pp(prefix, 'W_p')] = W_p
     
     U_p = norm_weight(dim, 1)
-    params[_p(prefix, 'U_p')] = U_p
+    params[pp(prefix, 'U_p')] = U_p
 
     b_p = numpy.zeros((dim, )).astype('float32')
-    params[_p(prefix, 'b_p')] = b_p
+    params[pp(prefix, 'b_p')] = b_p
 
     return params
 
@@ -451,6 +451,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
                    init_memory=None, init_state=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
+                   profile=False, 
                    **kwargs):
 
     assert context, 'Context must be provided'
@@ -468,10 +469,10 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
 
-    if _p(prefix, 'Wcx') in tparams:
-        dim = tparams[_p(prefix, 'Wcx')].shape[1]
+    if pp(prefix, 'Wcx') in tparams:
+        dim = tparams[pp(prefix, 'Wcx')].shape[1]
     else:
-        dim = tparams[_p(prefix, 'Wcx_B')].shape[1]
+        dim = tparams[pp(prefix, 'Wcx_B')].shape[1]
 
     # initial/previous state
     if init_state is None:
@@ -480,8 +481,6 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
     # projected context
     assert context.ndim == 3, \
         'Context must be 3-d: #annotation x #sample x dim'
-    # pctx_ = _dot(context*ctx_dropout[0], tparams, _p(prefix, 'Wc_att')) +\
-    #     tparams[_p(prefix, 'b_att')]
 
 
     def _slice(_x, n, dim):
@@ -491,10 +490,10 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
 
 
     # projected x
-    state_belowx = _dot(state_below*emb_dropout[0], tparams, _p(prefix, 'Wx')) +\
-        tparams[_p(prefix, 'bx')]
-    state_below_ = _dot(state_below*emb_dropout[1], tparams, _p(prefix, 'W')) +\
-        tparams[_p(prefix, 'b')]
+    state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
+        tparams[pp(prefix, 'bx')]
+    state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
+        tparams[pp(prefix, 'b')]
 
     winsize = 2 * options['pos_win'] + 1
 
@@ -597,22 +596,22 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
 
     seqs = [mask, state_below_, state_belowx]
     _step = _step_slice
-    shared_vars = [tparams[_p(prefix, 'U')],
-               tparams[_p(prefix, 'Wc')],
-               tparams[_p(prefix, 'W_comb_att')],
-               tparams[_p(prefix, 'U_att')],
-               tparams[_p(prefix, 'c_tt')],
-               tparams[_p(prefix, 'Ux')],
-               tparams[_p(prefix, 'Wcx')],
-               tparams[_p(prefix, 'U_nl')],
-               tparams[_p(prefix, 'Ux_nl')],
-               tparams[_p(prefix, 'b_nl')],
-               tparams[_p(prefix, 'bx_nl')], 
-               tparams[_p(prefix, 'W_p')], 
-               tparams[_p(prefix, 'U_p')], 
-               tparams[_p(prefix, 'b_p')], 
-               tparams[_p(prefix, 'Wc_att')], 
-               tparams[_p(prefix, 'b_att')], 
+    shared_vars = [tparams[pp(prefix, 'U')],
+               tparams[pp(prefix, 'Wc')],
+               tparams[pp(prefix, 'W_comb_att')],
+               tparams[pp(prefix, 'U_att')],
+               tparams[pp(prefix, 'c_tt')],
+               tparams[pp(prefix, 'Ux')],
+               tparams[pp(prefix, 'Wcx')],
+               tparams[pp(prefix, 'U_nl')],
+               tparams[pp(prefix, 'Ux_nl')],
+               tparams[pp(prefix, 'b_nl')],
+               tparams[pp(prefix, 'bx_nl')], 
+               tparams[pp(prefix, 'W_p')], 
+               tparams[pp(prefix, 'U_p')], 
+               tparams[pp(prefix, 'b_p')], 
+               tparams[pp(prefix, 'Wc_att')], 
+               tparams[pp(prefix, 'b_att')], 
                tparams['Indices_mask'], 
                tparams['Attention_mask']]
 
@@ -629,7 +628,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
                                                   tensor.alloc(0., n_samples,
                                                                winsize)], 
                                     non_sequences=[context, rec_dropout, ctx_dropout]+shared_vars,
-                                    name=_p(prefix, '_layers'),
+                                    name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
                                     profile=profile,
                                     strict=True)
