@@ -141,7 +141,6 @@ execute nematus/nmt.py to train a model.
 | --optimizer {adam,adadelta,rmsprop,sgd} | optimizer (default: adam) |
 | --batch_size INT     | minibatch size (default: 80) |
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
-| --src_maxlen INT     | maximum length of source sentence (default: 100) |
 | --pos_win INT        | half window size of local attention (default: 10)|
 | --decoder {gru_cond, gru_local}        | decoder type (default: gru_cond)|
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
