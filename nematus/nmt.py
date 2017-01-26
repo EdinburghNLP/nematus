@@ -941,14 +941,13 @@ def train(dim_word=512,  # word vector dimensionality
     valid_err = None
 
     last_disp_samples = 0
+    last_words = 0
     ud_start = time.time()
     p_validation = None
     for eidx in xrange(max_epochs):
         n_samples = 0
 
         for x, y in train:
-            n_samples += len(x)
-            last_disp_samples += len(x)
             uidx += 1
             use_noise.set_value(1.)
 
@@ -966,6 +965,10 @@ def train(dim_word=512,  # word vector dimensionality
                 uidx -= 1
                 continue
 
+            n_samples += len(x)
+            last_disp_samples += len(x)
+            last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+
             # compute cost, grads and copy grads to shared variables
             cost = f_grad_shared(x, x_mask, y, y_mask)
 
@@ -981,10 +984,11 @@ def train(dim_word=512,  # word vector dimensionality
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
                 ud = time.time() - ud_start
-                wps = (last_disp_samples) / float(ud)
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} sentences/s".format(wps)
+                wps = (last_words) / float(ud)
+                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} words/s".format(wps)
                 ud_start = time.time()
                 last_disp_samples = 0
+                last_words = 0
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
