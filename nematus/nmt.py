@@ -940,6 +940,8 @@ def train(dim_word=512,  # word vector dimensionality
 
     valid_err = None
 
+    cost_sum = 0
+    cost_batches = 0
     last_disp_samples = 0
     last_words = 0
     ud_start = time.time()
@@ -956,6 +958,9 @@ def train(dim_word=512,  # word vector dimensionality
                 sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
+            xlen = len(x)
+            n_samples += xlen
+
             x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                 n_words_src=n_words_src,
                                                 n_words=n_words)
@@ -965,12 +970,13 @@ def train(dim_word=512,  # word vector dimensionality
                 uidx -= 1
                 continue
 
-            n_samples += len(x)
-            last_disp_samples += len(x)
+            cost_batches += 1
+            last_disp_samples += xlen
             last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
             # compute cost, grads and copy grads to shared variables
             cost = f_grad_shared(x, x_mask, y, y_mask)
+            cost_sum += cost
 
             # do the update on parameters
             f_update(lrate)
@@ -984,11 +990,14 @@ def train(dim_word=512,  # word vector dimensionality
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
                 ud = time.time() - ud_start
-                wps = (last_words) / float(ud)
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} words/s".format(wps)
+                sps = last_disp_samples / float(ud)
+                wps = last_words / float(ud)
+                cost_avg = cost_sum / float(cost_batches)
+                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
                 ud_start = time.time()
                 last_disp_samples = 0
                 last_words = 0
+                cost_sum = 0
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
