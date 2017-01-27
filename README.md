@@ -89,11 +89,17 @@ GPU, CuDNN 5.1, theano 0.8.2:
 
 >> 139.73 sentences/s
 
-GPU, CuDNN 5.1, theano dev:
+GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e:
 
   THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
 
 >> 173.15 sentences/s
+
+GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e, new GPU backend:
+
+  THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cuda ./test_train.sh
+
+>> 209.21 sentences/s
 
 USAGE INSTRUCTIONS
 ------------------
@@ -135,6 +141,8 @@ execute nematus/nmt.py to train a model.
 | --optimizer {adam,adadelta,rmsprop,sgd} | optimizer (default: adam) |
 | --batch_size INT     | minibatch size (default: 80) |
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
+| --pos_win INT        | half window size of local attention (default: 10)|
+| --decoder {gru_cond, gru_local}        | decoder type (default: gru_cond)|
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
 | --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
@@ -229,3 +237,5 @@ for the changes specific to Nematus, please consider the following papers:
 Sennrich, Rico, Haddow, Barry, Birch, Alexandra (2016): Edinburgh Neural Machine Translation Systems for WMT 16, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany
 
 Sennrich, Rico, Haddow, Barry (2016): Linguistic Input Features Improve Neural Machine Translation, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany
+
+Luong M T, Pham H, Manning C D. Effective approaches to attention-based neural machine translation[J]. arXiv preprint arXiv:1508.04025, 2015.

@@ -79,6 +79,37 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
 
     return x, x_mask, y, y_mask
 
+def init_attn_mask(win, maxlen):
+    # return a maxlen * maxlen matrix
+    # first dimension is middle point
+    # second dimension is sentence length (middle point always less than sentence length, and sentence length == 0 is all 0)
+    # last dimension is index
+    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype='float32')
+    for i in xrange(maxlen):
+        start = i - win
+        end = i + win
+        for k in xrange(maxlen):
+            idx = 0
+            for j in xrange(start, end + 1):
+                if j in xrange(k):
+                    if i < k:
+                        mask[i][k][idx] = 1
+                idx += 1
+    return mask
+
+def init_index_mask(win, maxlen):
+    # return a maxlen * window-size matrix
+    winsize = 2 * win + 1
+    mask = -1 * numpy.ones((maxlen, winsize), dtype='float32')
+    for i in xrange(maxlen):
+        start = i - win
+        end = i + win
+        idx = 0
+        for j in xrange(start, end + 1):
+            if j in xrange(maxlen):
+                mask[i][idx] = j
+            idx += 1
+    return mask
 
 # initialize all parameters
 def init_params(options):
@@ -89,6 +120,10 @@ def init_params(options):
         params[embedding_name(factor)] = norm_weight(options['n_words_src'], options['dim_per_factor'][factor])
 
     params['Wemb_dec'] = norm_weight(options['n_words'], options['dim_word'])
+
+    if options['decoder'] == 'gru_local':
+        params['Attention_mask'] = init_attn_mask(options['pos_win'], options['maxlen'])
+        params['Indices_mask'] = init_index_mask(options['pos_win'], options['maxlen'])
 
     # encoder: bidirectional RNN
     params = get_layer_param(options['encoder'])(options, params,
@@ -433,7 +468,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next..',
+    print >>sys.stderr, 'Building f_next...',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
 
@@ -656,7 +691,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
-def train(dim_word=100,  # word vector dimensionality
+def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
@@ -665,22 +700,23 @@ def train(dim_word=100,  # word vector dimensionality
           patience=10,  # early stopping patience
           max_epochs=5000,
           finish_after=10000000,  # finish after this many updates
-          dispFreq=100,
+          dispFreq=1000,
           decay_c=0.,  # L2 regularization penalty
           map_decay_c=0., # L2 regularization penalty towards original weights
           alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
-          lrate=0.01,  # learning rate
+          lrate=0.0001,  # learning rate
           n_words_src=None,  # source vocabulary size
           n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
-          optimizer='rmsprop',
+          pos_win=10, # half window size of local attenton
+          optimizer='adam',
           batch_size=16,
           valid_batch_size=16,
           saveto='model.npz',
-          validFreq=1000,
-          saveFreq=1000,   # save the parameters after every saveFreq updates
-          sampleFreq=100,   # generate some samples after every sampleFreq
+          validFreq=10000,
+          saveFreq=30000,   # save the parameters after every saveFreq updates
+          sampleFreq=10000,   # generate some samples after every sampleFreq
           datasets=[
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
@@ -691,7 +727,7 @@ def train(dim_word=100,  # word vector dimensionality
               '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
-          dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
+          dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
           dropout_source=0, # dropout source words (0: no dropout)
           dropout_target=0, # dropout target words (0: no dropout)
           reload_=False,
@@ -904,15 +940,16 @@ def train(dim_word=100,  # word vector dimensionality
 
     valid_err = None
 
+    cost_sum = 0
+    cost_batches = 0
     last_disp_samples = 0
+    last_words = 0
     ud_start = time.time()
     p_validation = None
     for eidx in xrange(max_epochs):
         n_samples = 0
 
         for x, y in train:
-            n_samples += len(x)
-            last_disp_samples += len(x)
             uidx += 1
             use_noise.set_value(1.)
 
@@ -920,6 +957,9 @@ def train(dim_word=100,  # word vector dimensionality
             if len(x) and len(x[0]) and len(x[0][0]) != factors:
                 sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
+
+            xlen = len(x)
+            n_samples += xlen
 
             x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                 n_words_src=n_words_src,
@@ -930,6 +970,10 @@ def train(dim_word=100,  # word vector dimensionality
                 uidx -= 1
                 continue
 
+            cost_batches += 1
+            last_disp_samples += xlen
+            last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+
             if optimizer != 'adam':
                 # compute cost, grads and copy grads to shared variables 
                 cost = f_grad_shared(x, x_mask, y, y_mask)
@@ -938,6 +982,8 @@ def train(dim_word=100,  # word vector dimensionality
             else:
                 # compute cost, grads and update parameters
                 cost = f_update(lrate, x, x_mask, y, y_mask)
+
+            cost_sum += cost
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
@@ -948,10 +994,15 @@ def train(dim_word=100,  # word vector dimensionality
             # verbose
             if numpy.mod(uidx, dispFreq) == 0:
                 ud = time.time() - ud_start
-                wps = (last_disp_samples) / float(ud)
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} sentences/s".format(wps)
+                sps = last_disp_samples / float(ud)
+                wps = last_words / float(ud)
+                cost_avg = cost_sum / float(cost_batches)
+                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
                 ud_start = time.time()
+                cost_batches = 0
                 last_disp_samples = 0
+                last_words = 0
+                cost_sum = 0
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
@@ -1172,13 +1223,15 @@ if __name__ == '__main__':
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
-    #network.add_argument('--decoder', type=str, default='gru_cond',
-                         #choices=['gru_cond'],
-                         #help='decoder recurrent layer')
+    network.add_argument('--decoder', type=str, default='gru_cond',
+                         choices=['gru_cond', 'gru_local'],
+                         help='decoder recurrent layer')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
+    training.add_argument('--pos_win', type=int, default=10, metavar='INT',
+                         help="half window size of local attention (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
                          help="optimizer (default: %(default)s)")
