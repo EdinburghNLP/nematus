@@ -995,6 +995,7 @@ def train(dim_word=512,  # word vector dimensionality
                 cost_avg = cost_sum / float(cost_batches)
                 print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
                 ud_start = time.time()
+                cost_batches = 0
                 last_disp_samples = 0
                 last_words = 0
                 cost_sum = 0
