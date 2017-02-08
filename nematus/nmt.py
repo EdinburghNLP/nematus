@@ -351,8 +351,10 @@ def build_model(tparams, options):
     if options['use_dropout']:
         logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden, scaled)
 
+    logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
     logit = get_layer_constr('ff')(tparams, logit, options,
-                                   prefix='ff_logit', activ='linear')
+                            prefix='ff_logit', activ='linear', W=logit_W)
+
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
                                                logit_shp[2]]))
@@ -455,8 +457,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if options['use_dropout'] and options['model_version'] < 0.1:
         logit *= retain_probability_hidden
 
+    logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
     logit = get_layer_constr('ff')(tparams, logit, options,
-                              prefix='ff_logit', activ='linear')
+                            prefix='ff_logit', activ='linear', W=logit_W)
 
     # compute the softmax probability
     next_probs = tensor.nnet.softmax(logit)
@@ -620,8 +623,9 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
         if options['use_dropout'] and options['model_version'] < 0.1:
             logit *= retain_probability_hidden
 
+        logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
         logit = get_layer_constr('ff')(tparams, logit, options,
-                                prefix='ff_logit', activ='linear')
+                                prefix='ff_logit', activ='linear', W=logit_W)
 
         # compute the softmax probability
         next_probs = tensor.nnet.softmax(logit)
@@ -1262,12 +1266,6 @@ def train(dim_word=512,  # word vector dimensionality
                     uidx -= 1
                     continue
 
-                # compute cost, grads and copy grads to shared variables
-                cost = f_grad_shared(x, x_mask, y, y_mask)
-
-                # do the update on parameters
-                f_update(lrate)
-
                 cost_batches += 1
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
@@ -1275,6 +1273,9 @@ def train(dim_word=512,  # word vector dimensionality
                 # compute cost, grads and copy grads to shared variables
                 cost = f_grad_shared(x, x_mask, y, y_mask)
                 cost_sum += cost
+
+                # do the update on parameters
+                f_update(lrate)
 
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
