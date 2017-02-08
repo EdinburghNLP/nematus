@@ -19,6 +19,8 @@ import warnings
 import sys
 import time
 
+import itertools
+
 from subprocess import Popen
 
 from collections import OrderedDict
@@ -33,6 +35,7 @@ from alignment_util import *
 from layers import *
 from initializers import *
 from optimizers import *
+from metrics.scorer_provider import ScorerProvider
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
@@ -224,10 +227,10 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
     proj = get_layer_constr(options['encoder'])(tparams, emb, options,
                                             prefix='encoder',
                                             mask=x_mask,
-                                            emb_dropout=emb_dropout, 
+                                            emb_dropout=emb_dropout,
                                             rec_dropout=rec_dropout,
                                             profile=profile)
-    
+
 
     # word embedding for backward rnn (source)
     embr = []
@@ -480,6 +483,203 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     return f_init, f_next
 
+
+# minimum risk cost
+# assumes cost is the negative sentence-level log probability
+# and each sentence in the minibatch is a sample of the same source sentence
+def mrt_cost(cost, y_mask, options):
+    loss = tensor.vector('loss', dtype='float32')
+    alpha = theano.shared(numpy.float32(options['mrt_alpha']))
+
+    if options['mrt_ml_mix'] > 0:
+        ml_cost = cost[0]
+
+        # remove reference for MRT objective unless enabled
+        if not options['mrt_reference']:
+            cost = cost[1:]
+
+    cost *= alpha
+
+    #get normalized probability
+    cost = tensor.nnet.softmax(-cost)[0]
+
+    # risk: expected loss
+    if options['mrt_ml_mix'] > 0 and not options['mrt_reference']:
+        cost *= loss[1:]
+    else:
+        cost *= loss
+
+
+    cost = cost.sum()
+
+    if options['mrt_ml_mix'] > 0:
+        #normalize ML by length (because MRT is length-invariant)
+        ml_cost /= y_mask[:,0].sum(0)
+        ml_cost *= options['mrt_ml_mix']
+        cost += ml_cost
+
+    return cost, loss
+
+
+# build a sampler that produces samples in one theano function
+def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
+
+    if options['use_dropout'] and options['model_version'] < 0.1:
+        retain_probability_emb = 1-options['dropout_embedding']
+        retain_probability_hidden = 1-options['dropout_hidden']
+        retain_probability_target = 1-options['dropout_target']
+        rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
+        target_dropout = theano.shared(numpy.float32(retain_probability_target))
+    else:
+        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
+        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
+        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
+        target_dropout = theano.shared(numpy.float32(1.))
+
+    if greedy:
+        x_mask = tensor.matrix('x_mask', dtype='float32')
+        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    else:
+        x_mask = None
+
+    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=True)
+    n_samples = x.shape[2]
+
+    if x_mask:
+        ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+    else:
+        ctx_mean = ctx.mean(0)
+
+    if options['use_dropout'] and options['model_version'] < 0.1:
+        ctx_mean *= retain_probability_hidden
+
+    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
+                                    prefix='ff_state', activ='tanh')
+
+    if greedy:
+        init_w = tensor.alloc(numpy.int64(-1), n_samples)
+    else:
+        k = tensor.iscalar("k")
+        k.tag.test_value = 12
+        init_w = tensor.alloc(numpy.int64(-1), k*n_samples)
+
+        ctx = tensor.tile(ctx, [k, 1])
+
+        init_state = tensor.tile(init_state, [k, 1])
+
+    # projected context
+    assert ctx.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+    pctx_ = tensor.dot(ctx*ctx_dropout_d[0], tparams[pp('decoder', 'Wc_att')]) +\
+        tparams[pp('decoder', 'b_att')]
+
+    def decoder_step(y, init_state, ctx, pctx_, target_dropout, emb_dropout, rec_dropout, ctx_dropout, *shared_vars):
+
+        # if it's the first word, emb should be all zero and it is indicated by -1
+        emb = tensor.switch(y[:, None] < 0,
+                            tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
+                            tparams['Wemb_dec'][y])
+
+        emb *= target_dropout
+
+        # apply one step of conditional gru with attention
+        proj = get_layer_constr('gru_cond')(tparams, emb, options,
+                                                prefix='decoder',
+                                                mask=None,
+                                                context=ctx,
+                                                context_mask=x_mask,
+                                                pctx_=pctx_,
+                                                one_step=True,
+                                                init_state=init_state,
+                                                emb_dropout=emb_dropout,
+                                                ctx_dropout=ctx_dropout,
+                                                rec_dropout=rec_dropout,
+                                                shared_vars=shared_vars,
+                                                profile=profile)
+        # get the next hidden state
+        next_state = proj[0]
+
+        # get the weighted averages of context for this target word y
+        ctxs = proj[1]
+
+        # alignment matrix (attention model)
+        dec_alphas = proj[2]
+
+        if options['use_dropout'] and options['model_version'] < 0.1:
+            next_state_up = next_state * retain_probability_hidden
+            emb *= retain_probability_emb
+            ctxs *= retain_probability_hidden
+        else:
+            next_state_up = next_state
+
+        logit_lstm = get_layer_constr('ff')(tparams, next_state_up, options,
+                                        prefix='ff_logit_lstm', activ='linear')
+        logit_prev = get_layer_constr('ff')(tparams, emb, options,
+                                        prefix='ff_logit_prev', activ='linear')
+        logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
+                                    prefix='ff_logit_ctx', activ='linear')
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
+        if options['use_dropout'] and options['model_version'] < 0.1:
+            logit *= retain_probability_hidden
+
+        logit = get_layer_constr('ff')(tparams, logit, options,
+                                prefix='ff_logit', activ='linear')
+
+        # compute the softmax probability
+        next_probs = tensor.nnet.softmax(logit)
+
+        if greedy:
+            next_sample = next_probs.argmax(1)
+        else:
+            # sample from softmax distribution to get the sample
+            next_sample = trng.multinomial(pvals=next_probs).argmax(1)
+
+        # do not produce words after EOS
+        next_sample = tensor.switch(
+                      tensor.eq(y,0),
+                      0,
+                      next_sample)
+
+        return [next_sample, next_state, next_probs[:, next_sample].diagonal()], \
+               theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
+
+    # symbolic loop for sequence generation
+    shared_vars = [tparams[pp('decoder', 'U')],
+                   tparams[pp('decoder', 'Wc')],
+                   tparams[pp('decoder', 'W_comb_att')],
+                   tparams[pp('decoder', 'U_att')],
+                   tparams[pp('decoder', 'c_tt')],
+                   tparams[pp('decoder', 'Ux')],
+                   tparams[pp('decoder', 'Wcx')],
+                   tparams[pp('decoder', 'U_nl')],
+                   tparams[pp('decoder', 'Ux_nl')],
+                   tparams[pp('decoder', 'b_nl')],
+                   tparams[pp('decoder', 'bx_nl')]]
+
+
+    n_steps = tensor.iscalar("n_steps")
+    n_steps.tag.test_value = 50
+
+    (sample, state, probs), updates = theano.scan(decoder_step,
+                        outputs_info=[init_w, init_state, None],
+                        non_sequences=[ctx, pctx_, target_dropout, emb_dropout_d, rec_dropout_d, ctx_dropout_d]+shared_vars,
+                        n_steps=n_steps)
+
+    print >>sys.stderr, 'Building f_sample...',
+    if greedy:
+        inps = [x, x_mask, n_steps]
+    else:
+        inps = [x, k, n_steps]
+    outs = [sample, probs]
+    f_sample = theano.function(inps, outs, name='f_sample', updates=updates, profile=profile)
+    print >>sys.stderr, 'Done'
+
+    return f_sample
+
+
+
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
 def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
@@ -487,9 +687,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                return_hyp_graph=False):
 
     # k is the beam size we have
-    if k > 1:
+    if k > 1 and argmax:
         assert not stochastic, \
-            'Beam search does not support stochastic sampling'
+            'Beam search does not support stochastic sampling with argmax'
 
     sample = []
     sample_score = []
@@ -497,16 +697,20 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     alignment = []
     hyp_graph = None
     if stochastic:
-        sample_score = 0
+        if argmax:
+            sample_score = 0
+        live_k=k
+    else:
+        live_k = 1
+
     if return_hyp_graph:
         from hypgraph import HypGraph
         hyp_graph = HypGraph()
 
-    live_k = 1
     dead_k = 0
 
-    hyp_samples = [[]] * live_k
-    word_probs = [[]] * live_k
+    hyp_samples=[ [] for i in xrange(live_k) ]
+    word_probs=[ [] for i in xrange(live_k) ]
     hyp_scores = numpy.zeros(live_k).astype('float32')
     hyp_states = []
     if return_alignment:
@@ -522,9 +726,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
-        next_state[i] = ret[0]
+        next_state[i] = numpy.tile( ret[0] , (live_k,1))
         ctx0[i] = ret[1]
-    next_w = -1 * numpy.ones((1,)).astype('int64')  # bos indicator
+    next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
     # x is a sequence of word ids followed by 0, eos id
     for ii in xrange(maxlen):
@@ -540,14 +744,55 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
         if stochastic:
+            #batches are not supported with argmax: output data structure is different
             if argmax:
                 nw = sum(next_p)[0].argmax()
+                sample.append(nw)
+                sample_score += numpy.log(next_p[0][0, nw])
+                if nw == 0:
+                    break
             else:
-                nw = next_w_tmp[0]
-            sample.append(nw)
-            sample_score += numpy.log(next_p[0][0, nw])
-            if nw == 0:
-                break
+                #FIXME: sampling is currently performed according to the last model only
+                nws = next_w_tmp
+                cand_scores = numpy.array(hyp_scores)[:, None] - numpy.log(next_p[-1])
+                probs = next_p[-1]
+
+                for idx,nw in enumerate(nws):
+                    hyp_samples[idx].append(nw)
+
+
+                hyp_states=[]
+                for ti in xrange(live_k):
+                    hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                    hyp_scores[ti]=cand_scores[ti][nws[ti]]
+                    word_probs[ti].append(probs[ti][nws[ti]])
+
+                new_hyp_states=[]
+                new_hyp_samples=[]
+                new_hyp_scores=[]
+                new_word_probs=[]
+                for hyp_sample,hyp_state, hyp_score, hyp_word_prob in zip(hyp_samples,hyp_states,hyp_scores, word_probs):
+                    if hyp_sample[-1]  > 0:
+                        new_hyp_samples.append(copy.copy(hyp_sample))
+                        new_hyp_states.append(copy.copy(hyp_state))
+                        new_hyp_scores.append(hyp_score)
+                        new_word_probs.append(hyp_word_prob)
+                    else:
+                        sample.append(copy.copy(hyp_sample))
+                        sample_score.append(hyp_score)
+                        sample_word_probs.append(hyp_word_prob)
+
+                hyp_samples=new_hyp_samples
+                hyp_states=new_hyp_states
+                hyp_scores=new_hyp_scores
+                word_probs=new_word_probs
+
+                live_k=len(hyp_samples)
+                if live_k < 1:
+                    break
+
+                next_w = numpy.array([w[-1] for w in hyp_samples])
+                next_state = [numpy.array(state) for state in zip(*hyp_states)]
         else:
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
             probs = sum(next_p)/num_models
@@ -605,7 +850,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     word_prob = new_word_probs[idx][-1]
                     hyp_graph.add(word, history, word_prob=word_prob, cost=score)
                 if new_hyp_samples[idx][-1] == 0:
-                    sample.append(new_hyp_samples[idx])
+                    sample.append(copy.copy(new_hyp_samples[idx]))
                     sample_score.append(new_hyp_scores[idx])
                     sample_word_probs.append(new_word_probs[idx])
                     if return_alignment:
@@ -613,9 +858,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     dead_k += 1
                 else:
                     new_live_k += 1
-                    hyp_samples.append(new_hyp_samples[idx])
+                    hyp_samples.append(copy.copy(new_hyp_samples[idx]))
                     hyp_scores.append(new_hyp_scores[idx])
-                    hyp_states.append(new_hyp_states[idx])
+                    hyp_states.append(copy.copy(new_hyp_states[idx]))
                     word_probs.append(new_word_probs[idx])
                     if return_alignment:
                         hyp_alignment.append(new_hyp_alignment[idx])
@@ -631,15 +876,14 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             next_w = numpy.array([w[-1] for w in hyp_samples])
             next_state = [numpy.array(state) for state in zip(*hyp_states)]
 
-    if not stochastic:
-        # dump every remaining one
-        if live_k > 0:
-            for idx in xrange(live_k):
-                sample.append(hyp_samples[idx])
-                sample_score.append(hyp_scores[idx])
-                sample_word_probs.append(word_probs[idx])
-                if return_alignment:
-                    alignment.append(hyp_alignment[idx])
+    # dump every remaining one
+    if not argmax and live_k > 0:
+        for idx in xrange(live_k):
+            sample.append(hyp_samples[idx])
+            sample_score.append(hyp_scores[idx])
+            sample_word_probs.append(word_probs[idx])
+            if return_alignment:
+                alignment.append(hyp_alignment[idx])
 
     if not return_alignment:
         alignment = [None for i in range(len(sample))]
@@ -742,6 +986,12 @@ def train(dim_word=512,  # word vector dimensionality
           domain_interpolation_inc=0.1,
           domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
           maxibatch_size=20, #How many minibatches to load at one time
+          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
+          mrt_alpha=0.005,
+          mrt_samples=100,
+          mrt_reference=False,
+          mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
+          mrt_ml_mix=0, # interpolate mrt loss with ML loss
           model_version=0.1, #store version used for training for compatibility
     ):
 
@@ -776,6 +1026,12 @@ def train(dim_word=512,  # word vector dimensionality
         n_words = len(worddicts[1])
         model_options['n_words'] = n_words
 
+    if model_options['objective'] == 'MRT':
+        # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
+        # per pair of train sentences (== per batch of samples), so we set batch_size to 1 to make
+        # model saving, validation, etc trigger after the same number of updates as before
+        print 'Running in MRT mode, minibatch size set to 1 sentence'
+        batch_size = 1
 
     print 'Loading data'
     domain_interpolation_cur = None
@@ -790,7 +1046,7 @@ def train(dim_word=512,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
-                         indomain_target=domain_interpolation_indomain_datasets[1], 
+                         indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=domain_interpolation_cur,
                          maxibatch_size=maxibatch_size)
     else:
@@ -838,13 +1094,24 @@ def train(dim_word=512,  # word vector dimensionality
     if validFreq or sampleFreq:
         print 'Building sampler'
         f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
+    if model_options['objective'] == 'MRT':
+        print 'Building MRT sampler'
+        f_sampler = build_full_sampler(tparams, model_options, use_noise, trng)
 
     # before any regularizer
     print 'Building f_log_probs...',
     f_log_probs = theano.function(inps, cost, profile=profile)
     print 'Done'
 
-    cost = cost.mean()
+    if model_options['objective'] == 'CE':
+        cost = cost.mean()
+    elif model_options['objective'] == 'MRT':
+        #MRT objective function
+        cost, loss = mrt_cost(cost, y_mask, model_options)
+        inps += [loss]
+    else:
+        sys.stderr.write('Error: objective must be one of ["CE", "MRT"]\n')
+        sys.exit(1)
 
     # apply L2 regularization on weights
     if decay_c > 0.:
@@ -958,28 +1225,80 @@ def train(dim_word=512,  # word vector dimensionality
                 sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
-            xlen = len(x)
-            n_samples += xlen
+            if model_options['objective'] == 'CE':
 
-            x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
-                                                n_words_src=n_words_src,
-                                                n_words=n_words)
+                xlen = len(x)
+                n_samples += xlen
+                x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
+                                                    n_words_src=n_words_src,
+                                                    n_words=n_words)
 
-            if x is None:
-                print 'Minibatch with zero sample under length ', maxlen
-                uidx -= 1
-                continue
+                if x is None:
+                    print 'Minibatch with zero sample under length ', maxlen
+                    uidx -= 1
+                    continue
 
-            cost_batches += 1
-            last_disp_samples += xlen
-            last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+                # compute cost, grads and copy grads to shared variables
+                cost = f_grad_shared(x, x_mask, y, y_mask)
 
-            # compute cost, grads and copy grads to shared variables
-            cost = f_grad_shared(x, x_mask, y, y_mask)
-            cost_sum += cost
+                # do the update on parameters
+                f_update(lrate)
 
-            # do the update on parameters
-            f_update(lrate)
+                cost_batches += 1
+                last_disp_samples += xlen
+                last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+
+                # compute cost, grads and copy grads to shared variables
+                cost = f_grad_shared(x, x_mask, y, y_mask)
+                cost_sum += cost
+
+            elif model_options['objective'] == 'MRT':
+                assert maxlen is not None and maxlen > 0
+
+                xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
+                if not xy_pairs:
+                    uidx -= 1
+                    continue
+
+                for x_s, y_s in xy_pairs:
+
+                    # create k samples
+                    use_noise.set_value(0.)
+                    samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
+                    use_noise.set_value(1.)
+
+                    samples = [numpy.trim_zeros(item) for item in zip(*samples)]
+
+                    # remove duplicate samples
+                    samples.sort()
+                    samples = [s for s, _ in itertools.groupby(samples)]
+
+                    # add gold translation [always in first position]
+                    if model_options['mrt_reference'] or model_options['mrt_ml_mix']:
+                        samples = [y_s] + [s for s in samples if s != y_s]
+
+                    # create mini-batch with masking
+                    x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
+                                                                    maxlen=None, n_words_src=n_words_src,
+                                                                    n_words=n_words)
+
+                    # map integers to words (for character-level metrics)
+                    samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
+                    y_s = seqs2words(y_s, worddicts_r[-1])
+
+                    #scorers expect tokenized hypotheses/references
+                    y_s = y_s.split(" ")
+                    samples = [sample.split(" ") for sample in samples]
+
+                    # get negative smoothed BLEU for samples
+                    scorer = ScorerProvider().get(model_options['mrt_loss'])
+                    scorer.set_reference(y_s)
+                    loss = 1-numpy.array(scorer.score_matrix(samples), dtype='float32')
+
+                    # compute cost, grads and copy grads to shared variables
+                    cost = f_grad_shared(x, x_mask, y, y_mask, loss)
+                    # do the update on parameters
+                    f_update(lrate)
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
@@ -1071,7 +1390,7 @@ def train(dim_word=512,  # word vector dimensionality
                     print
                     print 'Sample ', jj, ': ',
                     if stochastic:
-                        ss = sample
+                        ss = sample[0]
                     else:
                         score = score / numpy.array([len(s) for s in sample])
                         ss = sample[score.argmin()]
@@ -1253,6 +1572,9 @@ if __name__ == '__main__':
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    training.add_argument('--objective', choices=['CE', 'MRT'],
+                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
+
     finetune = training.add_mutually_exclusive_group()
     finetune.add_argument('--finetune', action="store_true",
                         help="train with fixed embedding layer")
@@ -1277,6 +1599,17 @@ if __name__ == '__main__':
     display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
                          help="display some samples after INT updates (default: %(default)s)")
 
+    mrt = parser.add_argument_group('minimum risk training parameters')
+    mrt.add_argument('--mrt_alpha', type=float, default=0.005, metavar='FLOAT',
+                         help="MRT alpha (default: %(default)s)")
+    mrt.add_argument('--mrt_samples', type=int, default=100, metavar='INT',
+                         help="samples per source sentence (default: %(default)s)")
+    mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
+                         help='loss used in MRT (default: %(default)s)')
+    mrt.add_argument('--mrt_reference', action="store_true",
+                         help='add reference to MRT samples.')
+    mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
+                     help="Mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
     args = parser.parse_args()
 

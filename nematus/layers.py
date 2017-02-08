@@ -245,6 +245,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    init_memory=None, init_state=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
+                   pctx_=None,
                    profile=False,
                    **kwargs):
 
@@ -270,17 +271,17 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         init_state = tensor.alloc(0., n_samples, dim)
 
     # projected context
-    assert context.ndim == 3, \
-        'Context must be 3-d: #annotation x #sample x dim'
-    pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
-        tparams[pp(prefix, 'b_att')]
+    assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+    if pctx_ is None:
+        pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
+            tparams[pp(prefix, 'b_att')]
 
     def _slice(_x, n, dim):
         if _x.ndim == 3:
             return _x[:, :, n*dim:(n+1)*dim]
         return _x[:, n*dim:(n+1)*dim]
 
-    # projected x
+    # state_below is the previous output word embedding
     state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
         tparams[pp(prefix, 'bx')]
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
