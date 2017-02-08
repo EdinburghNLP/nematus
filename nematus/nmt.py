@@ -119,10 +119,9 @@ def init_params(options):
     params = OrderedDict()
 
     # embedding
-    for factor in range(options['factors']):
-        params[embedding_name(factor)] = norm_weight(options['n_words_src'], options['dim_per_factor'][factor])
-
-    params['Wemb_dec'] = norm_weight(options['n_words'], options['dim_word'])
+    params = get_layer_param('embedding')(options, params, options['n_words_src'], options['dim_per_factor'], options['factors'], suffix='')
+    if not options['tie_encoder_decoder_embeddings']:
+        params = get_layer_param('embedding')(options, params, options['n_words'], options['dim_word'], suffix='_dec')
 
     if options['decoder'] == 'gru_local':
         params['Attention_mask'] = init_attn_mask(options['pos_win'], options['maxlen'])
@@ -158,9 +157,12 @@ def init_params(options):
     params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
                                 nin=ctxdim, nout=options['dim_word'],
                                 ortho=False)
+
+
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
-                                nout=options['n_words'])
+                                nout=options['n_words'],
+                                weight_matrix = not options['tie_decoder_embeddings'])
 
     return params
 
@@ -216,11 +218,7 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
 
     # word embedding for forward rnn (source)
-    emb = []
-    for factor in range(options['factors']):
-        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
-    emb = concatenate(emb, axis=1)
-    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
+    emb = get_layer_constr('embedding')(tparams, x, suffix='', factors= options['factors'])
     if options['use_dropout']:
         emb *= source_dropout
 
@@ -233,11 +231,7 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
 
 
     # word embedding for backward rnn (source)
-    embr = []
-    for factor in range(options['factors']):
-        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
-    embr = concatenate(embr, axis=1)
-    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
+    embr = get_layer_constr('embedding')(tparams, xr, suffix='', factors= options['factors'])
     if options['use_dropout']:
         if sampling:
             embr *= source_dropout
@@ -311,15 +305,14 @@ def build_model(tparams, options):
     # to the right. This is done because of the bi-gram connections in the
     # readout and decoder rnn. The first target will be all zeros and we will
     # not condition on the last output.
-    emb = tparams['Wemb_dec'][y.flatten()]
-    emb = emb.reshape([n_timesteps_trg, n_samples, options['dim_word']])
+    decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
+    emb = get_layer_constr('embedding')(tparams, y, suffix=decoder_embedding_suffix)
+    if options['use_dropout']:
+        emb *= target_dropout
 
     emb_shifted = tensor.zeros_like(emb)
     emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
     emb = emb_shifted
-
-    if options['use_dropout']:
-        emb *= target_dropout
 
     # decoder - pass through the decoder conditional gru with attention
     proj = get_layer_constr(options['decoder'])(tparams, emb, options,
@@ -416,12 +409,14 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     init_state = tensor.matrix('init_state', dtype='float32')
 
     # if it's the first word, emb should be all zero and it is indicated by -1
-    emb = tensor.switch(y[:, None] < 0,
-                        tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
-                        tparams['Wemb_dec'][y])
-
+    decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
+    emb = get_layer_constr('embedding')(tparams, y, suffix=decoder_embedding_suffix)
     if options['use_dropout'] and options['model_version'] < 0.1:
-        emb *= target_dropout
+        emb = emb * target_dropout
+    emb = tensor.switch(y[:, None] < 0,
+                        tensor.zeros((1, options['dim_word'])),
+                        emb)
+
 
     # apply one step of conditional gru with attention
     proj = get_layer_constr(options['decoder'])(tparams, emb, options,
@@ -577,10 +572,11 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
     def decoder_step(y, init_state, ctx, pctx_, target_dropout, emb_dropout, rec_dropout, ctx_dropout, *shared_vars):
 
         # if it's the first word, emb should be all zero and it is indicated by -1
+        decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
+        emb = get_layer_constr('embedding')(tparams, y, suffix=decoder_embedding_suffix)
         emb = tensor.switch(y[:, None] < 0,
-                            tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
-                            tparams['Wemb_dec'][y])
-
+                            tensor.zeros((1, options['dim_word'])),
+                            emb)
         emb *= target_dropout
 
         # apply one step of conditional gru with attention
@@ -993,6 +989,9 @@ def train(dim_word=512,  # word vector dimensionality
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
           model_version=0.1, #store version used for training for compatibility
+          prior_model=None, # Prior model file, used for MAP
+          tie_encoder_decoder_embeddings=False, # Tie the input embeddings of the encoder and the decoder (first factor only)
+          tie_decoder_embeddings=False, # Tie the input embeddings of the decoder with the softmax output embeddings
     ):
 
     # Model options
@@ -1009,6 +1008,7 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
+    assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
 
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
@@ -1025,6 +1025,11 @@ def train(dim_word=512,  # word vector dimensionality
     if n_words is None:
         n_words = len(worddicts[1])
         model_options['n_words'] = n_words
+
+    if tie_encoder_decoder_embeddings:
+        assert (n_words_src == n_words), "When tying encoder and decoder embeddings, source and target vocabulary size must the same"
+        if worddicts[0] != worddicts[1]:
+            warn("Encoder-decoder embedding tying is enabled with different source and target dictionaries. This is usually a configuration error")
 
     if model_options['objective'] == 'MRT':
         # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
@@ -1043,6 +1048,7 @@ def train(dim_word=512,  # word vector dimensionality
                          n_words_source=n_words_src, n_words_target=n_words,
                          batch_size=batch_size,
                          maxlen=maxlen,
+                         skip_empty=True,
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
@@ -1073,15 +1079,25 @@ def train(dim_word=512,  # word vector dimensionality
 
     print 'Building model'
     params = init_params(model_options)
+
     optimizer_params = {}
-    # reload parameters
+    # prepare parameters
     if reload_ and os.path.exists(saveto):
         print 'Reloading model parameters'
         params = load_params(saveto, params)
         print 'Reloading optimizer parameters'
         optimizer_params = load_optimizer_params(saveto, optimizer)
+    elif prior_model:
+        print 'Initializing model parameters from prior'
+        params = load_params(prior_model, params)
+
+    # load prior model if specified
+    if prior_model:
+        print 'Loading prior model parameters'
+        params = load_params(prior_model, params, with_prefix='prior_')
 
     tparams = init_theano_params(params)
+    #ipdb.set_trace()
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
@@ -1118,6 +1134,8 @@ def train(dim_word=512,  # word vector dimensionality
         decay_c = theano.shared(numpy.float32(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in tparams.iteritems():
+            if kk.startswith('prior_'):
+                continue
             weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
         cost += weight_decay
@@ -1130,27 +1148,33 @@ def train(dim_word=512,  # word vector dimensionality
              opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
         cost += alpha_reg
 
-     # apply L2 regularisation to loaded model (map training)
+    # apply L2 regularisation to loaded model (map training)
     if map_decay_c > 0:
         map_decay_c = theano.shared(numpy.float32(map_decay_c), name="map_decay_c")
         weight_map_decay = 0.
         for kk, vv in tparams.iteritems():
-            init_value = theano.shared(vv.get_value(), name= kk + "_init")
+            if kk.startswith('prior_'):
+                continue
+            init_value = tparams['prior_' + kk]
             weight_map_decay += ((vv -init_value) ** 2).sum()
         weight_map_decay *= map_decay_c
         cost += weight_map_decay
 
+    updated_params = OrderedDict(tparams)
+
+    # don't update prior model parameters
+    if prior_model:
+        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
+
     # allow finetuning with fixed embeddings
     if finetune:
-        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if not key.startswith('Wemb')])
-    else:
-        updated_params = tparams
+        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('Wemb')])
 
     # allow finetuning of only last layer (becomes a linear model training problem)
     if finetune_only_last:
-        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
-    else:
-        updated_params = tparams
+        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
+
+    #ipdb.set_trace()
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1327,8 +1351,8 @@ def train(dim_word=512,  # word vector dimensionality
                     params = best_p
                     optimizer_params = best_opt_p
                 else:
-                    params = unzip_from_theano(tparams)
-                    optimizer_params = unzip_from_theano(optimizer_tparams)
+                    params = unzip_from_theano(tparams, excluding_prefix='prior_')
+                    optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
                 both_params = dict(params, **optimizer_params)
                 numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **both_params)
@@ -1340,7 +1364,7 @@ def train(dim_word=512,  # word vector dimensionality
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], uidx)
 
-                    both_params = dict(unzip_from_theano(tparams), **unzip_from_theano(optimizer_tparams))
+                    both_params = dict(unzip_from_theano(tparams, excluding_prefix='prior_'), **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
                     numpy.savez(saveto_uidx, history_errs=history_errs,
                                 uidx=uidx, **both_params)
                     print 'Done'
@@ -1412,8 +1436,8 @@ def train(dim_word=512,  # word vector dimensionality
                 history_errs.append(valid_err)
 
                 if uidx == 0 or valid_err <= numpy.array(history_errs).min():
-                    best_p = unzip_from_theano(tparams)
-                    best_opt_p = unzip_from_theano(optimizer_tparams)
+                    best_p = unzip_from_theano(tparams, excluding_prefix='prior_')
+                    best_opt_p = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
                     bad_counter = 0
                 if len(history_errs) > patience and valid_err >= \
                         numpy.array(history_errs)[:-patience].min():
@@ -1446,8 +1470,8 @@ def train(dim_word=512,  # word vector dimensionality
                         p_validation.wait()
                         print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
                     print 'Saving  model...',
-                    params = unzip_from_theano(tparams)
-                    optimizer_params = unzip_from_theano(optimizer_tparams)
+                    params = unzip_from_theano(tparams, excluding_prefix='prior_')
+                    optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
                     both_params = dict(params, **optimizer_params)
                     numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **both_params)
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
@@ -1482,8 +1506,8 @@ def train(dim_word=512,  # word vector dimensionality
         optimizer_params = copy.copy(best_opt_p)
 
     else:
-        params = unzip_from_theano(tparams)
-        optimizer_params = unzip_from_theano(optimizer_tparams)
+        params = unzip_from_theano(tparams, excluding_prefix='prior_')
+        optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
     both_params = dict(params, **optimizer_params)
     numpy.savez(saveto, zipped_params=best_p,
@@ -1535,6 +1559,10 @@ if __name__ == '__main__':
                          help="dropout source words (0: no dropout) (default: %(default)s)")
     network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
                          help="dropout target words (0: no dropout) (default: %(default)s)")
+    network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
+                         help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
+    network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
+                         help="tie the input embeddings of the decoder with the softmax output embeddings")
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
@@ -1572,7 +1600,7 @@ if __name__ == '__main__':
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--objective', choices=['CE', 'MRT'],
+    training.add_argument('--objective', choices=['CE', 'MRT'], default='CE',
                          help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
 
     finetune = training.add_mutually_exclusive_group()

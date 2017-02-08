@@ -12,6 +12,7 @@ The changes to Nematus include:
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
+ - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
  - command line interface for training
  - automatic training set reshuffling between epochs
  - n-best output for decoder
@@ -78,8 +79,6 @@ CPU, theano 0.8.2:
 
 >> 2.37 sentences/s
 
-<<<<<<< HEAD
-=======
 GPU, no CuDNN, theano 0.8.2:
 
   THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=gpu ./test_train.sh
@@ -107,9 +106,6 @@ GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e, new GPU backend:
 USAGE INSTRUCTIONS
 ------------------
 
->>>>>>> master
-### TRAINING
-
 execute nematus/nmt.py to train a model.
 
 
@@ -120,11 +116,7 @@ execute nematus/nmt.py to train a model.
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
 | --model PATH         |  model file name (default: model.npz) |
 | --saveFreq INT       |  save frequency (default: 30000) |
-<<<<<<< HEAD
-| --reload_            |  load existing model (if '--model' points to existing model) |
-=======
 | --reload             |  load existing model (if '--model' points to existing model) |
->>>>>>> master
 | --overwrite          |  write all models to same file |
 
 #### network parameters
@@ -141,6 +133,8 @@ execute nematus/nmt.py to train a model.
 | --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
+| --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
+| --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 
 #### training parameters
 | parameter            | description |
@@ -160,10 +154,7 @@ execute nematus/nmt.py to train a model.
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
-<<<<<<< HEAD
 | --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
-=======
->>>>>>> master
 | --finetune           |  train with fixed embedding layer |
 | --finetune_only_last |  train with all layers except output layer fixed |
 
@@ -182,7 +173,6 @@ execute nematus/nmt.py to train a model.
 | --dispFreq INT       | display loss after INT updates (default: 1000) |
 | --sampleFreq INT     | display some samples after INT updates (default: 10000) |
 
-<<<<<<< HEAD
 #### minimum risk training parameters
 | parameter            | description |
 |---                   |--- |
@@ -190,10 +180,6 @@ execute nematus/nmt.py to train a model.
 | --mrt_samples INT    | samples per source sentence (default: 100) |
 | --mrt_loss STR       | loss used in MRT (default: SENTENCEBLEU n=4) |
 | --mrt_reference      | add reference to MRT samples. |
-
-=======
->>>>>>> master
-
 
 more instructions to train a model, including a sample configuration and
 preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-scripts
