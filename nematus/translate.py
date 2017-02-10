@@ -252,7 +252,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-k', type=int, default=5,
                         help="Beam size (default: %(default)s))")
-    parser.add_argument('-p', type=int, default=5,
+    parser.add_argument('-p', type=int, default=1,
                         help="Number of processes (default: %(default)s))")
     parser.add_argument('-n', action="store_true",
                         help="Normalize scores by sentence length")
