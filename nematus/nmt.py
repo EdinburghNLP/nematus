@@ -9,7 +9,6 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import cPickle as pkl
 import json
-import ipdb
 import numpy
 import copy
 import argparse
@@ -926,9 +925,6 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         for pp in pprobs:
             probs.append(pp)
 
-        if numpy.isnan(numpy.mean(probs)):
-            ipdb.set_trace()
-
         if verbose:
             print >>sys.stderr, '%d samples computed' % (n_done)
 
@@ -1101,7 +1097,6 @@ def train(dim_word=512,  # word vector dimensionality
         params = load_params(prior_model, params, with_prefix='prior_')
 
     tparams = init_theano_params(params)
-    #ipdb.set_trace()
 
     trng, use_noise, \
         x, x_mask, y, y_mask, \
@@ -1177,8 +1172,6 @@ def train(dim_word=512,  # word vector dimensionality
     # allow finetuning of only last layer (becomes a linear model training problem)
     if finetune_only_last:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
-
-    #ipdb.set_trace()
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1456,9 +1449,6 @@ def train(dim_word=512,  # word vector dimensionality
                             print 'Early Stop!'
                             estop = True
                             break
-
-                if numpy.isnan(valid_err):
-                    ipdb.set_trace()
 
                 print 'Valid ', valid_err
 

@@ -35,11 +35,10 @@ Nematus requires the following packages:
 
  - Python >= 2.7
  - numpy
- - ipdb
  - Theano >= 0.7 (and its dependencies).
 
 we recommend executing the following command in a Python virtual environment:
-   `pip install numpy numexpr cython tables theano ipdb`
+   `pip install numpy numexpr cython tables theano`
 
 the following packages are optional, but *highly* recommended
 
