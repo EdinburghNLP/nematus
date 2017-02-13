@@ -134,6 +134,19 @@ def init_params(options):
                                               prefix='encoder_r',
                                               nin=options['dim_word'],
                                               dim=options['dim'])
+    if options['enc_depth'] > 1:
+        for level in range(2, options['enc_depth'] + 1):
+            prefix_f = pp('encoder', level)
+            prefix_r = pp('encoder_r', level)
+
+            params = get_layer_param(options['encoder'])(options, params,
+                                                         prefix=prefix_f,
+                                                         nin=options['dim'],
+                                                         dim=options['dim'])
+            params = get_layer_param(options['encoder'])(options, params,
+                                                         prefix=prefix_r,
+                                                         nin=options['dim'],
+                                                         dim=options['dim'])
     ctxdim = 2 * options['dim']
 
     # init_state, init_cell
@@ -221,14 +234,6 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
     if options['use_dropout']:
         emb *= source_dropout
 
-    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder',
-                                            mask=x_mask,
-                                            emb_dropout=emb_dropout, 
-                                            rec_dropout=rec_dropout,
-                                            profile=profile)
-    
-
     # word embedding for backward rnn (source)
     embr = []
     for factor in range(options['factors']):
@@ -242,12 +247,32 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
             # we drop out the same words in both directions
             embr *= source_dropout[::-1]
 
-    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r',
-                                             mask=xr_mask,
-                                             emb_dropout=emb_dropout_r,
-                                             rec_dropout=rec_dropout_r,
-                                             profile=profile)
+    for level in range(1, options['enc_depth'] + 1):
+        if level == 1:
+            prefix_f = 'encoder'
+            prefix_r = 'encoder_r'
+            input_f = emb
+            input_r = embr
+        else:
+            prefix_f = pp('encoder', level)
+            prefix_r = pp('encoder_r', level)
+
+            # run forward on previous backward and backward on previous forward
+            input_f = projr[0]
+            input_r = proj[0]
+
+        proj = get_layer_constr(options['encoder'])(tparams, input_f, options,
+                                                    prefix=prefix_f,
+                                                    mask=x_mask,
+                                                    emb_dropout=emb_dropout,
+                                                    rec_dropout=rec_dropout,
+                                                    profile=profile)
+        projr = get_layer_constr(options['encoder'])(tparams, input_r, options,
+                                                     prefix=prefix_r,
+                                                     mask=xr_mask,
+                                                     emb_dropout=emb_dropout_r,
+                                                     rec_dropout=rec_dropout_r,
+                                                     profile=profile)
 
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
@@ -693,6 +718,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
 def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
+          enc_depth=1, # number of layers in the encoder
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
