@@ -790,7 +790,7 @@ def train(dim_word=512,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
-                         indomain_target=domain_interpolation_indomain_datasets[1], 
+                         indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=domain_interpolation_cur,
                          maxibatch_size=maxibatch_size)
     else:

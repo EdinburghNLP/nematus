@@ -437,7 +437,7 @@ def param_init_gru_local(options, params, prefix='gru_local',
     # local attention
     W_p = norm_weight(dim, dim)
     params[pp(prefix, 'W_p')] = W_p
-    
+
     U_p = norm_weight(dim, 1)
     params[pp(prefix, 'U_p')] = U_p
 
@@ -451,7 +451,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
                    init_memory=None, init_state=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
-                   profile=False, 
+                   profile=False,
                    **kwargs):
 
     assert context, 'Context must be provided'
@@ -538,7 +538,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
         src_positions = src_positions.reshape([src_positions.shape[0], ])
 
         p_t_steps = tensor.floor(p_t.reshape([p_t.shape[0], ]))
-        indicesSub = indices_mask_[src_positions]       # n_samples, window 
+        indicesSub = indices_mask_[src_positions]       # n_samples, window
 
         attn_mask = attention_mask_[src_positions, tensor.cast(sntlens.reshape([sntlens.shape[0], ]), 'int64')].T    # window, n_samples
         attn_mask_broad = tensor.tile(attn_mask[:, :, None], (1, 1, cc_.shape[2]))  # window, n_samples, dimctx
@@ -548,7 +548,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
         ccshuffle = cc_broad.dimshuffle(1, 0, 2)      # n_sample, n_timestep+2win, dimctx
 
         # cc_result = ccshuffle[src_positions, ]
-        cc_result, upd = theano.map(_step_index, 
+        cc_result, upd = theano.map(_step_index,
                                 sequences=[p_t_steps, ccshuffle])
 
         cc_result = cc_result.dimshuffle(1, 0, 2)  # window, n_sample, dimctx
@@ -606,13 +606,13 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
                tparams[pp(prefix, 'U_nl')],
                tparams[pp(prefix, 'Ux_nl')],
                tparams[pp(prefix, 'b_nl')],
-               tparams[pp(prefix, 'bx_nl')], 
-               tparams[pp(prefix, 'W_p')], 
-               tparams[pp(prefix, 'U_p')], 
-               tparams[pp(prefix, 'b_p')], 
-               tparams[pp(prefix, 'Wc_att')], 
-               tparams[pp(prefix, 'b_att')], 
-               tparams['Indices_mask'], 
+               tparams[pp(prefix, 'bx_nl')],
+               tparams[pp(prefix, 'W_p')],
+               tparams[pp(prefix, 'U_p')],
+               tparams[pp(prefix, 'b_p')],
+               tparams[pp(prefix, 'Wc_att')],
+               tparams[pp(prefix, 'b_att')],
+               tparams['Indices_mask'],
                tparams['Attention_mask']]
 
 
@@ -626,7 +626,7 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
                                                   tensor.alloc(0., n_samples,
                                                                context.shape[2]),    # ctx_: [n_samples * (dimctx=2dim)]
                                                   tensor.alloc(0., n_samples,
-                                                               winsize)], 
+                                                               winsize)],
                                     non_sequences=[context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
