@@ -985,6 +985,7 @@ def train(dim_word=512,  # word vector dimensionality
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
           mrt_samples=100,
+          mrt_samples_meanloss=10,
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
@@ -1281,6 +1282,29 @@ def train(dim_word=512,  # word vector dimensionality
 
                 for x_s, y_s in xy_pairs:
 
+                    # draw independent samples to compute mean reward
+                    if model_options['mrt_samples_meanloss']:
+                        use_noise.set_value(0.)
+                        samples, _ = f_sampler([x_s], model_options['mrt_samples_meanloss'], maxlen)
+                        use_noise.set_value(1.)
+
+                        samples = [numpy.trim_zeros(item) for item in zip(*samples)]
+
+                        # map integers to words (for character-level metrics)
+                        samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
+                        ref = seqs2words(y_s, worddicts_r[-1])
+
+                        #scorers expect tokenized hypotheses/references
+                        ref = ref.split(" ")
+                        samples = [sample.split(" ") for sample in samples]
+
+                        # get negative smoothed BLEU for samples
+                        scorer = ScorerProvider().get(model_options['mrt_loss'])
+                        scorer.set_reference(ref)
+                        mean_loss = numpy.array(scorer.score_matrix(samples), dtype='float32').mean()
+                    else:
+                        mean_loss = 0.
+
                     # create k samples
                     use_noise.set_value(0.)
                     samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
@@ -1316,7 +1340,7 @@ def train(dim_word=512,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
-                    loss = 1-numpy.array(scorer.score_matrix(samples), dtype='float32')
+                    loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask, loss)
@@ -1630,12 +1654,14 @@ if __name__ == '__main__':
                          help="MRT alpha (default: %(default)s)")
     mrt.add_argument('--mrt_samples', type=int, default=100, metavar='INT',
                          help="samples per source sentence (default: %(default)s)")
+    mrt.add_argument('--mrt_samples_meanloss', type=int, default=10, metavar='INT',
+                         help="draw n independent samples to calculate mean loss (which is subtracted from loss) (default: %(default)s)")
     mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
                          help='loss used in MRT (default: %(default)s)')
     mrt.add_argument('--mrt_reference', action="store_true",
                          help='add reference to MRT samples.')
     mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
-                     help="Mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+                     help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
     args = parser.parse_args()
 
