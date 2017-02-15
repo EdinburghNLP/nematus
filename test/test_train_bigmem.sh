@@ -23,5 +23,5 @@ mkdir -p models
   --no_shuffle \
   --dispFreq 500 \
   --finish_after 500 \
-  --encoder_truncate_gradient 15 \
-  --decoder_truncate_gradient 15
+  --encoder_truncate_gradient -1 \
+  --decoder_truncate_gradient -1
