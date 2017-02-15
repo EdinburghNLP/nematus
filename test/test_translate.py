@@ -35,12 +35,11 @@ class TestTranslate(unittest.TestCase):
         load_wmt16_model('en','de')
         load_wmt16_model('en','ro')
 
-    # English-German WMT16 system, no dropout
-    def test_ende(self):
-        os.chdir('models/en-de/')
-        translate(['model.npz'], open('../../en-de/in'), open('../../en-de/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
-        os.chdir('../..')
-        for i, (line, line2) in enumerate(zip(open('en-de/ref').readlines(), open('en-de/out').readlines())):
+    def outputEqual(self, output1, output2):
+        """given two translation outputs, check that output string is identical,
+        and probabilities are equal within rounding error.
+        """
+        for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
             if not i % 2:
                 self.assertEqual(line, line2)
             else:
@@ -49,12 +48,19 @@ class TestTranslate(unittest.TestCase):
                 for p, p2 in zip(probs, probs2):
                     self.assertAlmostEqual(p, p2, 5)
 
+    # English-German WMT16 system, no dropout
+    def test_ende(self):
+        os.chdir('models/en-de/')
+        translate(['model.npz'], open('../../en-de/in'), open('../../en-de/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
+        os.chdir('../..')
+        self.outputEqual('en-de/ref','en-de/out')
+
     # English-Romanian WMT16 system, dropout
-#    def test_enro(self):
-#        os.chdir('models/en-ro/')
-#        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
-#        os.chdir('../..')
-#        self.assertEqual(open('en-ro/ref').read(), open('en-ro/out').read())
+    def test_enro(self):
+        os.chdir('models/en-ro/')
+        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
+        os.chdir('../..')
+        self.outputEqual('en-ro/ref','en-ro/out')
 
 
 
