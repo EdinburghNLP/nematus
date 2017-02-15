@@ -1643,3 +1643,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     train(**vars(args))
+
+#    Profile peak GPU memory usage by uncommenting next line and enabling theano CUDA memory profiling (http://deeplearning.net/software/theano/tutorial/profiling.html)
+#    print theano.sandbox.cuda.theano_allocated()
+
