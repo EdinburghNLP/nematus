@@ -1246,10 +1246,11 @@ def train(dim_word=512,  # word vector dimensionality
                 sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
+            xlen = len(x)
+            n_samples += xlen
+
             if model_options['objective'] == 'CE':
 
-                xlen = len(x)
-                n_samples += xlen
                 x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                     n_words_src=n_words_src,
                                                     n_words=n_words)
@@ -1300,6 +1301,10 @@ def train(dim_word=512,  # word vector dimensionality
                                                                     maxlen=None, n_words_src=n_words_src,
                                                                     n_words=n_words)
 
+                    cost_batches += 1
+                    last_disp_samples += xlen
+                    last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+
                     # map integers to words (for character-level metrics)
                     samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
                     y_s = seqs2words(y_s, worddicts_r[-1])
@@ -1315,6 +1320,8 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask, loss)
+                    cost_sum += cost
+
                     # do the update on parameters
                     f_update(lrate)
 
