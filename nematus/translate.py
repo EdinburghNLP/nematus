@@ -10,6 +10,7 @@ import json
 import cPickle as pkl
 
 from multiprocessing import Process, Queue
+from Queue import Empty
 from util import load_dict, load_config
 from compat import fill_options
 from hypgraph import HypGraphRenderer
@@ -191,7 +192,21 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
         trans = [None] * n_samples
         out_idx = 0
         for idx in xrange(n_samples):
-            resp = rqueue.get()
+            resp = None
+            while resp is None:
+                try:
+                    resp = rqueue.get(True, 5)
+                # if queue is empty after 5s, check if processes are still alive
+                except Empty:
+                    for midx in xrange(n_process):
+                        if not processes[midx].is_alive():
+                            # kill all other processes and raise exception if one dies
+                            queue.cancel_join_thread()
+                            rqueue.cancel_join_thread()
+                            for idx in xrange(n_process):
+                                processes[idx].terminate()
+                            sys.stderr.write("Error: translate worker process {0} crashed with exitcode {1}".format(processes[midx].pid, processes[midx].exitcode))
+                            sys.exit(1)
             trans[resp[0]] = resp[1]
             if verbose and numpy.mod(idx, 10) == 0:
                 sys.stderr.write('Sample {0} / {1} Done\n'.format((idx+1), n_samples))
