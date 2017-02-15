@@ -133,20 +133,47 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 
 
 def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
-              emb_dropout=None,
-              rec_dropout=None,
+              retain_probability_below=None,
+              retain_probability_rec=None,
+              use_noise=None,
+              trng=None,
+              sampling=False,
               profile=False,
               **kwargs):
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
         n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
     else:
         n_samples = 1
+        dim_below = state_below.shape[1]
 
     dim = tparams[pp(prefix, 'Ux')].shape[1]
 
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
+
+    below_dropout = None
+    rec_dropout = None
+
+    if options['use_dropout']:
+        # models trained with old dropout need to be rescaled at test time
+        if sampling and options['model_version'] < 0.1:
+            below_dropout = theano.shared(numpy.array([retain_probability_below]*2, dtype='float32'))
+            rec_dropout = theano.shared(numpy.array([retain_probability_rec]*2, dtype='float32'))
+        elif not sampling:
+            if options['model_version'] < 0.1:
+                scaled = False
+            else:
+                scaled = True
+            below_dropout = shared_dropout_layer((2, n_samples, dim_below), use_noise, trng, retain_probability_below, scaled)
+            rec_dropout = shared_dropout_layer((2, n_samples, dim), use_noise, trng, retain_probability_rec, scaled)
+
+    # if dropout is off, or we don't need it because we're sampling, multiply by 1
+    if below_dropout is None or retain_probability_below == 1:
+        below_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+    if rec_dropout is None or retain_probability_rec == 1:
+        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
 
     # utility function to slice a tensor
     def _slice(_x, n, dim):
@@ -156,10 +183,10 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
 
     # state_below is the input word embeddings
     # input to the gates, concatenated
-    state_below_ = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'W')]) + \
+    state_below_ = tensor.dot(state_below*below_dropout[0], tparams[pp(prefix, 'W')]) + \
         tparams[pp(prefix, 'b')]
     # input to compute the hidden state proposal
-    state_belowx = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'Wx')]) + \
+    state_belowx = tensor.dot(state_below*below_dropout[1], tparams[pp(prefix, 'Wx')]) + \
         tparams[pp(prefix, 'bx')]
 
     # step function to be used by scan

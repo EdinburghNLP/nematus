@@ -201,33 +201,16 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         retain_probability_source = 1-options['dropout_source']
         if sampling:
             if options['model_version'] < 0.1:
-                rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-                rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-                emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-                emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
                 source_dropout = theano.shared(numpy.float32(retain_probability_source))
             else:
-                rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
                 source_dropout = theano.shared(numpy.float32(1.))
         else:
             if options['model_version'] < 0.1:
                 scaled = False
             else:
                 scaled = True
-            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
-            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
             source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source, scaled)
             source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
-    else:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
 
     # word embedding for forward rnn (source)
     emb = get_layer_constr('embedding')(tparams, x, suffix='', factors= options['factors'])
@@ -249,9 +232,13 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
             prefix_r = 'encoder_r'
             input_f = emb
             input_r = embr
+            retain_probability_below = 1-options['dropout_embedding']
+            retain_probability_rec = 1-options['dropout_hidden']
         else:
             prefix_f = pp('encoder', level)
             prefix_r = pp('encoder_r', level)
+            retain_probability_below = 1-options['dropout_hidden']
+            retain_probability_rec = 1-options['dropout_hidden']
 
             # run forward on previous backward and backward on previous forward
             input_f = projr[0][::-1]
@@ -260,14 +247,20 @@ def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False
         proj = get_layer_constr(options['encoder'])(tparams, input_f, options,
                                                     prefix=prefix_f,
                                                     mask=x_mask,
-                                                    emb_dropout=emb_dropout,
-                                                    rec_dropout=rec_dropout,
+                                                    retain_probability_below=retain_probability_below,
+                                                    retain_probability_rec=retain_probability_rec,
+                                                    use_noise=use_noise,
+                                                    trng=trng,
+                                                    sampling=sampling,
                                                     profile=profile)
         projr = get_layer_constr(options['encoder'])(tparams, input_r, options,
                                                      prefix=prefix_r,
                                                      mask=xr_mask,
-                                                     emb_dropout=emb_dropout_r,
-                                                     rec_dropout=rec_dropout_r,
+                                                     retain_probability_below=retain_probability_below,
+                                                     retain_probability_rec=retain_probability_rec,
+                                                     use_noise=use_noise,
+                                                     trng=trng,
+                                                     sampling=sampling,
                                                      profile=profile)
 
         # residual connections
