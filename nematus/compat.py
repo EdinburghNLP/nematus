@@ -22,3 +22,5 @@ def fill_options(options):
         options['tie_encoder_decoder_embeddings'] = False
     if not 'tie_decoder_embeddings' in options:
         options['tie_decoder_embeddings'] = False
+    if not 'enc_depth' in options:
+        options['enc_depth'] = 1
