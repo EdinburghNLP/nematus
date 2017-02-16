@@ -35,19 +35,25 @@ class TestTranslate(unittest.TestCase):
         load_wmt16_model('en','de')
         load_wmt16_model('en','ro')
 
+    def scoreEqual(self, output1, output2):
+        """given two files with translation scores, check that probabilities are equal within rounding error.
+        """
+        for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
+            self.assertAlmostEqual(float(line.split()[-1]), float(line2.split()[-1]), 5)
+
     # English-German WMT16 system, no dropout
     def test_ende(self):
         os.chdir('models/en-de/')
         score(['model.npz'], open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), normalize=True)
         os.chdir('../..')
-        self.assertEqual(open('en-de/ref_score').read(), open('en-de/out_score').read())
+        self.scoreEqual('en-de/ref_score', 'en-de/out_score')
 
     # English-Romanian WMT16 system, dropout
     def test_enro(self):
         os.chdir('models/en-ro/')
         score(['model.npz'], open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), normalize=True)
         os.chdir('../..')
-        self.assertEqual(open('en-ro/ref_score').read(), open('en-ro/out_score').read())
+        self.scoreEqual('en-ro/ref_score', 'en-ro/out_score')
 
 
 
