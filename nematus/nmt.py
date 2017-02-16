@@ -442,6 +442,22 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
+    if options['dec_depth'] > 1:
+        for level in range(2, options['dec_depth'] + 1):
+
+            if options['deep_include_ctx']:
+                input_ = tensor.concatenate([next_state, ctxs], axis=2)
+            else:
+                input_ = next_state
+
+            next_state += get_layer_constr('gru')(tparams, input_, options, dropout,
+                                              prefix=pp('decoder', level),
+                                              mask=None,
+                                              one_step=True,
+                                              dropout_probability_below=options['dropout_hidden'],
+                                              dropout_probability_rec=options['dropout_hidden'],
+                                              profile=profile)[0]
+
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_logit_lstm', activ='linear')
@@ -587,6 +603,22 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
         # alignment matrix (attention model)
         dec_alphas = proj[2]
+
+        if options['dec_depth'] > 1:
+            for level in range(2, options['dec_depth'] + 1):
+
+                if options['deep_include_ctx']:
+                    input_ = tensor.concatenate([next_state, ctxs], axis=2)
+                else:
+                    input_ = next_state
+
+                next_state += get_layer_constr('gru')(tparams, input_, options, dropout,
+                                                    prefix=pp('decoder', level),
+                                                    mask=None,
+                                                    one_step=True,
+                                                    dropout_probability_below=options['dropout_hidden'],
+                                                    dropout_probability_rec=options['dropout_hidden'],
+                                                    profile=profile)[0]
 
         logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                         dropout_probability=options['dropout_hidden'],
