@@ -1559,6 +1559,8 @@ if __name__ == '__main__':
                          help="number of encoder layers (default: %(default)s)")
     network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
                          help="number of decoder layers (default: %(default)s)")
+    network.add_argument('--deep_include_ctx', action='store_true',
+                         help="include context in deep decoder layers")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")

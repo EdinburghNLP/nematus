@@ -134,6 +134,9 @@ execute nematus/nmt.py to train a model.
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
+| --enc_depth INT | number of encoder layers (default: 1) |
+| --dec_depth INT | number of decoder layers (default: 1) |
+| --deep_include_ctx | include context in deep decoder layers |
 
 #### training parameters
 | parameter            | description |
