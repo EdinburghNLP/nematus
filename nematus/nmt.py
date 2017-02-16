@@ -325,6 +325,22 @@ def build_model(tparams, options):
     # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
     opt_ret['dec_alphas'] = proj[2]
 
+    if options['dec_depth'] > 1:
+        for level in range(2, options['dec_depth'] + 1):
+            prefix = pp('decoder', level)
+            retain_probability_below = 1-options['dropout_hidden']
+            retain_probability_hidden = 1-options['dropout_hidden']
+
+            proj_h = get_layer_constr('gru')(tparams, proj_h, options,
+                                             prefix=prefix,
+                                             mask=y_mask,
+                                             retain_probability_below=retain_probability_below,
+                                             retain_probability_rec=retain_probability_rec,
+                                             use_noise=use_noise,
+                                             trng=trng,
+                                             sampling=sampling,
+                                             profile=profile)
+
     # compute word probabilities
     logit_lstm = get_layer_constr('ff')(tparams, proj_h, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
