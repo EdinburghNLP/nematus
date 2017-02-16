@@ -336,19 +336,12 @@ def build_model(tparams, options):
 
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
-            prefix = pp('decoder', level)
-            retain_probability_below = 1-options['dropout_hidden']
-            retain_probability_hidden = 1-options['dropout_hidden']
-
-            proj_h = get_layer_constr('gru')(tparams, proj_h, options,
-                                             prefix=prefix,
+            proj_h = get_layer_constr('gru')(tparams, proj_h, options, dropout,
+                                             prefix=pp('decoder', level),
                                              mask=y_mask,
-                                             retain_probability_below=retain_probability_below,
-                                             retain_probability_rec=retain_probability_rec,
-                                             use_noise=use_noise,
-                                             trng=trng,
-                                             sampling=sampling,
-                                             profile=profile)
+                                             dropout_probability_below=options['dropout_hidden'],
+                                             dropout_probability_rec=options['dropout_hidden'],
+                                             profile=profile)[0]
 
     # compute word probabilities
     logit_lstm = get_layer_constr('ff')(tparams, proj_h, options, dropout,
@@ -908,6 +901,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
+          dec_depth=1, # number of layers in the decoder
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
@@ -1519,6 +1513,8 @@ if __name__ == '__main__':
                          help="target vocabulary size (default: %(default)s)")
     network.add_argument('--enc_depth', type=int, default=1, metavar='INT',
                          help="number of encoder layers (default: %(default)s)")
+    network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
+                         help="number of decoder layers (default: %(default)s)")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")
