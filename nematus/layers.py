@@ -25,6 +25,43 @@ layers = {'ff': ('param_init_fflayer', 'fflayer'),
           }
 
 
+def dropout_constr(options, use_noise, trng, sampling):
+    """This constructor takes care of the fact that we want different
+    behaviour in training and sampling, and keeps backward compatibility:
+    on older versions, activations need to be rescaled at test time;
+    on newer veresions, they are rescaled at training time.
+    """
+
+    # if dropout is off, or we don't need it because we're sampling, multiply by 1
+    # this is also why we make all arguments optional
+    def get_layer(shape=None, dropout_probability=0, num=1):
+        if num > 1:
+            return theano.shared(numpy.array([1.]*num, dtype='float32'))
+        else:
+            return theano.shared(numpy.float32(1.))
+
+    if options['use_dropout']:
+        # models trained with old dropout need to be rescaled at test time
+        if sampling and options['model_version'] < 0.1:
+            def get_layer(shape=None, dropout_probability=0, num=1):
+                if num > 1:
+                    return theano.shared(numpy.array([1-dropout_probability]*num, dtype='float32'))
+                else:
+                    return theano.shared(numpy.float32(1-dropout_probability))
+        elif not sampling:
+            if options['model_version'] < 0.1:
+                scaled = False
+            else:
+                scaled = True
+            def get_layer(shape, dropout_probability=0, num=1):
+                if num > 1:
+                    return shared_dropout_layer((num,) + shape, use_noise, trng, 1-dropout_probability, scaled)
+                else:
+                    return shared_dropout_layer(shape, use_noise, trng, 1-dropout_probability, scaled)
+
+    return get_layer
+
+
 def get_layer_param(name):
     param_fn, constr_fn = layers[name]
     return eval(param_fn)
@@ -65,13 +102,22 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
     return params
 
 
-def fflayer(tparams, state_below, options, prefix='rconv',
-            activ='lambda x: tensor.tanh(x)', W=None, b=None, **kwargs):
+def fflayer(tparams, state_below, options, dropout, prefix='rconv',
+            activ='lambda x: tensor.tanh(x)', W=None, b=None, dropout_probability=0, **kwargs):
     if W == None:
         W = tparams[pp(prefix, 'W')]
     if b == None:
         b = tparams[pp(prefix, 'b')]
-    return eval(activ)(tensor.dot(state_below, W) + b)
+
+    # for three-dimensional tensors, we assume that first dimension is number of timesteps
+    # we want to apply same mask to all timesteps
+    if state_below.ndim == 3:
+        dropout_shape = (state_below.shape[1], state_below.shape[2])
+    else:
+        dropout_shape = state_below.shape
+    dropout_mask = dropout(dropout_shape, dropout_probability)
+
+    return eval(activ)(tensor.dot(state_below*dropout_mask, W) + b)
 
 # embedding layer
 def param_init_embedding_layer(options, params, n_words, dims, factors=None, prefix='', suffix=''):
@@ -132,12 +178,10 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
     return params
 
 
-def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
-              retain_probability_below=None,
-              retain_probability_rec=None,
-              use_noise=None,
-              trng=None,
-              sampling=False,
+def gru_layer(tparams, state_below, options, dropout, prefix='gru',
+              mask=None,
+              dropout_probability_below=0,
+              dropout_probability_rec=0,
               profile=False,
               **kwargs):
     nsteps = state_below.shape[0]
@@ -153,27 +197,8 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
 
-    below_dropout = None
-    rec_dropout = None
-
-    if options['use_dropout']:
-        # models trained with old dropout need to be rescaled at test time
-        if sampling and options['model_version'] < 0.1:
-            below_dropout = theano.shared(numpy.array([retain_probability_below]*2, dtype='float32'))
-            rec_dropout = theano.shared(numpy.array([retain_probability_rec]*2, dtype='float32'))
-        elif not sampling:
-            if options['model_version'] < 0.1:
-                scaled = False
-            else:
-                scaled = True
-            below_dropout = shared_dropout_layer((2, n_samples, dim_below), use_noise, trng, retain_probability_below, scaled)
-            rec_dropout = shared_dropout_layer((2, n_samples, dim), use_noise, trng, retain_probability_rec, scaled)
-
-    # if dropout is off, or we don't need it because we're sampling, multiply by 1
-    if below_dropout is None or retain_probability_below == 1:
-        below_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-    if rec_dropout is None or retain_probability_rec == 1:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
+    below_dropout = dropout((n_samples, dim_below), dropout_probability_below, num=2)
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=2)
 
     # utility function to slice a tensor
     def _slice(_x, n, dim):
@@ -300,11 +325,13 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     return params
 
 
-def gru_cond_layer(tparams, state_below, options, prefix='gru',
+def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_memory=None, init_state=None,
-                   context_mask=None, emb_dropout=None,
-                   rec_dropout=None, ctx_dropout=None,
+                   context_mask=None,
+                   dropout_probability_below=0,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0,
                    pctx_=None,
                    profile=False,
                    **kwargs):
@@ -317,14 +344,20 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
         n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
     else:
         n_samples = 1
+        dim_below = state_below.shape[1]
 
     # mask
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
 
     dim = tparams[pp(prefix, 'Wcx')].shape[1]
+
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=5)
+    below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
+    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=4)
 
     # initial/previous state
     if init_state is None:
@@ -342,9 +375,9 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         return _x[:, n*dim:(n+1)*dim]
 
     # state_below is the previous output word embedding
-    state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
+    state_belowx = tensor.dot(state_below*below_dropout[0], tparams[pp(prefix, 'Wx')]) +\
         tparams[pp(prefix, 'bx')]
-    state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
+    state_below_ = tensor.dot(state_below*below_dropout[1], tparams[pp(prefix, 'W')]) +\
         tparams[pp(prefix, 'b')]
 
     def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
@@ -507,11 +540,13 @@ def param_init_gru_local(options, params, prefix='gru_local',
 
     return params
 
-def gru_local_layer(tparams, state_below, options, prefix='gru',
+def gru_local_layer(tparams, state_below, options, dropout, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_memory=None, init_state=None,
-                   context_mask=None, emb_dropout=None,
-                   rec_dropout=None, ctx_dropout=None,
+                   context_mask=None, 
+                   dropout_probability_below=0,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0,
                    profile=False, 
                    **kwargs):
 
@@ -523,8 +558,10 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
         n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
     else:
         n_samples = 1
+        dim_below = state_below.shape[1]
 
     # mask
     if mask is None:
@@ -534,6 +571,10 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
         dim = tparams[pp(prefix, 'Wcx')].shape[1]
     else:
         dim = tparams[pp(prefix, 'Wcx_B')].shape[1]
+
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=5)
+    below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
+    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=4)
 
     # initial/previous state
     if init_state is None:
@@ -551,9 +592,9 @@ def gru_local_layer(tparams, state_below, options, prefix='gru',
 
 
     # projected x
-    state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
+    state_belowx = tensor.dot(state_below*below_dropout[0], tparams[pp(prefix, 'Wx')]) +\
         tparams[pp(prefix, 'bx')]
-    state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
+    state_below_ = tensor.dot(state_below*below_dropout[1], tparams[pp(prefix, 'W')]) +\
         tparams[pp(prefix, 'b')]
 
     winsize = 2 * options['pos_win'] + 1
