@@ -410,7 +410,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
+    init_state_old = init_state
     init_state = tensor.matrix('init_state', dtype='float32')
+    init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype('float32')
+    y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
 
     # if it's the first word, emb should be all zero and it is indicated by -1
     decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
@@ -454,6 +457,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                               prefix=pp('decoder', level),
                                               mask=None,
                                               one_step=True,
+                                              init_state=init_state,
                                               dropout_probability_below=options['dropout_hidden'],
                                               dropout_probability_rec=options['dropout_hidden'],
                                               profile=profile)[0]
@@ -616,6 +620,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                                     prefix=pp('decoder', level),
                                                     mask=None,
                                                     one_step=True,
+                                                    init_state=init_state,
                                                     dropout_probability_below=options['dropout_hidden'],
                                                     dropout_probability_rec=options['dropout_hidden'],
                                                     profile=profile)[0]
