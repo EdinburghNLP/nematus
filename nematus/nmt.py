@@ -162,10 +162,15 @@ def init_params(options):
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
+        if options['deep_include_ctx']:
+            input_dim = options['dim'] + ctxdim
+        else:
+            input_dim = options['dim']
+
         for level in range(2, options['dec_depth'] + 1):
             params = get_layer_param('gru')(options, params,
                                             prefix=pp('decoder', level),
-                                            nin=options['dim'],
+                                            nin=input_dim,
                                             dim=options['dim'])
 
     # readout
@@ -336,12 +341,18 @@ def build_model(tparams, options):
 
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
-            proj_h = get_layer_constr('gru')(tparams, proj_h, options, dropout,
-                                             prefix=pp('decoder', level),
-                                             mask=y_mask,
-                                             dropout_probability_below=options['dropout_hidden'],
-                                             dropout_probability_rec=options['dropout_hidden'],
-                                             profile=profile)[0]
+
+            if options['deep_include_ctx']:
+                input_ = tensor.concatenate([proj_h, ctxs], axis=2)
+            else:
+                input_ = proj_h
+
+            proj_h += get_layer_constr('gru')(tparams, input_, options, dropout,
+                                              prefix=pp('decoder', level),
+                                              mask=y_mask,
+                                              dropout_probability_below=options['dropout_hidden'],
+                                              dropout_probability_rec=options['dropout_hidden'],
+                                              profile=profile)[0]
 
     # compute word probabilities
     logit_lstm = get_layer_constr('ff')(tparams, proj_h, options, dropout,
@@ -902,6 +913,7 @@ def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
+          deep_include_ctx=False, # include context vectors in deeper layers of the decoder
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
