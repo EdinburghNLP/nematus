@@ -179,11 +179,19 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 
 
 def gru_layer(tparams, state_below, options, dropout, prefix='gru',
-              mask=None,
+              mask=None, one_step=False
               dropout_probability_below=0,
               dropout_probability_rec=0,
               profile=False,
               **kwargs):
+
+    if one_step:
+        assert init_state, 'previous state must be provided'
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.alloc(0., n_samples, dim)
+
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
         n_samples = state_below.shape[1]
@@ -241,15 +249,17 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 
     # prepare scan arguments
     seqs = [mask, state_below_, state_belowx]
-    init_states = [tensor.alloc(0., n_samples, dim)]
     _step = _step_slice
     shared_vars = [tparams[pp(prefix, 'U')],
                    tparams[pp(prefix, 'Ux')],
                    rec_dropout]
 
-    rval, updates = theano.scan(_step,
+    if one_step:
+        rval = _step(*(seqs + [init_state] + shared_vars))
+    else:
+        rval, updates = theano.scan(_step,
                                 sequences=seqs,
-                                outputs_info=init_states,
+                                outputs_info=init_state,
                                 non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
