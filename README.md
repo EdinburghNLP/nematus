@@ -238,11 +238,11 @@ PUBLICATIONS
 
 if you use Nematus, please cite the following paper:
 
-Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
+Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
 
 @inproceedings{nematus,
 	address = "Valencia, Spain",
-	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Nadejde, Maria",
+	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Mokry, Jozef and Nadejde, Maria",
 	booktitle = "{Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics}",
 	title = "{Nematus: a Toolkit for Neural Machine Translation}",
 	year = "2017"
