@@ -159,6 +159,15 @@ def init_params(options):
                                               nin=options['dim_word'],
                                               dim=options['dim'],
                                               dimctx=ctxdim)
+
+    # deeper layers of the decoder
+    if options['dec_depth'] > 1:
+        for level in range(2, options['dec_depth'] + 1):
+            params = get_layer_param('gru')(options, params,
+                                            prefix=pp('decoder', level),
+                                            nin=options['dim'],
+                                            dim=options['dim'])
+
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
                                 nin=options['dim'], nout=options['dim_word'],
