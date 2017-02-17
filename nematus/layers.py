@@ -179,7 +179,8 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 
 
 def gru_layer(tparams, state_below, options, dropout, prefix='gru',
-              mask=None, one_step=False
+              mask=None, one_step=False,
+              init_state=None,
               dropout_probability_below=0,
               dropout_probability_rec=0,
               profile=False,
@@ -187,10 +188,6 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 
     if one_step:
         assert init_state, 'previous state must be provided'
-
-    # initial/previous state
-    if init_state is None:
-        init_state = tensor.alloc(0., n_samples, dim)
 
     nsteps = state_below.shape[0]
     if state_below.ndim == 3:
@@ -201,6 +198,10 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         dim_below = state_below.shape[1]
 
     dim = tparams[pp(prefix, 'Ux')].shape[1]
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.alloc(0., n_samples, dim)
 
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)

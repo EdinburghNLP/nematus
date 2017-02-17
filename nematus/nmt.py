@@ -197,7 +197,9 @@ def init_params(options):
 def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
 
     x = tensor.tensor3('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
+    if theano.config.compute_test_value:
+        # source text length 5; batch size 10
+        x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
 
     # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
@@ -279,11 +281,14 @@ def build_model(tparams, options):
     use_noise = theano.shared(numpy.float32(0.))
 
     x_mask = tensor.matrix('x_mask', dtype='float32')
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
     y = tensor.matrix('y', dtype='int64')
-    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
     y_mask = tensor.matrix('y_mask', dtype='float32')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+    if theano.config.compute_test_value:
+        # source text length 5; batch size 10
+        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+        # target text length 8; batch size 10
+        y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
+        y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
     x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
     n_samples = x.shape[2]
@@ -306,6 +311,11 @@ def build_model(tparams, options):
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_state', activ='tanh')
 
+    # every decoder RNN layer gets its own copy of the init state
+    init_state = init_state.reshape([1, init_state.shape[0], init_state.shape[1]])
+    if options['dec_depth'] > 1:
+        init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
+
     # word embedding (target), we will shift the target sequence one time step
     # to the right. This is done because of the bi-gram connections in the
     # readout and decoder rnn. The first target will be all zeros and we will
@@ -325,7 +335,7 @@ def build_model(tparams, options):
                                             mask=y_mask, context=ctx,
                                             context_mask=x_mask,
                                             one_step=False,
-                                            init_state=init_state,
+                                            init_state=init_state[0],
                                             dropout_probability_below=options['dropout_embedding'],
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
@@ -350,6 +360,8 @@ def build_model(tparams, options):
             proj_h += get_layer_constr('gru')(tparams, input_, options, dropout,
                                               prefix=pp('decoder', level),
                                               mask=y_mask,
+                                              one_step=False,
+                                              init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],
                                               dropout_probability_rec=options['dropout_hidden'],
                                               profile=profile)[0]
@@ -403,6 +415,11 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_state', activ='tanh')
 
+    # every decoder RNN layer gets its own copy of the init state
+    init_state = init_state.reshape([1, init_state.shape[0], init_state.shape[1]])
+    if options['dec_depth'] > 1:
+        init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
+
     print >>sys.stderr, 'Building f_init...',
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
@@ -411,9 +428,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
     init_state_old = init_state
-    init_state = tensor.matrix('init_state', dtype='float32')
-    init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype('float32')
-    y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
+    init_state = tensor.tensor3('init_state', dtype='float32')
+    if theano.config.compute_test_value:
+        init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype('float32')
+        y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
 
     # if it's the first word, emb should be all zero and it is indicated by -1
     decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
@@ -431,7 +449,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                             prefix='decoder',
                                             mask=None, context=ctx,
                                             one_step=True,
-                                            init_state=init_state,
+                                            init_state=init_state[0],
                                             dropout_probability_below=options['dropout_embedding'],
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
@@ -445,6 +463,12 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
+    print 'init_state', init_state.tag.test_value.shape
+    print 'next_state', next_state.tag.test_value.shape
+
+    # we return state of each layer
+    ret_state = [next_state.reshape((1, next_state.shape[0], next_state.shape[1]))]
+
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
 
@@ -457,10 +481,19 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                               prefix=pp('decoder', level),
                                               mask=None,
                                               one_step=True,
-                                              init_state=init_state,
+                                              init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],
                                               dropout_probability_rec=options['dropout_hidden'],
                                               profile=profile)[0]
+
+            ret_state.append(next_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+
+    if options['dec_depth'] > 1:
+        ret_state = tensor.concatenate(ret_state, axis=0)
+    else:
+        ret_state = ret_state[0]
+
+    print 'ret_state', ret_state.tag.test_value.shape
 
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
@@ -488,7 +521,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # sampled word for the next target, next hidden state to be used
     print >>sys.stderr, 'Building f_next...',
     inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, next_state]
+    outs = [next_probs, next_sample, ret_state]
 
     if return_alignment:
         outs.append(dec_alphas)
@@ -559,6 +592,11 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_state', activ='tanh')
 
+    # every decoder RNN layer gets its own copy of the init state
+    init_state = init_state.reshape([1, init_state.shape[0], init_state.shape[1]])
+    if options['dec_depth'] > 1:
+        init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
+
     if greedy:
         init_w = tensor.alloc(numpy.int64(-1), n_samples)
     else:
@@ -593,7 +631,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                                 context_mask=x_mask,
                                                 pctx_=pctx_,
                                                 one_step=True,
-                                                init_state=init_state,
+                                                init_state=init_state[0],
                                                 dropout_probability_below=options['dropout_embedding'],
                                                 dropout_probability_ctx=options['dropout_hidden'],
                                                 dropout_probability_rec=options['dropout_hidden'],
@@ -620,7 +658,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                                     prefix=pp('decoder', level),
                                                     mask=None,
                                                     one_step=True,
-                                                    init_state=init_state,
+                                                    init_state=init_state[level-1],
                                                     dropout_probability_below=options['dropout_hidden'],
                                                     dropout_probability_rec=options['dropout_hidden'],
                                                     profile=profile)[0]
@@ -740,7 +778,9 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
+        print 'ret0', ret[0].shape
         next_state[i] = numpy.tile( ret[0] , (live_k,1))
+        print 'ret1', next_state[i].shape
         ctx0[i] = ret[1]
     next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
