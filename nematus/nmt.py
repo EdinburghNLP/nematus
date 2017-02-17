@@ -639,6 +639,9 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
         # alignment matrix (attention model)
         dec_alphas = proj[2]
 
+        # we return state of each layer
+        ret_state = [next_state.reshape((1, next_state.shape[0], next_state.shape[1]))]
+
         if options['dec_depth'] > 1:
             for level in range(2, options['dec_depth'] + 1):
 
@@ -655,6 +658,13 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                                     dropout_probability_below=options['dropout_hidden'],
                                                     dropout_probability_rec=options['dropout_hidden'],
                                                     profile=profile)[0]
+
+                ret_state.append(next_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+
+        if options['dec_depth'] > 1:
+            ret_state = tensor.concatenate(ret_state, axis=0)
+        else:
+            ret_state = ret_state[0]
 
         logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                         dropout_probability=options['dropout_hidden'],
@@ -687,7 +697,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                       0,
                       next_sample)
 
-        return [next_sample, next_state, next_probs[:, next_sample].diagonal()], \
+        return [next_sample, ret_state, next_probs[:, next_sample].diagonal()], \
                theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
 
     # symbolic loop for sequence generation
