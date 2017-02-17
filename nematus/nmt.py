@@ -468,7 +468,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         for level in range(2, options['dec_depth'] + 1):
 
             if options['deep_include_ctx']:
-                input_ = tensor.concatenate([next_state, ctxs], axis=2)
+                input_ = tensor.concatenate([next_state, ctxs], axis=1)
             else:
                 input_ = next_state
 
