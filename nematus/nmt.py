@@ -463,9 +463,6 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # alignment matrix (attention model)
     dec_alphas = proj[2]
 
-    print 'init_state', init_state.tag.test_value.shape
-    print 'next_state', next_state.tag.test_value.shape
-
     # we return state of each layer
     ret_state = [next_state.reshape((1, next_state.shape[0], next_state.shape[1]))]
 
@@ -492,8 +489,6 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         ret_state = tensor.concatenate(ret_state, axis=0)
     else:
         ret_state = ret_state[0]
-
-    print 'ret_state', ret_state.tag.test_value.shape
 
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
@@ -606,7 +601,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
         ctx = tensor.tile(ctx, [k, 1])
 
-        init_state = tensor.tile(init_state, [k, 1])
+        init_state = tensor.tile(init_state, [1, k, 1])
 
     # projected context
     assert ctx.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
@@ -778,9 +773,11 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # get initial state of decoder rnn and encoder context
     for i in xrange(num_models):
         ret = f_init[i](x)
-        print 'ret0', ret[0].shape
-        next_state[i] = numpy.tile( ret[0] , (live_k,1))
-        print 'ret1', next_state[i].shape
+
+        # to more easily manipulate batch size, go from (layers, batch_size, dim) to (batch_size, layers, dim)
+        ret[0] = numpy.transpose(ret[0], (1,0,2))
+
+        next_state[i] = numpy.tile( ret[0] , (live_k, 1, 1))
         ctx0[i] = ret[1]
     next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
@@ -788,12 +785,20 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     for ii in xrange(maxlen):
         for i in xrange(num_models):
             ctx = numpy.tile(ctx0[i], [live_k, 1])
+
+            # for theano function, go from (batch_size, layers, dim) to (layers, batch_size, dim)
+            next_state[i] = numpy.transpose(next_state[i], (1,0,2))
+
             inps = [next_w, ctx, next_state[i]]
             ret = f_next[i](*inps)
+
             # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
             next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
             if return_alignment:
                 dec_alphas[i] = ret[3]
+
+            # to more easily manipulate batch size, go from (layers, batch_size, dim) to (batch_size, layers, dim)
+            next_state[i] = numpy.transpose(next_state[i], (1,0,2))
 
             if suppress_unk:
                 next_p[i][:,1] = -numpy.inf
