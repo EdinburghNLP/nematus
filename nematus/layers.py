@@ -135,6 +135,7 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
               emb_dropout=None,
               rec_dropout=None,
+              truncate_gradient=-1,
               profile=False,
               **kwargs):
     nsteps = state_below.shape[0]
@@ -201,6 +202,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
                                 non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
+                                truncate_gradient=truncate_gradient,
                                 profile=profile,
                                 strict=True)
     rval = [rval]
@@ -279,6 +281,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
                    pctx_=None,
+                   truncate_gradient=-1,
                    profile=False,
                    **kwargs):
 
@@ -401,6 +404,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
+                                    truncate_gradient=truncate_gradient,
                                     profile=profile,
                                     strict=True)
     return rval

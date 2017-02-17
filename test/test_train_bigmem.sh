@@ -12,14 +12,14 @@ mkdir -p models
   --model models/model.npz \
   --datasets data/corpus.en data/corpus.de \
   --dictionaries data/vocab.en.json data/vocab.de.json \
-  --dim_word 256 \
-  --dim 512 \
+  --dim_word 500 \
+  --dim 1024 \
   --n_words_src 30000 \
   --n_words 30000 \
   --maxlen 50 \
   --optimizer adam \
   --lrate 0.0001 \
-  --batch_size 40 \
+  --batch_size 80 \
   --no_shuffle \
   --dispFreq 500 \
   --finish_after 500 \
