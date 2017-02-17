@@ -197,9 +197,8 @@ def init_params(options):
 def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
 
     x = tensor.tensor3('x', dtype='int64')
-    if theano.config.compute_test_value:
-        # source text length 5; batch size 10
-        x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
+    # source text length 5; batch size 10
+    x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
 
     # for the backward rnn, we just need to invert x
     xr = x[:,::-1]
@@ -283,12 +282,11 @@ def build_model(tparams, options):
     x_mask = tensor.matrix('x_mask', dtype='float32')
     y = tensor.matrix('y', dtype='int64')
     y_mask = tensor.matrix('y_mask', dtype='float32')
-    if theano.config.compute_test_value:
-        # source text length 5; batch size 10
-        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-        # target text length 8; batch size 10
-        y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-        y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+    # source text length 5; batch size 10
+    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    # target text length 8; batch size 10
+    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
+    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
 
     x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
     n_samples = x.shape[2]
@@ -427,11 +425,11 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
+    y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
     init_state_old = init_state
     init_state = tensor.tensor3('init_state', dtype='float32')
-    if theano.config.compute_test_value:
+    if theano.config.compute_test_value != 'off':
         init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype('float32')
-        y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
 
     # if it's the first word, emb should be all zero and it is indicated by -1
     decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
