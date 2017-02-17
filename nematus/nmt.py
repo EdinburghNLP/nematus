@@ -606,7 +606,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
     pctx_ = tensor.dot(ctx*dropout(dropout_probability=options['dropout_hidden']), tparams[pp('decoder', 'Wc_att')]) +\
         tparams[pp('decoder', 'b_att')]
 
-    def decoder_step(y, init_state, ctx, pctx_, dropout, *shared_vars):
+    def decoder_step(y, init_state, ctx, pctx_, *shared_vars):
 
         # if it's the first word, emb should be all zero and it is indicated by -1
         decoder_embedding_suffix = '' if options['tie_encoder_decoder_embeddings'] else '_dec'
@@ -709,7 +709,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
     (sample, state, probs), updates = theano.scan(decoder_step,
                         outputs_info=[init_w, init_state, None],
-                        non_sequences=[ctx, pctx_, dropout]+shared_vars,
+                        non_sequences=[ctx, pctx_]+shared_vars,
                         n_steps=n_steps)
 
     print >>sys.stderr, 'Building f_sample...',
