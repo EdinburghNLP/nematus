@@ -472,7 +472,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
             else:
                 input_ = next_state
 
-            next_state += get_layer_constr('gru')(tparams, input_, options, dropout,
+            out_state = get_layer_constr('gru')(tparams, input_, options, dropout,
                                               prefix=pp('decoder', level),
                                               mask=None,
                                               one_step=True,
@@ -481,7 +481,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
                                               dropout_probability_rec=options['dropout_hidden'],
                                               profile=profile)[0]
 
-            ret_state.append(next_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+            ret_state.append(out_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+
+            next_state += out_state
 
     if options['dec_depth'] > 1:
         ret_state = tensor.concatenate(ret_state, axis=0)
@@ -650,7 +652,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                 else:
                     input_ = next_state
 
-                next_state += get_layer_constr('gru')(tparams, input_, options, dropout,
+                out_state = get_layer_constr('gru')(tparams, input_, options, dropout,
                                                     prefix=pp('decoder', level),
                                                     mask=None,
                                                     one_step=True,
@@ -659,7 +661,9 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                                                     dropout_probability_rec=options['dropout_hidden'],
                                                     profile=profile)[0]
 
-                ret_state.append(next_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+                ret_state.append(out_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+
+                next_state += out_state
 
         if options['dec_depth'] > 1:
             ret_state = tensor.concatenate(ret_state, axis=0)
