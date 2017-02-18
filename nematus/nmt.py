@@ -339,7 +339,11 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         for level in range(2, options['dec_depth'] + 1):
 
             if options['deep_include_ctx']:
-                input_ = tensor.concatenate([next_state, ctxs], axis=2)
+                if sampling:
+                    axis=1
+                else:
+                    axis=2
+                input_ = tensor.concatenate([next_state, ctxs], axis=axis)
             else:
                 input_ = next_state
 
