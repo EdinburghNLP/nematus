@@ -140,14 +140,22 @@ def init_params(options):
             prefix_f = pp('encoder', level)
             prefix_r = pp('encoder_r', level)
 
-            params = get_layer_param(options['encoder'])(options, params,
-                                                         prefix=prefix_f,
-                                                         nin=options['dim'],
-                                                         dim=options['dim'])
-            params = get_layer_param(options['encoder'])(options, params,
-                                                         prefix=prefix_r,
-                                                         nin=options['dim'],
-                                                         dim=options['dim'])
+            if level < options['enc_merge_depth']:
+                params = get_layer_param(options['encoder'])(options, params,
+                                                             prefix=prefix_f,
+                                                             nin=options['dim'],
+                                                             dim=options['dim'])
+                params = get_layer_param(options['encoder'])(options, params,
+                                                             prefix=prefix_r,
+                                                             nin=options['dim'],
+                                                             dim=options['dim'])
+            else:
+                params = get_layer_param(options['encoder'])(options, params,
+                                                             prefix=prefix_f,
+                                                             nin=options['dim'] * 2,
+                                                             dim=options['dim'] * 2)
+
+
     ctxdim = 2 * options['dim']
 
     # init_state, init_cell
@@ -228,23 +236,31 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
             # we drop out the same words in both directions
             embr *= source_dropout[::-1]
 
-    for level in range(1, options['enc_depth'] + 1):
-        if level == 1:
-            prefix_f = 'encoder'
-            prefix_r = 'encoder_r'
-            input_f = emb
-            input_r = embr
-            dropout_probability_below = options['dropout_embedding']
-            dropout_probability_rec = options['dropout_hidden']
-        else:
-            prefix_f = pp('encoder', level)
-            prefix_r = pp('encoder_r', level)
-            dropout_probability_below = options['dropout_hidden']
-            dropout_probability_rec = options['dropout_hidden']
 
-            # run forward on previous backward and backward on previous forward
-            input_f = projr[0][::-1]
-            input_r = proj[0][::-1]
+    ## level 1
+    proj = get_layer_constr(options['encoder'])(tparams, emb, options, dropout,
+                                                prefix='encoder',
+                                                mask=x_mask,
+                                                dropout_probability_below=options['dropout_embedding'],
+                                                dropout_probability_rec=options['dropout_hidden'],
+                                                profile=profile)
+    projr = get_layer_constr(options['encoder'])(tparams, embr, options, dropout,
+                                                 prefix='encoder_r',
+                                                 mask=xr_mask,
+                                                 dropout_probability_below=options['dropout_embedding'],
+                                                 dropout_probability_rec=options['dropout_hidden'],
+                                                 profile=profile)
+
+    ## bidirectional levels before merge
+    for level in range(2, min(options['enc_depth'] + 1, options['merge_depth'])):
+        prefix_f = pp('encoder', level)
+        prefix_r = pp('encoder_r', level)
+        dropout_probability_below = options['dropout_hidden']
+        dropout_probability_rec = options['dropout_hidden']
+
+        # run forward on previous backward and backward on previous forward
+        input_f = projr[0][::-1]
+        input_r = proj[0][::-1]
 
         proj = get_layer_constr(options['encoder'])(tparams, input_f, options, dropout,
                                                     prefix=prefix_f,
@@ -268,6 +284,18 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
 
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
+
+    ## forward levels after merge (run on context)
+    for level in range(options['merge_depth'], options['enc_depth'] + 1):
+        dropout_probability_below = options['dropout_hidden']
+        dropout_probability_rec = options['dropout_hidden']
+
+        ctx = get_layer_constr(options['encoder'])(tparams, ctx, options, dropout,
+                                                   prefix=pp('encoder', level),
+                                                   mask=x_mask,
+                                                   dropout_probability_below=options['dropout_hidden'],
+                                                   dropout_probability_rec=options['dropout_hidden'],
+                                                   profile=profile)
 
     return x, ctx
 
@@ -388,7 +416,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit = get_layer_constr('ff')(tparams, logit, options, dropout,
                             dropout_probability=options['dropout_hidden'],
                             prefix='ff_logit', activ='linear', W=logit_W)
-    
+
     return logit, opt_ret, ret_state
 
 # build a training model
@@ -914,6 +942,7 @@ def train(dim_word=512,  # word vector dimensionality
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
+          merge_depth=1, # on which level to merge passes from each direction (continue with forward steps)
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
@@ -1252,7 +1281,7 @@ def train(dim_word=512,  # word vector dimensionality
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask)
                 else:
-                    # compute cost, grads and copy grads to shared variables 
+                    # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask)
                     # do the update on parameters
                     f_update(lrate)
@@ -1331,7 +1360,7 @@ def train(dim_word=512,  # word vector dimensionality
                         # compute cost, grads and update parameters
                         cost = f_update(lrate, x, x_mask, y, y_mask, loss)
                     else:
-                        # compute cost, grads and copy grads to shared variables 
+                        # compute cost, grads and copy grads to shared variables
                         cost = f_grad_shared(x, x_mask, y, y_mask, loss)
                         # do the update on parameters
                         f_update(lrate)
@@ -1561,6 +1590,8 @@ if __name__ == '__main__':
                          help="number of decoder layers (default: %(default)s)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
+    network.add_argument('--enc_merge_depth', type=int, default=1, metavar='INT',
+                         help="encoder depth in which the independent bidirectional passes will be merged")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")
@@ -1668,4 +1699,3 @@ if __name__ == '__main__':
 
 #    Profile peak GPU memory usage by uncommenting next line and enabling theano CUDA memory profiling (http://deeplearning.net/software/theano/tutorial/profiling.html)
 #    print theano.sandbox.cuda.theano_allocated()
-

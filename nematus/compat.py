@@ -35,3 +35,5 @@ def fill_options(options):
         options['encoder_truncate_gradient'] = -1
     if not 'decoder_truncate_gradient' in options:
         options['decoder_truncate_gradient'] = -1
+    if not 'merge_depth' in options:
+        options['merge_depth'] = 1
