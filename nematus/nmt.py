@@ -1248,12 +1248,14 @@ def train(dim_word=512,  # word vector dimensionality
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
-                # compute cost, grads and copy grads to shared variables
-                cost = f_grad_shared(x, x_mask, y, y_mask)
-                cost_sum += cost
-
-                # do the update on parameters
-                f_update(lrate)
+                if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                    # compute cost, grads and update parameters
+                    cost = f_update(lrate, x, x_mask, y, y_mask)
+                else:
+                    # compute cost, grads and copy grads to shared variables 
+                    cost = f_grad_shared(x, x_mask, y, y_mask)
+                    # do the update on parameters
+                    f_update(lrate)
 
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
@@ -1325,12 +1327,16 @@ def train(dim_word=512,  # word vector dimensionality
                     scorer.set_reference(y_s)
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype='float32')
 
-                    # compute cost, grads and copy grads to shared variables
-                    cost = f_grad_shared(x, x_mask, y, y_mask, loss)
-                    cost_sum += cost
+                    if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                        # compute cost, grads and update parameters
+                        cost = f_update(lrate, x, x_mask, y, y_mask, loss)
+                    else:
+                        # compute cost, grads and copy grads to shared variables 
+                        cost = f_grad_shared(x, x_mask, y, y_mask, loss)
+                        # do the update on parameters
+                        f_update(lrate)
 
-                    # do the update on parameters
-                    f_update(lrate)
+                    cost_sum += cost
 
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here

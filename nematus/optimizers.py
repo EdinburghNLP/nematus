@@ -19,12 +19,6 @@ from theano_util import *
 def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimizer_params={}, profile=False):
     PREFIX='adam_'
 
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
-
-    f_grad_shared = theano.function(inp, cost, updates=gsup, profile=profile)
-
     updates = []
     optimizer_tparams = {}
 
@@ -39,7 +33,7 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
     t = t_prev + 1.
     lr_t = lr * tensor.sqrt(1. - beta2**t) / (1. - beta1**t)
 
-    for p, g in zip(tparams.values(), gshared):
+    for p, g in zip(tparams.values(), grads):
         # Create/Load variable for first moment
         m_name = PREFIX + p.name + '_mean'
         if m_name in optimizer_params:
@@ -68,10 +62,10 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
         updates.append((p, p_t))
     updates.append((t_prev, t))
 
-    f_update = theano.function([lr], [], updates=updates,
+    f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return f_grad_shared, f_update, optimizer_tparams
+    return None, f_update, optimizer_tparams
 
 def adadelta(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     zipped_grads = [theano.shared(p.get_value() * numpy.float32(0.),
