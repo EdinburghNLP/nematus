@@ -21,6 +21,7 @@ class DomainInterpolatorTextIterator:
                  maxlen=100,
                  n_words_source=-1,
                  n_words_target=-1,
+                 skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
                  indomain_source='', indomain_target='',
@@ -45,6 +46,7 @@ class DomainInterpolatorTextIterator:
 
         self.batch_size = batch_size
         self.maxlen = maxlen
+        self.skip_empty = skip_empty
 
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
@@ -181,7 +183,9 @@ class DomainInterpolatorTextIterator:
                 if self.n_words_target > 0:
                     tt = [w if w < self.n_words_target else 1 for w in tt]
 
-                if len(ss) > self.maxlen and len(tt) > self.maxlen:
+                if (len(ss) > self.maxlen and len(tt) > self.maxlen):
+                    continue
+                if self.skip_empty and (not ss or not tt):
                     continue
 
                 source.append(ss)

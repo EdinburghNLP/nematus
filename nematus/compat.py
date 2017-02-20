@@ -18,3 +18,12 @@ def fill_options(options):
         options['dim_per_factor'] = [options['dim_word']]
     if not 'model_version' in options:
         options['model_version'] = 0
+    if not 'tie_encoder_decoder_embeddings' in options:
+        options['tie_encoder_decoder_embeddings'] = False
+    if not 'tie_decoder_embeddings' in options:
+        options['tie_decoder_embeddings'] = False
+    if not 'encoder_truncate_gradient' in options:
+        options['encoder_truncate_gradient'] = -1
+    if not 'decoder_truncate_gradient' in options:
+        options['decoder_truncate_gradient'] = -1
+

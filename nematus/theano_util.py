@@ -18,9 +18,11 @@ def zip_to_theano(params, tparams):
 
 
 # pull parameters from Theano shared variables
-def unzip_from_theano(zipped):
+def unzip_from_theano(zipped, excluding_prefix=None):
     new_params = OrderedDict()
     for kk, vv in zipped.iteritems():
+        if excluding_prefix and (kk.startswith(excluding_prefix)):
+            continue
         new_params[kk] = vv.get_value()
     return new_params
 
@@ -42,14 +44,16 @@ def init_theano_params(params):
 
 
 # load parameters
-def load_params(path, params):
+def load_params(path, params, with_prefix=''):
     pp = numpy.load(path)
+    new_params = OrderedDict()
     for kk, vv in params.iteritems():
         if kk not in pp:
             warnings.warn('%s is not in the archive' % kk)
             continue
-        params[kk] = pp[kk]
+        new_params[with_prefix+kk] = pp[kk]
 
+    params.update(new_params)
     return params
 
 # load parameters of the optimizer
@@ -120,4 +124,9 @@ def embedding_name(i):
         return 'Wemb'
     else:
         return 'Wemb'+str(i)
+
+# Zero out all parameters
+def zero_all(params):
+    for kk, vv in params.iteritems():
+        vv[:] = numpy.zeros_like(vv)
 

@@ -42,6 +42,7 @@ def main(files, temporary=False):
     else:
         [ff.close() for ff in fds]
 
+    os.close(tf_os)
     os.remove(tpath)
 
     return fds

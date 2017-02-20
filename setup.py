@@ -20,5 +20,5 @@ setuptools.setup(
                  'License :: OSI Approved :: BSD License',
                  'Operating System :: OS Independent',
                  'Topic :: Scientific/Engineering'],
-    packages = ['nematus'],
+    packages = ['nematus', 'nematus.metrics'],
 )

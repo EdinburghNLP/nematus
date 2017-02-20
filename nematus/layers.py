@@ -21,6 +21,7 @@ layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
           'gru_local': ('param_init_gru_local', 'gru_local_layer'),
+          'embedding': {'param_init_embedding_layer', 'embedding_layer'}
           }
 
 
@@ -51,23 +52,55 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
 
 # feedforward layer: affine transformation + point-wise nonlinearity
 def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
-                       ortho=True):
+                       ortho=True, weight_matrix=True, bias=True):
     if nin is None:
         nin = options['dim_proj']
     if nout is None:
         nout = options['dim_proj']
-    params[pp(prefix, 'W')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
-    params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype('float32')
+    if weight_matrix:
+        params[pp(prefix, 'W')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
+    if bias:
+       params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype('float32')
 
     return params
 
 
 def fflayer(tparams, state_below, options, prefix='rconv',
-            activ='lambda x: tensor.tanh(x)', **kwargs):
-    return eval(activ)(
-        tensor.dot(state_below, tparams[pp(prefix, 'W')]) +
-        tparams[pp(prefix, 'b')])
+            activ='lambda x: tensor.tanh(x)', W=None, b=None, **kwargs):
+    if W == None:
+        W = tparams[pp(prefix, 'W')]
+    if b == None:
+        b = tparams[pp(prefix, 'b')]
+    return eval(activ)(tensor.dot(state_below, W) + b)
 
+# embedding layer
+def param_init_embedding_layer(options, params, n_words, dims, factors=None, prefix='', suffix=''):
+    if factors == None:
+        factors = 1
+        dims = [dims]
+    for factor in xrange(factors):
+        params[prefix+embedding_name(factor)+suffix] = norm_weight(n_words, dims[factor])
+    return params
+
+def embedding_layer(tparams, ids, factors=None, prefix='', suffix=''):
+    do_reshape = False
+    if factors == None:
+        if ids.ndim > 1:
+            do_reshape = True
+            n_timesteps = ids.shape[0]
+            n_samples = ids.shape[1]
+        emb = tparams[prefix+embedding_name(0)+suffix][ids.flatten()]
+    else:
+        if ids.ndim > 2:
+          do_reshape = True
+          n_timesteps = ids.shape[1]
+          n_samples = ids.shape[2]
+        emb_list = [tparams[prefix+embedding_name(factor)+suffix][ids[factor].flatten()] for factor in xrange(factors)]
+        emb = concatenate(emb_list, axis=1)
+    if do_reshape:
+        emb = emb.reshape((n_timesteps, n_samples, -1))
+
+    return emb
 
 # GRU layer
 def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
@@ -102,6 +135,7 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
 def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
               emb_dropout=None,
               rec_dropout=None,
+              truncate_gradient=-1,
               profile=False,
               **kwargs):
     nsteps = state_below.shape[0]
@@ -168,6 +202,7 @@ def gru_layer(tparams, state_below, options, prefix='gru', mask=None,
                                 non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
+                                truncate_gradient=truncate_gradient,
                                 profile=profile,
                                 strict=True)
     rval = [rval]
@@ -245,6 +280,8 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                    init_memory=None, init_state=None,
                    context_mask=None, emb_dropout=None,
                    rec_dropout=None, ctx_dropout=None,
+                   pctx_=None,
+                   truncate_gradient=-1,
                    profile=False,
                    **kwargs):
 
@@ -270,17 +307,17 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
         init_state = tensor.alloc(0., n_samples, dim)
 
     # projected context
-    assert context.ndim == 3, \
-        'Context must be 3-d: #annotation x #sample x dim'
-    pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
-        tparams[pp(prefix, 'b_att')]
+    assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+    if pctx_ is None:
+        pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
+            tparams[pp(prefix, 'b_att')]
 
     def _slice(_x, n, dim):
         if _x.ndim == 3:
             return _x[:, :, n*dim:(n+1)*dim]
         return _x[:, n*dim:(n+1)*dim]
 
-    # projected x
+    # state_below is the previous output word embedding
     state_belowx = tensor.dot(state_below*emb_dropout[0], tparams[pp(prefix, 'Wx')]) +\
         tparams[pp(prefix, 'bx')]
     state_below_ = tensor.dot(state_below*emb_dropout[1], tparams[pp(prefix, 'W')]) +\
@@ -367,6 +404,7 @@ def gru_cond_layer(tparams, state_below, options, prefix='gru',
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
+                                    truncate_gradient=truncate_gradient,
                                     profile=profile,
                                     strict=True)
     return rval

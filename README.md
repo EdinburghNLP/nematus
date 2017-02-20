@@ -11,6 +11,8 @@ The changes to Nematus include:
  - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
  - ensemble decoding (and new translation API to support it)
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
+ - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
+ - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
  - command line interface for training
  - automatic training set reshuffling between epochs
  - n-best output for decoder
@@ -33,11 +35,10 @@ Nematus requires the following packages:
 
  - Python >= 2.7
  - numpy
- - ipdb
  - Theano >= 0.7 (and its dependencies).
 
 we recommend executing the following command in a Python virtual environment:
-   `pip install numpy numexpr cython tables theano ipdb`
+   `pip install numpy numexpr cython tables theano`
 
 the following packages are optional, but *highly* recommended
 
@@ -104,8 +105,6 @@ GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e, new GPU backend:
 USAGE INSTRUCTIONS
 ------------------
 
-### TRAINING
-
 execute nematus/nmt.py to train a model.
 
 
@@ -133,6 +132,8 @@ execute nematus/nmt.py to train a model.
 | --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
+| --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
+| --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 
 #### training parameters
 | parameter            | description |
@@ -152,6 +153,7 @@ execute nematus/nmt.py to train a model.
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
+| --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
 | --finetune           |  train with fixed embedding layer |
 | --finetune_only_last |  train with all layers except output layer fixed |
 
@@ -170,7 +172,15 @@ execute nematus/nmt.py to train a model.
 | --dispFreq INT       | display loss after INT updates (default: 1000) |
 | --sampleFreq INT     | display some samples after INT updates (default: 10000) |
 
-
+#### minimum risk training parameters
+| parameter                    | description |
+|---                           |--- |
+| --mrt_alpha FLOAT            | MRT alpha (default: 0.005) |
+| --mrt_samples INT            | samples per source sentence (default: 100) |
+| --mrt_samples_meanloss INT   | draw n independent samples to calculate mean loss (which is subtracted from loss) (default: 10) |
+| --mrt_loss STR               | loss used in MRT (default: SENTENCEBLEU n=4) |
+| --mrt_reference              | add reference to MRT samples. |
+| --mrt_ml_mix                 | mix in ML objective in MRT training with this scaling factor (default: 0) |
 
 more instructions to train a model, including a sample configuration and
 preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-scripts
@@ -228,14 +238,20 @@ sample models, and instructions on using them for translation, are provided in t
 PUBLICATIONS
 ------------
 
+if you use Nematus, please cite the following paper:
+
+Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
+
+@inproceedings{nematus,
+	address = "Valencia, Spain",
+	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Mokry, Jozef and Nadejde, Maria",
+	booktitle = "{Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics}",
+	title = "{Nematus: a Toolkit for Neural Machine Translation}",
+	year = "2017"
+}
+
 the code is based on the following model:
 
 Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio (2015): Neural Machine Translation by Jointly Learning to Align and Translate, Proceedings of the International Conference on Learning Representations (ICLR).
 
-for the changes specific to Nematus, please consider the following papers:
-
-Sennrich, Rico, Haddow, Barry, Birch, Alexandra (2016): Edinburgh Neural Machine Translation Systems for WMT 16, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany
-
-Sennrich, Rico, Haddow, Barry (2016): Linguistic Input Features Improve Neural Machine Translation, Proc. of the First Conference on Machine Translation (WMT16). Berlin, Germany
-
-Luong M T, Pham H, Manning C D. Effective approaches to attention-based neural machine translation[J]. arXiv preprint arXiv:1508.04025, 2015.
+please refer to the Nematus paper for a description of implementation differences
