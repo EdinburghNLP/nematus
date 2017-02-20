@@ -177,12 +177,14 @@ execute nematus/nmt.py to train a model.
 | --sampleFreq INT     | display some samples after INT updates (default: 10000) |
 
 #### minimum risk training parameters
-| parameter            | description |
-|---                   |--- |
-| --mrt_alpha FLOAT    | MRT alpha (default: 0.005) |
-| --mrt_samples INT    | samples per source sentence (default: 100) |
-| --mrt_loss STR       | loss used in MRT (default: SENTENCEBLEU n=4) |
-| --mrt_reference      | add reference to MRT samples. |
+| parameter                    | description |
+|---                           |--- |
+| --mrt_alpha FLOAT            | MRT alpha (default: 0.005) |
+| --mrt_samples INT            | samples per source sentence (default: 100) |
+| --mrt_samples_meanloss INT   | draw n independent samples to calculate mean loss (which is subtracted from loss) (default: 10) |
+| --mrt_loss STR               | loss used in MRT (default: SENTENCEBLEU n=4) |
+| --mrt_reference              | add reference to MRT samples. |
+| --mrt_ml_mix                 | mix in ML objective in MRT training with this scaling factor (default: 0) |
 
 more instructions to train a model, including a sample configuration and
 preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-scripts
@@ -242,11 +244,11 @@ PUBLICATIONS
 
 if you use Nematus, please cite the following paper:
 
-Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
+Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
 
 @inproceedings{nematus,
 	address = "Valencia, Spain",
-	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Nadejde, Maria",
+	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Mokry, Jozef and Nadejde, Maria",
 	booktitle = "{Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics}",
 	title = "{Nematus: a Toolkit for Neural Machine Translation}",
 	year = "2017"

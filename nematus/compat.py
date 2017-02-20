@@ -31,3 +31,7 @@ def fill_options(options):
            options['dec_deep_context'] = options['deep_include_ctx']
         else:
             options['deep_include_ctx'] = False
+    if not 'encoder_truncate_gradient' in options:
+        options['encoder_truncate_gradient'] = -1
+    if not 'decoder_truncate_gradient' in options:
+        options['decoder_truncate_gradient'] = -1

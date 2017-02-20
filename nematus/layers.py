@@ -183,6 +183,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
               init_state=None,
               dropout_probability_below=0,
               dropout_probability_rec=0,
+              truncate_gradient=-1,
               profile=False,
               **kwargs):
 
@@ -264,6 +265,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
                                 non_sequences=shared_vars,
                                 name=pp(prefix, '_layers'),
                                 n_steps=nsteps,
+                                truncate_gradient=truncate_gradient,
                                 profile=profile,
                                 strict=True)
     rval = [rval]
@@ -344,6 +346,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    dropout_probability_ctx=0,
                    dropout_probability_rec=0,
                    pctx_=None,
+                   truncate_gradient=-1,
                    profile=False,
                    **kwargs):
 
@@ -472,6 +475,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
+                                    truncate_gradient=truncate_gradient,
                                     profile=profile,
                                     strict=True)
     return rval

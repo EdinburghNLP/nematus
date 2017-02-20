@@ -251,12 +251,14 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                     mask=x_mask,
                                                     dropout_probability_below=dropout_probability_below,
                                                     dropout_probability_rec=dropout_probability_rec,
+                                                    truncate_gradient=options['encoder_truncate_gradient'],
                                                     profile=profile)
         projr = get_layer_constr(options['encoder'])(tparams, input_r, options, dropout,
                                                      prefix=prefix_r,
                                                      mask=xr_mask,
                                                      dropout_probability_below=dropout_probability_below,
                                                      dropout_probability_rec=dropout_probability_rec,
+                                                     truncate_gradient=options['encoder_truncate_gradient'],
                                                      profile=profile)
 
         # residual connections
@@ -319,6 +321,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                             dropout_probability_below=options['dropout_embedding'],
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
+                                            truncate_gradient=options['decoder_truncate_gradient'],
                                             profile=profile)
     # hidden states of the decoder gru
     next_state = proj[0]
@@ -354,8 +357,9 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                               init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],
                                               dropout_probability_rec=options['dropout_hidden'],
+                                              truncate_gradient=options['decoder_truncate_gradient'],
                                               profile=profile)[0]
-            
+
             if sampling:
                 ret_state.append(out_state.reshape((1, next_state.shape[0], next_state.shape[1])))
 
@@ -626,7 +630,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
     (sample, state, probs), updates = theano.scan(decoder_step,
                         outputs_info=[init_w, init_state, None],
                         non_sequences=[ctx, pctx_]+shared_vars,
-                        n_steps=n_steps)
+                        n_steps=n_steps, truncate_gradient=options['decoder_truncate_gradient'])
 
     print >>sys.stderr, 'Building f_sample...',
     if greedy:
@@ -962,6 +966,7 @@ def train(dim_word=512,  # word vector dimensionality
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
           mrt_samples=100,
+          mrt_samples_meanloss=10,
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
@@ -969,6 +974,8 @@ def train(dim_word=512,  # word vector dimensionality
           prior_model=None, # Prior model file, used for MAP
           tie_encoder_decoder_embeddings=False, # Tie the input embeddings of the encoder and the decoder (first factor only)
           tie_decoder_embeddings=False, # Tie the input embeddings of the decoder with the softmax output embeddings
+          encoder_truncate_gradient=-1, # Truncate BPTT gradients in the encoder to this value. Use -1 for no truncation
+          decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
     ):
 
     # Model options
@@ -1258,6 +1265,29 @@ def train(dim_word=512,  # word vector dimensionality
 
                 for x_s, y_s in xy_pairs:
 
+                    # draw independent samples to compute mean reward
+                    if model_options['mrt_samples_meanloss']:
+                        use_noise.set_value(0.)
+                        samples, _ = f_sampler([x_s], model_options['mrt_samples_meanloss'], maxlen)
+                        use_noise.set_value(1.)
+
+                        samples = [numpy.trim_zeros(item) for item in zip(*samples)]
+
+                        # map integers to words (for character-level metrics)
+                        samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
+                        ref = seqs2words(y_s, worddicts_r[-1])
+
+                        #scorers expect tokenized hypotheses/references
+                        ref = ref.split(" ")
+                        samples = [sample.split(" ") for sample in samples]
+
+                        # get negative smoothed BLEU for samples
+                        scorer = ScorerProvider().get(model_options['mrt_loss'])
+                        scorer.set_reference(ref)
+                        mean_loss = numpy.array(scorer.score_matrix(samples), dtype='float32').mean()
+                    else:
+                        mean_loss = 0.
+
                     # create k samples
                     use_noise.set_value(0.)
                     samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
@@ -1293,7 +1323,7 @@ def train(dim_word=512,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
-                    loss = 1-numpy.array(scorer.score_matrix(samples), dtype='float32')
+                    loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype='float32')
 
                     # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask, loss)
@@ -1583,6 +1613,10 @@ if __name__ == '__main__':
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
     training.add_argument('--objective', choices=['CE', 'MRT'], default='CE',
                          help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
+    training.add_argument('--encoder_truncate_gradient', type=int, default=-1, metavar='INT',
+                         help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
+    training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
+                         help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
 
     finetune = training.add_mutually_exclusive_group()
     finetune.add_argument('--finetune', action="store_true",
@@ -1613,13 +1647,19 @@ if __name__ == '__main__':
                          help="MRT alpha (default: %(default)s)")
     mrt.add_argument('--mrt_samples', type=int, default=100, metavar='INT',
                          help="samples per source sentence (default: %(default)s)")
+    mrt.add_argument('--mrt_samples_meanloss', type=int, default=10, metavar='INT',
+                         help="draw n independent samples to calculate mean loss (which is subtracted from loss) (default: %(default)s)")
     mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
                          help='loss used in MRT (default: %(default)s)')
     mrt.add_argument('--mrt_reference', action="store_true",
                          help='add reference to MRT samples.')
     mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
-                     help="Mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+                     help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
     args = parser.parse_args()
 
     train(**vars(args))
+
+#    Profile peak GPU memory usage by uncommenting next line and enabling theano CUDA memory profiling (http://deeplearning.net/software/theano/tutorial/profiling.html)
+#    print theano.sandbox.cuda.theano_allocated()
+
