@@ -255,3 +255,7 @@ the code is based on the following model:
 Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio (2015): Neural Machine Translation by Jointly Learning to Align and Translate, Proceedings of the International Conference on Learning Representations (ICLR).
 
 please refer to the Nematus paper for a description of implementation differences
+
+ACKNOWLEDGMENTS
+---------------
+This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreements 645452 (QT21), 644333 (TraMOOC), 644402 (HimL) and 688139 (SUMMA).
