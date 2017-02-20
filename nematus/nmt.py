@@ -162,7 +162,7 @@ def init_params(options):
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
-        if options['deep_include_ctx']:
+        if options['dec_deep_context']:
             input_dim = options['dim'] + ctxdim
         else:
             input_dim = options['dim']
@@ -338,7 +338,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
 
-            if options['deep_include_ctx']:
+            if options['dec_deep_context']:
                 if sampling:
                     axis=1
                 else:
@@ -909,7 +909,7 @@ def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
-          deep_include_ctx=False, # include context vectors in deeper layers of the decoder
+          dec_deep_context=False, # include context vectors in deeper layers of the decoder
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
@@ -1523,8 +1523,8 @@ if __name__ == '__main__':
                          help="number of encoder layers (default: %(default)s)")
     network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
                          help="number of decoder layers (default: %(default)s)")
-    network.add_argument('--deep_include_ctx', action='store_true',
-                         help="include context in deep decoder layers")
+    network.add_argument('--dec_deep_context', action='store_true',
+                         help="pass context vector (from first layer) to deep decoder layers")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")

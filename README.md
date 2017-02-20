@@ -10,6 +10,7 @@ The changes to Nematus include:
 
  - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
  - ensemble decoding (and new translation API to support it)
+ - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
  - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
@@ -136,7 +137,7 @@ execute nematus/nmt.py to train a model.
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 | --enc_depth INT | number of encoder layers (default: 1) |
 | --dec_depth INT | number of decoder layers (default: 1) |
-| --deep_include_ctx | include context in deep decoder layers |
+| --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
 
 #### training parameters
 | parameter            | description |
