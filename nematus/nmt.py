@@ -252,7 +252,7 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                  profile=profile)
 
     ## bidirectional levels before merge
-    for level in range(2, min(options['enc_depth'] + 1, options['merge_depth'])):
+    for level in range(2, min(options['enc_depth'] + 1, options['enc_merge_depth'])):
         prefix_f = pp('encoder', level)
         prefix_r = pp('encoder_r', level)
         dropout_probability_below = options['dropout_hidden']
@@ -286,7 +286,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
 
     ## forward levels after merge (run on context)
-    for level in range(options['merge_depth'], options['enc_depth'] + 1):
+    # if enc_merge_depth < 2, all levels except the first are merged
+    for level in range(max(2, options['enc_merge_depth']), options['enc_depth'] + 1):
         dropout_probability_below = options['dropout_hidden']
         dropout_probability_rec = options['dropout_hidden']
 
@@ -295,7 +296,7 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                    mask=x_mask,
                                                    dropout_probability_below=options['dropout_hidden'],
                                                    dropout_probability_rec=options['dropout_hidden'],
-                                                   profile=profile)
+                                                   profile=profile)[0]
 
     return x, ctx
 
@@ -942,7 +943,7 @@ def train(dim_word=512,  # word vector dimensionality
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
-          merge_depth=1, # on which level to merge passes from each direction (continue with forward steps)
+          enc_merge_depth=1, # on which level to merge passes from each direction (continue with forward steps)
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
