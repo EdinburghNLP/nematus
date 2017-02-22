@@ -11,7 +11,7 @@ def matmul3d(x3d, matrix):
     mat_shape = tf.shape(matrix)
     x2d = tf.reshape(x3d, [shape[0]*shape[1], shape[2]])
     result2d = tf.matmul(x2d, matrix)
-    result3d = tf.reshape(x2d, [shape[0], shape[1], mat_shape[1]])
+    result3d = tf.reshape(result2d, [shape[0], shape[1], mat_shape[1]])
     return result3d
 
 class FeedForwardLayer(object):
@@ -25,6 +25,7 @@ class FeedForwardLayer(object):
         self.non_linearity = non_linearity
         self.input_is_3d = input_is_3d
 
+    #TODO: Possible move input_is_3d to here
     def forward(self, x):
         if self.input_is_3d:
             y = matmul3d(x, self.W) + self.b
@@ -61,7 +62,9 @@ class RecurrentLayer(object):
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
-                 state_size):
+                 state_size,
+                 input_comes_premultiplied=False):
+        self.input_comes_premultiplied = input_comes_premultiplied #TODO
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
                                     [ortho_weight(state_size),
@@ -155,6 +158,35 @@ class AttentionStep(object):
         attention_context = tf.reduce_sum(attention_context, axis=0, keep_dims=False)
 
         return attention_context
+
+class Masked_cross_entropy_loss(object):
+    def __init__(self,
+                 y_true,
+                 y_mask):
+        self.y_true = tf.reshape(y_true, shape=[-1])
+        self.y_mask = y_mask
+
+
+    def forward(self, logits):
+        # TODO: maybe first select the important logits and then compute cost? -- efficiency
+        log_probs = tf.nn.log_softmax(logits, dim=-1)
+        log_probs = tf.reshape(log_probs, shape=[-1])
+        num_classes = tf.shape(logits)[-1] # assumes shape ... x num_classes
+        num_logits = tf.size(logits)
+        indices = tf.range(start=0, limit=num_logits, delta=num_classes) # limit is excluded
+        indices = indices + self.y_true
+        log_probs = tf.gather(log_probs, indices)
+        log_probs = tf.reshape(log_probs, shape=tf.shape(self.y_mask))
+        log_probs *= self.y_mask
+
+        cost = tf.reduce_sum(log_probs, axis=0, keep_dims=False)
+        cost = -cost # shape is [batch]
+
+        return cost
+
+
+
+
         
 
         
