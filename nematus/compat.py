@@ -39,3 +39,5 @@ def fill_options(options):
         options['enc_depth_bidirectional'] = options['enc_depth']
     if not 'output_depth' in options:
         options['output_depth'] = 1
+    if not 'output_hidden_layers' in options:
+        options['output_hidden_layers'] = 0
