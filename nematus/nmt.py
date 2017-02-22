@@ -192,6 +192,16 @@ def init_params(options):
                                 nin=ctxdim, nout=options['dim_word'],
                                 ortho=False)
 
+    # deep output
+    for level in range(options['output_hidden_layers']):
+        if level == 0:
+            prefix = 'ff_deep_output'
+        else:
+            prefix = pp('ff_deep_output', level)
+        params = get_layer_param('ff')(options, params, prefix=prefix,
+                                       nin=options['dim_word'],
+                                       nout=options['dim_word'],
+                                       ortho=False)
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
@@ -413,6 +423,19 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
+
+    # deep output (with tanh activations)
+    for level in range(options['output_hidden_layers']):
+        if level == 0:
+            prefix = 'ff_deep_output'
+        else:
+            prefix = pp('ff_deep_output', level)
+
+        logit = get_layer_constr('ff')(tparams, logit, options, dropout,
+                                       dropout_probability=options['dropout_hidden'],
+                                       prefix=prefix)
+
+    # last layer
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
     logit = get_layer_constr('ff')(tparams, logit, options, dropout,
                             dropout_probability=options['dropout_hidden'],
@@ -944,6 +967,7 @@ def train(dim_word=512,  # word vector dimensionality
           dec_depth=1, # number of layers in the decoder
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
           enc_merge_depth=1, # on which level to merge passes from each direction (continue with forward steps)
+          output_hidden_layers=1, # number of layers in deep output
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
@@ -1593,6 +1617,8 @@ if __name__ == '__main__':
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--enc_merge_depth', type=int, default=1, metavar='INT',
                          help="encoder depth in which the independent bidirectional passes will be merged")
+    network.add_argument('--output_hidden_layers', type=int, default=0, metavar='INT',
+                         help="number of deep output hidden layers (default: %(default)s)")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")
