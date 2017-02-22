@@ -140,7 +140,7 @@ def init_params(options):
             prefix_f = pp('encoder', level)
             prefix_r = pp('encoder_r', level)
 
-            if level < options['enc_merge_depth']:
+            if level <= options['enc_depth_bidirectional']:
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_f,
                                                              nin=options['dim'],
@@ -253,20 +253,20 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                 mask=x_mask,
                                                 dropout_probability_below=options['dropout_embedding'],
                                                 dropout_probability_rec=options['dropout_hidden'],
+                                                truncate_gradient=options['encoder_truncate_gradient'],
                                                 profile=profile)
     projr = get_layer_constr(options['encoder'])(tparams, embr, options, dropout,
                                                  prefix='encoder_r',
                                                  mask=xr_mask,
                                                  dropout_probability_below=options['dropout_embedding'],
                                                  dropout_probability_rec=options['dropout_hidden'],
+                                                 truncate_gradient=options['encoder_truncate_gradient'],
                                                  profile=profile)
 
     ## bidirectional levels before merge
-    for level in range(2, min(options['enc_depth'] + 1, options['enc_merge_depth'])):
+    for level in range(2, options['enc_depth_bidirectional'] + 1):
         prefix_f = pp('encoder', level)
         prefix_r = pp('encoder_r', level)
-        dropout_probability_below = options['dropout_hidden']
-        dropout_probability_rec = options['dropout_hidden']
 
         # run forward on previous backward and backward on previous forward
         input_f = projr[0][::-1]
@@ -275,15 +275,15 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
         proj = get_layer_constr(options['encoder'])(tparams, input_f, options, dropout,
                                                     prefix=prefix_f,
                                                     mask=x_mask,
-                                                    dropout_probability_below=dropout_probability_below,
-                                                    dropout_probability_rec=dropout_probability_rec,
+                                                    dropout_probability_below=options['dropout_hidden'],
+                                                    dropout_probability_rec=options['dropout_hidden'],
                                                     truncate_gradient=options['encoder_truncate_gradient'],
                                                     profile=profile)
         projr = get_layer_constr(options['encoder'])(tparams, input_r, options, dropout,
                                                      prefix=prefix_r,
                                                      mask=xr_mask,
-                                                     dropout_probability_below=dropout_probability_below,
-                                                     dropout_probability_rec=dropout_probability_rec,
+                                                     dropout_probability_below=options['dropout_hidden'],
+                                                     dropout_probability_rec=options['dropout_hidden'],
                                                      truncate_gradient=options['encoder_truncate_gradient'],
                                                      profile=profile)
 
@@ -295,17 +295,15 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
     # context will be the concatenation of forward and backward rnns
     ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
 
-    ## forward levels after merge (run on context)
-    # if enc_merge_depth < 2, all levels except the first are merged
-    for level in range(max(2, options['enc_merge_depth']), options['enc_depth'] + 1):
-        dropout_probability_below = options['dropout_hidden']
-        dropout_probability_rec = options['dropout_hidden']
+    ## forward encoder layers after bidirectional layers are concatenated
+    for level in range(options['enc_depth_bidirectional'] + 1, options['enc_depth'] + 1):
 
         ctx = get_layer_constr(options['encoder'])(tparams, ctx, options, dropout,
                                                    prefix=pp('encoder', level),
                                                    mask=x_mask,
                                                    dropout_probability_below=options['dropout_hidden'],
                                                    dropout_probability_rec=options['dropout_hidden'],
+                                                   truncate_gradient=options['encoder_truncate_gradient'],
                                                    profile=profile)[0]
 
     return x, ctx
@@ -966,7 +964,7 @@ def train(dim_word=512,  # word vector dimensionality
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
-          enc_merge_depth=1, # on which level to merge passes from each direction (continue with forward steps)
+          enc_depth_bidirectional=None, # first n encoder layers are bidirectional (default: all)
           output_hidden_layers=1, # number of layers in deep output
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
@@ -1035,7 +1033,6 @@ def train(dim_word=512,  # word vector dimensionality
     # Model options
     model_options = locals().copy()
 
-
     if model_options['dim_per_factor'] == None:
         if factors == 1:
             model_options['dim_per_factor'] = [model_options['dim_word']]
@@ -1047,6 +1044,11 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
     assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
+
+    if model_options['enc_depth_bidirectional'] is None:
+        model_options['enc_depth_bidirectional'] = model_options['enc_depth']
+    # first layer is always bidirectional; make sure people don't forget to increase enc_depth as well
+    assert(model_options['enc_depth_bidirectional'] >= 1 and model_options['enc_depth_bidirectional'] <= model_options['enc_depth'])
 
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
@@ -1615,8 +1617,8 @@ if __name__ == '__main__':
                          help="number of decoder layers (default: %(default)s)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
-    network.add_argument('--enc_merge_depth', type=int, default=1, metavar='INT',
-                         help="encoder depth in which the independent bidirectional passes will be merged")
+    network.add_argument('--enc_depth_bidirectional', type=int, default=None, metavar='INT',
+                         help="number of bidirectional encoder layer; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional.")
     network.add_argument('--output_hidden_layers', type=int, default=0, metavar='INT',
                          help="number of deep output hidden layers (default: %(default)s)")
 

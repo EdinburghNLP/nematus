@@ -136,6 +136,7 @@ execute nematus/nmt.py to train a model.
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 | --enc_depth INT | number of encoder layers (default: 1) |
+| --enc_depth_bidirectional | number of bidirectional encoder layers; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional. |
 | --dec_depth INT | number of decoder layers (default: 1) |
 | --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
 
