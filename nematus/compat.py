@@ -36,6 +36,6 @@ def fill_options(options):
     if not 'decoder_truncate_gradient' in options:
         options['decoder_truncate_gradient'] = -1
     if not 'enc_depth_bidirectional' in options:
-        options['enc_depth_bidirectional'] = None
+        options['enc_depth_bidirectional'] = options['enc_depth']
     if not 'output_depth' in options:
         options['output_depth'] = 1
