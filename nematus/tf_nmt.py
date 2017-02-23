@@ -105,11 +105,15 @@ def test_forward_step(config):
 #    return source_vocab, target_vocab
 
 def train(config):
+    print 'Building model'
     model = StandardModel(config)
 
     x,x_mask,y,y_mask = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
     mean_loss = tf.reduce_mean(loss_per_sentence, keep_dims=False)
+    print 'Getting samples'
+    sampled_ys = model.get_samples()
+    print 'Done'
 
     optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
     t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
@@ -174,6 +178,12 @@ def train(config):
                 if uidx % config.saveFreq == 0:
                     saver.save(sess, save_path=config.saveto, global_step=uidx)
 
+                if uidx % config.sampleFreq == 0:
+                    print 'TIME TO SAMPLE'
+                    samples = sess.run(sampled_ys, feed_dict=inn)
+                    print 'Samples are:'
+                    print samples
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -226,6 +236,8 @@ def parse_args():
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
                          help="display loss after INT updates (default: %(default)s)")
+    display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
+                         help="display some samples after INT updates (default: %(default)s)")
 
 
     config = parser.parse_args()

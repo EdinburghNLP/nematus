@@ -17,8 +17,10 @@ class Decoder(object):
                                         in_size=config.state_size * 2,
                                         out_size=config.state_size)
             self.init_state = self.init_state_layer.forward(context_mean)
-            init_attended_context = tf.zeros([tf.shape(self.init_state)[0], config.state_size*2])
-            self.init_state = (self.init_state, init_attended_context)
+
+            self.maxlen = config.maxlen
+            self.embedding_size = config.embedding_size
+            self.state_size = config.state_size
 
         with tf.name_scope("y_embeddings_layer"):
             self.y_emb_layer = EmbeddingLayer(
@@ -39,57 +41,82 @@ class Decoder(object):
                             state_size=config.state_size)
 
     def sample(self):
-       ##use self.init_state
-       #def cond(loop_vars):
-       #    i, states, prev_ys, prev_embs = loop_vars
-       #    return tf.logical_and(
-       #            tf.less(i, maxlen),
-       #            tf.reduce_all(tf.equal(prev_ys, 0))) #tf.zeros(shape=tf.shape(prev_ys), dtype=tf.int32))))
+       batch_size = tf.shape(self.init_state)[0]
+       i = tf.constant(0)
+       init_ys = -tf.ones(dtype=tf.int32, shape=[batch_size])
+       init_embs = tf.zeros(dtype=tf.float32, shape=[batch_size,self.embedding_size])
+       ys_array = tf.TensorArray(
+                    dtype=tf.int32,
+                    size=self.maxlen,
+                    clear_after_read=False,
+                    name='y_sampled_array')
+       init_loop_vars = [i, self.init_state, init_ys, init_embs, ys_array]
+       def cond(i, states, prev_ys, prev_embs, ys_array):
+           i = tf.Print(i, [i], "in the loop")
+           return tf.logical_and(
+                   tf.less(i, self.maxlen),
+                   tf.reduce_any(tf.not_equal(prev_ys, 0)))
 
-       #def body(loop_vars):
-       #    i, states, prev_ys, prev_embs = loop_vars
-       #    new_states1 = gru_layer1.forward(states, prev_embs)
-       #    att_ctx = att_layer.forward(new_states1)
-       #    new_states2 = gru_layer2.forward(new_state1, att_ctx)
-       #    logits = prediction_layer.forward(states, prev_embs, att_ctx)
-       #    new_ys = tf.multinomial(logits, num_samples=1)
-       #    new_ys = tf.squeeze(new_ys, axis=1)
-       #    new_ys = tf.where(tf.equal(prev_ys, 0), 0, new_ys)
-       #    new_embs = embs_layer.forward(new_ys)
-       #    return i+1, new_states2, new_ys, new_embs
+       def body(i, states, prev_ys, prev_embs, ys_array):
+           new_states1 = self.grustep1.forward(states, prev_embs)
+           att_ctx = self.attstep.forward(new_states1)
+           new_states2 = self.grustep2.forward(new_states1, att_ctx)
+           logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
+           new_ys = tf.multinomial(logits, num_samples=1)
+           new_ys = tf.cast(new_ys, dtype=tf.int32)
+           new_ys = tf.squeeze(new_ys, axis=1)
+           new_ys = tf.where(
+                   tf.equal(prev_ys, tf.constant(0, dtype=tf.int32)),
+                   tf.zeros_like(new_ys),
+                   new_ys)
+           ys_array = ys_array.write(index=i, value=new_ys)
+           new_embs = self.y_emb_layer.forward(new_ys)
+           return i+1, new_states2, new_ys, new_embs, ys_array
 
-       #_, _, ys, _ = tf.while_loop(
-       #                    cond=cond,
-       #                    body=body,
-       #                    loop_vars=loop_vars
-       #                    back_prop=False)
-       #sampled_ys = ys.stack() # seqLen X batch -- has trailing zeros
-       #return sampled_ys
-       pass
+       final_loop_vars = tf.while_loop(
+                           cond=cond,
+                           body=body,
+                           loop_vars=init_loop_vars,
+                           back_prop=False)
+       i, _, _, _, ys_array = final_loop_vars
+       sampled_ys = ys_array.gather(tf.range(0, i))
+       return sampled_ys
 
-    def beam_search(self, context, x_mask, maxlen, beam_size):
-        """
-        Strategy:
-            tile context and init_state
-            compute the log_probs
-            add previous cost to log_probs
-            flatten cost
-            set cost of class 0 to 0 for each beam that has already ended
-            e.g. tf.where(mask == True, 0, cost)
-            run top k -> (idxs, values)
-            use values as new costs
-            divide idxs by num_classes to get state_idxs
-            use gather to get new states
-            take the remainder of idxs after num_classes to get new_predicted words
-            use gather to get new mask
-            update the mask (finished?) according to new_predicted_words, e.g. tf.logical_or(mask, tf.equal(new_predicted_words, 0))
-        Now try to do in batches:
-        mask.shape (batch, beam)
-        log_probs.shape(batch, beam, num_classes)
-        context.shape (seqLen, batch, emb_size)
-        """
-          
-        return None #beam_ys
+#   def beam_search(self, context, x_mask, maxlen, beam_size):
+
+#       def cond(i, states, prev_ys, prev_embs, ys_array):
+#           # states are of the shape (batch x beam, state_size)
+#           # prev_ys (batch x beam, target_vocab_size)
+#           # prev_embs (batch x beam, embedding_size)
+#           
+#           i = tf.Print(i, [i], "in the loop")
+#           return tf.logical_and(
+#                   tf.less(i, self.maxlen),
+#                   tf.reduce_any(tf.not_equal(prev_ys, 0)))
+#       """
+#       Strategy:
+#           tile context and init_state - do this by reshape, tile, reshape
+#           compute the log_probs - same as with sampling
+#           add previous cost to log_probs
+#           flatten cost
+#           set cost of class 0 to 0 for each beam that has already ended
+#           e.g. by:
+#               create new costs where cost of eos is 0
+#               use tf.where(mask == True, new_cost, cost)
+#           run top k -> (idxs, values)
+#           use values as new costs
+#           divide idxs by num_classes to get state_idxs
+#           use gather to get new states
+#           take the remainder of idxs after num_classes to get new_predicted words
+#           use gather to get new mask
+#           update the mask (finished?) according to new_predicted_words, e.g. tf.logical_or(mask, tf.equal(new_predicted_words, 0))
+#       Now try to do in batches:
+#       mask.shape (batch, beam)
+#       log_probs.shape(batch, beam, num_classes)
+#       context.shape (seqLen, batch, emb_size)
+#       """
+#         
+#       return None #beam_ys
 
     def score(self, y):
         with tf.name_scope("y_embeddings_layer"):
@@ -99,6 +126,8 @@ class Decoder(object):
                             mode='CONSTANT',
                             paddings=[[1,0],[0,0],[0,0]]) # prepend zeros
 
+        init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
+        init_state_att_ctx = (self.init_state, init_attended_context)
         def step_fn(prev, x):
             prev_state = prev[0]
             prev_att_ctx = prev[1]
@@ -109,7 +138,7 @@ class Decoder(object):
             return (state, att_ctx)
 
         states, attended_states = RecurrentLayer(
-                                    initial_state=self.init_state,
+                                    initial_state=init_state_att_ctx,
                                     step_fn=step_fn).forward(y_embs)
         logits = self.predictor.get_logits(y_embs, states, attended_states, multi_step=True)
         return logits
@@ -236,4 +265,7 @@ class StandardModel(object):
     
     def get_loss(self):
         return self.loss_per_sentence
+
+    def get_samples(self):
+        return self.decoder.sample()
 
