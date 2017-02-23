@@ -79,7 +79,9 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
 
     for i, line in enumerate(target_lines):
         score_str = ' '.join(map(str,[s[i] for s in scores]))
-        saveto.write('{0} {1}\n'.format(line.strip(), score_str))
+        if verbose:
+            saveto.write('{0} '.format(line.strip()))
+        saveto.write('{0}\n'.format(score_str))
 
     ### optional save weights mode.
     if alignweights:
