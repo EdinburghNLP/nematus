@@ -429,7 +429,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         else:
             prefix = pp('ff_deep_output', level)
 
-        logit = get_layer_constr('ff')(tparams, logit, options, dropout,
+        logit += get_layer_constr('ff')(tparams, logit, options, dropout,
                                        dropout_probability=options['dropout_hidden'],
                                        prefix=prefix)
 
