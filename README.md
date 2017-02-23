@@ -139,6 +139,7 @@ execute nematus/nmt.py to train a model.
 | --enc_depth_bidirectional | number of bidirectional encoder layers; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional. |
 | --dec_depth INT | number of decoder layers (default: 1) |
 | --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
+| --output_depth | number of deep output layers (default: 1)
 
 #### training parameters
 | parameter            | description |
