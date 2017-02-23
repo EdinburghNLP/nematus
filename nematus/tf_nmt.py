@@ -105,8 +105,10 @@ def test_forward_step(config):
 #    return source_vocab, target_vocab
 
 def train(config):
-    x,x_mask,y,y_mask,logits=build_model(config)
-    loss_per_sentence = Masked_cross_entropy_loss(y, y_mask).forward(logits)
+    model = StandardModel(config)
+
+    x,x_mask,y,y_mask = model.get_score_inputs()
+    loss_per_sentence = model.get_loss()
     mean_loss = tf.reduce_mean(loss_per_sentence, keep_dims=False)
 
     optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)

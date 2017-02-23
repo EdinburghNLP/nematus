@@ -18,16 +18,13 @@ class FeedForwardLayer(object):
     def __init__(self,
                  in_size,
                  out_size,
-                 non_linearity=tf.nn.tanh,
-                 input_is_3d=False):
+                 non_linearity=tf.nn.tanh):
         self.W = tf.Variable(norm_weight(in_size, out_size), name='W')
         self.b = tf.Variable(numpy.zeros((out_size,)).astype('float32'), name='b')
         self.non_linearity = non_linearity
-        self.input_is_3d = input_is_3d
 
-    #TODO: Possible move input_is_3d to here
-    def forward(self, x):
-        if self.input_is_3d:
+    def forward(self, x, input_is_3d=False):
+        if input_is_3d:
             y = matmul3d(x, self.W) + self.b
         else:
             y = tf.matmul(x, self.W) + self.b
