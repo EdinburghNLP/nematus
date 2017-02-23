@@ -298,7 +298,7 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
     ## forward encoder layers after bidirectional layers are concatenated
     for level in range(options['enc_depth_bidirectional'] + 1, options['enc_depth'] + 1):
 
-        ctx = get_layer_constr(options['encoder'])(tparams, ctx, options, dropout,
+        ctx += get_layer_constr(options['encoder'])(tparams, ctx, options, dropout,
                                                    prefix=pp('encoder', level),
                                                    mask=x_mask,
                                                    dropout_probability_below=options['dropout_hidden'],
