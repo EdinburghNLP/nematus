@@ -26,4 +26,19 @@ def fill_options(options):
         options['encoder_truncate_gradient'] = -1
     if not 'decoder_truncate_gradient' in options:
         options['decoder_truncate_gradient'] = -1
+    if not 'reload_training_progress' in options:
+        options['reload_training_progress'] = True
+    if not 'use_domain_interpolation' in options:
+        options['use_domain_interpolation'] = False
+    if not 'domain_interpolation_min' in options:
+        options['decoder_truncate_gradient'] = 0.1
+    if not 'domain_interpolation_max' in options:
+        options['decoder_truncate_gradient'] = 1.0
+    if not 'domain_interpolation_inc' in options:
+        options['decoder_truncate_gradient'] = 0.1
+    if not 'domain_interpolation_indomain_datasets' in options:
+        options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
+
+
+
 
