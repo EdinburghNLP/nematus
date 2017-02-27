@@ -14,7 +14,6 @@ import copy
 import argparse
 
 import os
-import warnings
 import sys
 import time
 
@@ -166,7 +165,8 @@ def init_params(options):
                                               prefix='decoder',
                                               nin=options['dim_word'],
                                               dim=options['dim'],
-                                              dimctx=ctxdim)
+                                              dimctx=ctxdim,
+                                              recurrence_transition_depth=options['dec_base_recurrence_transition_depth'])
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
@@ -352,6 +352,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                             pctx_=pctx_,
                                             one_step=one_step,
                                             init_state=init_state[0],
+                                            recurrence_transition_depth=options['dec_base_recurrence_transition_depth'],
                                             dropout_probability_below=options['dropout_embedding'],
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
@@ -958,6 +959,7 @@ def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
+          dec_base_recurrence_transition_depth=2, # number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond)
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
           enc_depth_bidirectional=None, # first n encoder layers are bidirectional (default: all)
           output_depth=1, # number of layers in deep output
@@ -1039,6 +1041,7 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
     assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
+    assert(dec_base_recurrence_transition_depth >= 2) # recurrence transition depth must be at least 2.
 
     if model_options['enc_depth_bidirectional'] is None:
         model_options['enc_depth_bidirectional'] = model_options['enc_depth']
@@ -1613,6 +1616,8 @@ if __name__ == '__main__':
                          help="number of encoder layers (default: %(default)s)")
     network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
                          help="number of decoder layers (default: %(default)s)")
+    network.add_argument('--dec_base_recurrence_transition_depth', type=int, default=2, metavar='INT',
+                         help="number of GRU transition operations applied in the first layer of the decoder. Minimum is 2.  (Only applies to gru_cond). (default: %(default)s)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--enc_depth_bidirectional', type=int, default=None, metavar='INT',

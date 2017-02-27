@@ -26,6 +26,8 @@ def fill_options(options):
         options['enc_depth'] = 1
     if not 'dec_depth' in options:
         options['dec_depth'] = 1
+    if not 'dec_base_recurrence_transition_depth' in options:
+        options['dec_base_recurrence_transition_depth'] = 2
     if not 'dec_deep_context' in options:
         if 'deep_include_ctx' in options:
            options['dec_deep_context'] = options['deep_include_ctx']

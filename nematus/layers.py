@@ -275,7 +275,8 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
-                        nin_nonlin=None, dim_nonlin=None):
+                        nin_nonlin=None, dim_nonlin=None,
+                        recurrence_transition_depth=2):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -301,14 +302,16 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     params[pp(prefix, 'Ux')] = Ux
     params[pp(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
 
-    U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
+    for i in xrange(recurrence_transition_depth - 1):
+        suffix = '' if i == 0 else ('_drt_%s' % i)
+        U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
                               ortho_weight(dim_nonlin)], axis=1)
-    params[pp(prefix, 'U_nl')] = U_nl
-    params[pp(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
+        params[pp(prefix, 'U_nl'+suffix)] = U_nl
+        params[pp(prefix, 'b_nl'+suffix)] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
 
-    Ux_nl = ortho_weight(dim_nonlin)
-    params[pp(prefix, 'Ux_nl')] = Ux_nl
-    params[pp(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
+        Ux_nl = ortho_weight(dim_nonlin)
+        params[pp(prefix, 'Ux_nl'+suffix)] = Ux_nl
+        params[pp(prefix, 'bx_nl'+suffix)] = numpy.zeros((dim_nonlin,)).astype('float32')
 
     # context to LSTM
     Wc = norm_weight(dimctx, dim*2)
@@ -346,6 +349,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    dropout_probability_ctx=0,
                    dropout_probability_rec=0,
                    pctx_=None,
+                   recurrence_transition_depth=2,
                    truncate_gradient=-1,
                    profile=False,
                    **kwargs):
@@ -369,7 +373,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     dim = tparams[pp(prefix, 'Wcx')].shape[1]
 
-    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=5)
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num= 1 + 2 * recurrence_transition_depth)
     below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
     ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=4)
 
@@ -396,7 +400,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
-                    U_nl, Ux_nl, b_nl, bx_nl):
+                    *nl_params):
+#                    U_nl, Ux_nl, b_nl, bx_nl):
 
         preact1 = tensor.dot(h_*rec_dropout[0], U)
         preact1 += x_
@@ -427,21 +432,27 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         alpha = alpha / alpha.sum(0, keepdims=True)
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
-        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
-        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
-        preact2 = tensor.nnet.sigmoid(preact2)
+        h2_prev = h1
+        for i in xrange(recurrence_transition_depth - 1):
+            U_nl, Ux_nl, b_nl, bx_nl = nl_params[4*i], nl_params[4*i+1], nl_params[4*i+2], nl_params[4*i+3]
+            preact2 = tensor.dot(h2_prev*rec_dropout[3+2*i], U_nl)+b_nl
+            if i == 0:
+                preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
+            preact2 = tensor.nnet.sigmoid(preact2)
 
-        r2 = _slice(preact2, 0, dim)
-        u2 = _slice(preact2, 1, dim)
+            r2 = _slice(preact2, 0, dim)
+            u2 = _slice(preact2, 1, dim)
 
-        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
-        preactx2 *= r2
-        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
+            preactx2 = tensor.dot(h2_prev*rec_dropout[4+2*i], Ux_nl)+bx_nl
+            preactx2 *= r2
+            if i == 0:
+                preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
 
-        h2 = tensor.tanh(preactx2)
+            h2 = tensor.tanh(preactx2)
 
-        h2 = u2 * h1 + (1. - u2) * h2
-        h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
+            h2 = u2 * h2_prev + (1. - u2) * h2
+            h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h2_prev
+            h2_prev = h2
 
         return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
 
@@ -460,6 +471,11 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    tparams[pp(prefix, 'Ux_nl')],
                    tparams[pp(prefix, 'b_nl')],
                    tparams[pp(prefix, 'bx_nl')]]
+    for i in xrange(1, recurrence_transition_depth - 1):
+        shared_vars.append(tparams[pp(prefix, ('U_nl_drt_%s' % i))])
+        shared_vars.append(tparams[pp(prefix, ('Ux_nl_drt_%s' % i))])
+        shared_vars.append(tparams[pp(prefix, ('b_nl_drt_%s' % i))])
+        shared_vars.append(tparams[pp(prefix, ('bx_nl_drt_%s' % i))])
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
@@ -482,7 +498,9 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
 def param_init_gru_local(options, params, prefix='gru_local',
                         nin=None, dim=None, dimctx=None,
-                        nin_nonlin=None, dim_nonlin=None):
+                        nin_nonlin=None, dim_nonlin=None,
+                        recurrence_transition_depth=None # ignored
+                        ):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -558,7 +576,7 @@ def param_init_gru_local(options, params, prefix='gru_local',
 def gru_local_layer(tparams, state_below, options, dropout, prefix='gru',
                    mask=None, context=None, one_step=False,
                    init_memory=None, init_state=None,
-                   context_mask=None, 
+                   context_mask=None,
                    dropout_probability_below=0,
                    dropout_probability_ctx=0,
                    dropout_probability_rec=0,
