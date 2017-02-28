@@ -385,6 +385,9 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
             else:
                 input_ = next_state
 
+            if options['decoder_deep'] == 'gru_cond_reuse_att':
+                ctx = ctxs # we pass pre-computed context vectors to deep layer
+
             out_state = get_layer_constr(options['decoder_deep'])(tparams, input_, options, dropout,
                                               prefix=pp('decoder', level),
                                               mask=y_mask,
@@ -1650,7 +1653,7 @@ if __name__ == '__main__':
                          choices=['gru_cond', 'gru_local'],
                          help='first decoder recurrent layer')
     network.add_argument('--decoder_deep', type=str, default='gru',
-                         choices=['gru', 'gru_cond'],
+                         choices=['gru', 'gru_cond', 'gru_cond_reuse_att'],
                          help='decoder recurrent layer after first one')
 
     training = parser.add_argument_group('training parameters')

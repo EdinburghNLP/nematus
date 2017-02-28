@@ -20,6 +20,7 @@ from alignment_util import *
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
+          'gru_cond_reuse_att': ('param_init_gru_cond_reuse_att', 'gru_cond_layer_reuse_att'),
           'gru_local': ('param_init_gru_local', 'gru_local_layer'),
           'embedding': {'param_init_embedding_layer', 'embedding_layer'}
           }
@@ -479,6 +480,172 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                                     profile=profile,
                                     strict=True)
     return rval
+
+
+
+# Conditional GRU layer with Attention (but reusing attention)
+def param_init_gru_cond_reuse_att(options, params, prefix='gru_cond',
+                        nin=None, dim=None, dimctx=None,
+                        nin_nonlin=None, dim_nonlin=None):
+    if nin is None:
+        nin = options['dim']
+    if dim is None:
+        dim = options['dim']
+    if dimctx is None:
+        dimctx = options['dim']
+    if nin_nonlin is None:
+        nin_nonlin = nin
+    if dim_nonlin is None:
+        dim_nonlin = dim
+
+    W = numpy.concatenate([norm_weight(nin, dim),
+                           norm_weight(nin, dim)], axis=1)
+    params[pp(prefix, 'W')] = W
+    params[pp(prefix, 'b')] = numpy.zeros((2 * dim,)).astype('float32')
+    U = numpy.concatenate([ortho_weight(dim_nonlin),
+                           ortho_weight(dim_nonlin)], axis=1)
+    params[pp(prefix, 'U')] = U
+
+    Wx = norm_weight(nin_nonlin, dim_nonlin)
+    params[pp(prefix, 'Wx')] = Wx
+    Ux = ortho_weight(dim_nonlin)
+    params[pp(prefix, 'Ux')] = Ux
+    params[pp(prefix, 'bx')] = numpy.zeros((dim_nonlin,)).astype('float32')
+
+    U_nl = numpy.concatenate([ortho_weight(dim_nonlin),
+                              ortho_weight(dim_nonlin)], axis=1)
+    params[pp(prefix, 'U_nl')] = U_nl
+    params[pp(prefix, 'b_nl')] = numpy.zeros((2 * dim_nonlin,)).astype('float32')
+
+    Ux_nl = ortho_weight(dim_nonlin)
+    params[pp(prefix, 'Ux_nl')] = Ux_nl
+    params[pp(prefix, 'bx_nl')] = numpy.zeros((dim_nonlin,)).astype('float32')
+
+    # context to LSTM
+    Wc = norm_weight(dimctx, dim*2)
+    params[pp(prefix, 'Wc')] = Wc
+
+    Wcx = norm_weight(dimctx, dim)
+    params[pp(prefix, 'Wcx')] = Wcx
+
+    return params
+
+
+def gru_cond_layer_reuse_att(tparams, state_below, options, dropout, prefix='gru',
+                   mask=None, context=None, one_step=False,
+                   init_memory=None, init_state=None,
+                   dropout_probability_below=0,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0,
+                   truncate_gradient=-1,
+                   profile=False,
+                   **kwargs):
+
+    assert context, 'Context must be provided'
+
+    if one_step:
+        assert init_state, 'previous state must be provided'
+
+    nsteps = state_below.shape[0]
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
+    else:
+        n_samples = 1
+        dim_below = state_below.shape[1]
+
+    # mask
+    if mask is None:
+        mask = tensor.alloc(1., state_below.shape[0], 1)
+
+    dim = tparams[pp(prefix, 'Wcx')].shape[1]
+
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=5)
+    below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
+    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=2)
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.alloc(0., n_samples, dim)
+
+    def _slice(_x, n, dim):
+        if _x.ndim == 3:
+            return _x[:, :, n*dim:(n+1)*dim]
+        return _x[:, n*dim:(n+1)*dim]
+
+    # state_below is the previous output word embedding
+    state_belowx = tensor.dot(state_below*below_dropout[0], tparams[pp(prefix, 'Wx')]) +\
+        tparams[pp(prefix, 'bx')]
+    state_below_ = tensor.dot(state_below*below_dropout[1], tparams[pp(prefix, 'W')]) +\
+        tparams[pp(prefix, 'b')]
+
+    def _step_slice(m_, x_, xx_, ctx_, h_, rec_dropout, ctx_dropout,
+                    U, Wc, Ux, Wcx,
+                    U_nl, Ux_nl, b_nl, bx_nl):
+
+        preact1 = tensor.dot(h_*rec_dropout[0], U)
+        preact1 += x_
+        preact1 = tensor.nnet.sigmoid(preact1)
+
+        r1 = _slice(preact1, 0, dim)
+        u1 = _slice(preact1, 1, dim)
+
+        preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
+        preactx1 *= r1
+        preactx1 += xx_
+
+        h1 = tensor.tanh(preactx1)
+
+        h1 = u1 * h_ + (1. - u1) * h1
+        h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
+
+        preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
+        preact2 += tensor.dot(ctx_*ctx_dropout[0], Wc)
+        preact2 = tensor.nnet.sigmoid(preact2)
+
+        r2 = _slice(preact2, 0, dim)
+        u2 = _slice(preact2, 1, dim)
+
+        preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
+        preactx2 *= r2
+        preactx2 += tensor.dot(ctx_*ctx_dropout[1], Wcx)
+
+        h2 = tensor.tanh(preactx2)
+
+        h2 = u2 * h1 + (1. - u2) * h2
+        h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
+
+        return h2
+
+    seqs = [mask, state_below_, state_belowx, context]
+    #seqs = [mask, state_below_, state_belowx, state_belowc]
+    _step = _step_slice
+
+    shared_vars = [tparams[pp(prefix, 'U')],
+                   tparams[pp(prefix, 'Wc')],
+                   tparams[pp(prefix, 'Ux')],
+                   tparams[pp(prefix, 'Wcx')],
+                   tparams[pp(prefix, 'U_nl')],
+                   tparams[pp(prefix, 'Ux_nl')],
+                   tparams[pp(prefix, 'b_nl')],
+                   tparams[pp(prefix, 'bx_nl')]]
+
+    if one_step:
+        rval = _step(*(seqs + [init_state, rec_dropout, ctx_dropout] +
+                       shared_vars))
+    else:
+        rval, updates = theano.scan(_step,
+                                    sequences=seqs,
+                                    outputs_info=init_state,
+                                    non_sequences=[rec_dropout, ctx_dropout]+shared_vars,
+                                    name=pp(prefix, '_layers'),
+                                    n_steps=nsteps,
+                                    truncate_gradient=truncate_gradient,
+                                    profile=profile,
+                                    strict=True)
+    return [rval]
+
+
 
 def param_init_gru_local(options, params, prefix='gru_local',
                         nin=None, dim=None, dimctx=None,
