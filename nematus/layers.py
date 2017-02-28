@@ -149,7 +149,7 @@ def embedding_layer(tparams, ids, factors=None, prefix='', suffix=''):
     return emb
 
 # GRU layer
-def param_init_gru(options, params, prefix='gru', nin=None, dim=None):
+def param_init_gru(options, params, prefix='gru', nin=None, dim=None, **kwargs):
     if nin is None:
         nin = options['dim_proj']
     if dim is None:

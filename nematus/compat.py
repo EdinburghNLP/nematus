@@ -41,3 +41,5 @@ def fill_options(options):
         options['output_depth'] = 1
     if not 'output_depth' in options:
         options['output_depth'] = 1
+    if not 'decoder_deep' in options:
+        options['decoder_deep'] = 'gru'

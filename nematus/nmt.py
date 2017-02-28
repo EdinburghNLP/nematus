@@ -176,10 +176,11 @@ def init_params(options):
             input_dim = options['dim']
 
         for level in range(2, options['dec_depth'] + 1):
-            params = get_layer_param('gru')(options, params,
+            params = get_layer_param(options['decoder_deep'])(options, params,
                                             prefix=pp('decoder', level),
                                             nin=input_dim,
-                                            dim=options['dim'])
+                                            dim=options['dim'],
+                                            dimctx=ctxdim)
 
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
@@ -384,9 +385,12 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
             else:
                 input_ = next_state
 
-            out_state = get_layer_constr('gru')(tparams, input_, options, dropout,
+            out_state = get_layer_constr(options['decoder_deep'])(tparams, input_, options, dropout,
                                               prefix=pp('decoder', level),
                                               mask=y_mask,
+                                              context=ctx,
+                                              context_mask=x_mask,
+                                              pctx_=None, #TODO: we can speed up sampler by precomputing this
                                               one_step=one_step,
                                               init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],
@@ -965,6 +969,7 @@ def train(dim_word=512,  # word vector dimensionality
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
           decoder='gru_cond',
+          decoder_deep='gru',
           patience=10,  # early stopping patience
           max_epochs=5000,
           finish_after=10000000,  # finish after this many updates
@@ -1643,7 +1648,10 @@ if __name__ == '__main__':
                          #help='encoder recurrent layer')
     network.add_argument('--decoder', type=str, default='gru_cond',
                          choices=['gru_cond', 'gru_local'],
-                         help='decoder recurrent layer')
+                         help='first decoder recurrent layer')
+    network.add_argument('--decoder_deep', type=str, default='gru',
+                         choices=['gru', 'gru_cond'],
+                         help='decoder recurrent layer after first one')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
