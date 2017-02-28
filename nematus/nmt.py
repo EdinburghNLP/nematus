@@ -170,13 +170,8 @@ def init_params(options):
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
-        reuse_attention = False
         if options['dec_deep_context']:
-            if options['decoder_deep'] == 'gru_cond':
-                input_dim = options['dim']
-                reuse_attention = True
-            else:
-                input_dim = options['dim'] + ctxdim
+            input_dim = options['dim'] + ctxdim
         else:
             input_dim = options['dim']
 
@@ -185,8 +180,7 @@ def init_params(options):
                                             prefix=pp('decoder', level),
                                             nin=input_dim,
                                             dim=options['dim'],
-                                            dimctx=ctxdim,
-                                            reuse_attention=reuse_attention)
+                                            dimctx=ctxdim)
 
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
@@ -382,30 +376,21 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
 
-            context = None #TODO: we can speed up sampler by precomputing pctx_ for all layers
-            reuse_attention = False
             if options['dec_deep_context']:
-                if options['decoder_deep'] == 'gru_cond':
-                    input_ = next_state
-                    context = ctxs
-                    reuse_attention = True
+                if sampling:
+                    axis=1
                 else:
-                    if sampling:
-                        axis=1
-                    else:
-                        axis=2
-                    input_ = tensor.concatenate([next_state, ctxs], axis=axis)
+                    axis=2
+                input_ = tensor.concatenate([next_state, ctxs], axis=axis)
             else:
                 input_ = next_state
-
 
             out_state = get_layer_constr(options['decoder_deep'])(tparams, input_, options, dropout,
                                               prefix=pp('decoder', level),
                                               mask=y_mask,
                                               context=ctx,
                                               context_mask=x_mask,
-                                              pctx_=context,
-                                              reuse_attention=reuse_attention,
+                                              pctx_=None, #TODO: we can speed up sampler by precomputing this
                                               one_step=one_step,
                                               init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],

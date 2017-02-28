@@ -275,9 +275,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
-                        nin_nonlin=None, dim_nonlin=None,
-                        reuse_attention=False
-                        ):
+                        nin_nonlin=None, dim_nonlin=None):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -319,32 +317,23 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     Wcx = norm_weight(dimctx, dim)
     params[pp(prefix, 'Wcx')] = Wcx
 
-    if not reuse_attention:
-        # attention: combined -> hidden
-        W_comb_att = norm_weight(dim, dimctx)
-        params[pp(prefix, 'W_comb_att')] = W_comb_att
+    # attention: combined -> hidden
+    W_comb_att = norm_weight(dim, dimctx)
+    params[pp(prefix, 'W_comb_att')] = W_comb_att
 
-        # attention: context -> hidden
-        Wc_att = norm_weight(dimctx)
-        params[pp(prefix, 'Wc_att')] = Wc_att
+    # attention: context -> hidden
+    Wc_att = norm_weight(dimctx)
+    params[pp(prefix, 'Wc_att')] = Wc_att
 
-        # attention: hidden bias
-        b_att = numpy.zeros((dimctx,)).astype('float32')
-        params[pp(prefix, 'b_att')] = b_att
+    # attention: hidden bias
+    b_att = numpy.zeros((dimctx,)).astype('float32')
+    params[pp(prefix, 'b_att')] = b_att
 
-        # attention:
-        U_att = norm_weight(dimctx, 1)
-        params[pp(prefix, 'U_att')] = U_att
-        c_att = numpy.zeros((1,)).astype('float32')
-        params[pp(prefix, 'c_tt')] = c_att
-
-    else:
-        # hack: create dummy values to make gru_cond_layer work with minimal code changes
-        params[pp(prefix, 'W_comb_att')] = numpy.zeros((1,)).astype('float32')
-        params[pp(prefix, 'Wc_att')] = numpy.zeros((1,)).astype('float32')
-        params[pp(prefix, 'b_att')] = numpy.zeros((1,)).astype('float32')
-        params[pp(prefix, 'U_att')] = numpy.zeros((1,)).astype('float32')
-        params[pp(prefix, 'c_tt')] = numpy.zeros((1,)).astype('float32')
+    # attention:
+    U_att = norm_weight(dimctx, 1)
+    params[pp(prefix, 'U_att')] = U_att
+    c_att = numpy.zeros((1,)).astype('float32')
+    params[pp(prefix, 'c_tt')] = c_att
 
     return params
 
@@ -359,12 +348,9 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    pctx_=None,
                    truncate_gradient=-1,
                    profile=False,
-                   reuse_attention=False,
                    **kwargs):
 
-    if not reuse_attention:
-        assert context, 'Context must be provided'
-        assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+    assert context, 'Context must be provided'
 
     if one_step:
         assert init_state, 'previous state must be provided'
@@ -392,9 +378,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         init_state = tensor.alloc(0., n_samples, dim)
 
     # projected context
-    if reuse_attention:
-        assert pctx_ is not None, 'if re-using attention, pass to-be-reused context vectors as \'pctx_\'' #slightly hacky: pctx_ is either the projected annotations, or if we re-use attention, the pre-computed context vector
-    elif pctx_ is None:
+    assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+    if pctx_ is None:
         pctx_ = tensor.dot(context*ctx_dropout[0], tparams[pp(prefix, 'Wc_att')]) +\
             tparams[pp(prefix, 'b_att')]
 
@@ -429,21 +414,18 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         h1 = u1 * h_ + (1. - u1) * h1
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
-        if reuse_attention:
-            ctx_ = pctx_
-        else:
-            # attention
-            pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
-            pctx__ = pctx_ + pstate_[None, :, :]
-            #pctx__ += xc_
-            pctx__ = tensor.tanh(pctx__)
-            alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
-            alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
-            alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
-            if context_mask:
-                alpha = alpha * context_mask
-            alpha = alpha / alpha.sum(0, keepdims=True)
-            ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
+        # attention
+        pstate_ = tensor.dot(h1*rec_dropout[2], W_comb_att)
+        pctx__ = pctx_ + pstate_[None, :, :]
+        #pctx__ += xc_
+        pctx__ = tensor.tanh(pctx__)
+        alpha = tensor.dot(pctx__*ctx_dropout[1], U_att)+c_tt
+        alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
+        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
+        if context_mask:
+            alpha = alpha * context_mask
+        alpha = alpha / alpha.sum(0, keepdims=True)
+        ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
         preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
         preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
@@ -460,9 +442,6 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
         h2 = u2 * h1 + (1. - u2) * h2
         h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h1
-
-        if reuse_attention:
-            return h2
 
         return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
 

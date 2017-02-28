@@ -22,6 +22,4 @@ mkdir -p models
   --batch_size 40 \
   --no_shuffle \
   --dispFreq 500 \
-  --finish_after 500 \
-  --dec_depth 2 \
-  --decoder_deep gru_cond
+  --finish_after 500
