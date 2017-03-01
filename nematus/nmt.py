@@ -166,7 +166,8 @@ def init_params(options):
                                               nin=options['dim_word'],
                                               dim=options['dim'],
                                               dimctx=ctxdim,
-                                              recurrence_transition_depth=options['dec_base_recurrence_transition_depth'])
+                                              recurrence_transition_depth=options['dec_base_recurrence_transition_depth'],
+                                              recurrence_transition_deep_context=options['dec_base_recurrence_transition_deep_context'])
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
@@ -353,6 +354,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                             one_step=one_step,
                                             init_state=init_state[0],
                                             recurrence_transition_depth=options['dec_base_recurrence_transition_depth'],
+                                            recurrence_transition_deep_context=options['dec_base_recurrence_transition_deep_context'],
                                             dropout_probability_below=options['dropout_embedding'],
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
@@ -960,6 +962,7 @@ def train(dim_word=512,  # word vector dimensionality
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
           dec_base_recurrence_transition_depth=2, # number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond)
+          dec_base_recurrence_transition_deep_context=False, # include context vectors in the GRU transitions after the second one in the first layer of the decoder. (Only applies to gru_cond)
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
           enc_depth_bidirectional=None, # first n encoder layers are bidirectional (default: all)
           output_depth=1, # number of layers in deep output
@@ -1618,6 +1621,8 @@ if __name__ == '__main__':
                          help="number of decoder layers (default: %(default)s)")
     network.add_argument('--dec_base_recurrence_transition_depth', type=int, default=2, metavar='INT',
                          help="number of GRU transition operations applied in the first layer of the decoder. Minimum is 2.  (Only applies to gru_cond). (default: %(default)s)")
+    network.add_argument('--dec_base_recurrence_transition_deep_context', action='store_true',
+                         help="include context vectors in the GRU transitions after the second one in the first layer of the decoder. (Only applies to gru_cond)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--enc_depth_bidirectional', type=int, default=None, metavar='INT',
