@@ -80,7 +80,8 @@ def train(config, sess):
     text_iterator, valid_text_iterator = load_data(config)
     source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
     n_samples = 0
-    uidx = 0
+    uidx = sess.run(t)
+    print >>sys.stderr, "Initial uidx={}".format(uidx)
     last_time = time.time()
     last_n_samples = n_samples
     for eidx in xrange(config.max_epochs):
