@@ -84,6 +84,7 @@ def train(config, sess):
     print >>sys.stderr, "Initial uidx={}".format(uidx)
     last_time = time.time()
     last_n_samples = n_samples
+    STOP = False
     for eidx in xrange(config.max_epochs):
         print 'Starting epoch', eidx
         for source_sents, target_sents in text_iterator:
@@ -144,6 +145,13 @@ def train(config, sess):
                     total_loss += sess.run(all_losses, feed_dict=feeds)
                     total_seen += x_v_in.shape[1]
                 print 'Validation loss:', total_loss/total_seen
+
+            if config.finish_after and uidx % config.finish_after == 0:
+                print >>sys.stderr, "Maximum number of updates reached"
+                STOP=True
+                break
+        if STOP:
+            break
 
 def translate(config, sess):
     model, saver = create_model(config, sess)
@@ -223,6 +231,8 @@ def parse_args():
                          help="minibatch size (default: %(default)s)")
     training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
                          help="maximum number of epochs (default: %(default)s)")
+    training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
+                         help="maximum number of updates (minibatches) (default: %(default)s)")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--learning_rate', type=float, default=0.0001, metavar='FLOAT',
