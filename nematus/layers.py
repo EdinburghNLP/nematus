@@ -96,6 +96,12 @@ def layer_norm(x, b, s):
     output = s[None, :] * output + b[None,:]
     return output
 
+def layer_norm3d(x, b, s):
+    _eps = 1e-5
+    output = (x - x.mean(2)[:,:,None]) / numpy.sqrt((x.var(2)[:,:,None] + _eps))
+    output = s[None, None, :] * output + b[None, None,:]
+    return output
+
 # feedforward layer: affine transformation + point-wise nonlinearity
 def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
                        ortho=True, weight_matrix=True, bias=True):
@@ -133,8 +139,12 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
     dropout_mask = dropout(dropout_shape, dropout_probability)
 
     preact = tensor.dot(state_below*dropout_mask, W) + b
+
     if options['layer_normalisation_ff']:
-        preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
+            if state_below.ndim == 3:
+                preact = layer_norm3d(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
+            else:
+                preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
 
     return eval(activ)(preact)
 
