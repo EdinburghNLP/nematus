@@ -170,25 +170,19 @@ class Masked_cross_entropy_loss(object):
     def __init__(self,
                  y_true,
                  y_mask):
-        self.y_true = tf.reshape(y_true, shape=[-1])
+        self.y_true = y_true
         self.y_mask = y_mask
 
 
     def forward(self, logits):
         # TODO: maybe first select the important logits and then compute cost? -- efficiency
-        log_probs = tf.nn.log_softmax(logits, dim=-1)
-        log_probs = tf.reshape(log_probs, shape=[-1])
-        num_classes = tf.shape(logits)[-1] # assumes shape ... x num_classes
-        num_logits = tf.size(logits)
-        indices = tf.range(start=0, limit=num_logits, delta=num_classes) # limit is excluded
-        indices = indices + self.y_true
-        log_probs = tf.gather(log_probs, indices)
-        log_probs = tf.reshape(log_probs, shape=tf.shape(self.y_mask))
-        log_probs *= self.y_mask
 
-        cost = tf.reduce_sum(log_probs, axis=0, keep_dims=False)
-        cost = -cost # shape is [batch]
-
+        cost = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=self.y_true,
+                logits=logits)
+        #cost has shape seqLen x batch
+        cost *= self.y_mask
+        cost = tf.reduce_sum(cost, axis=0, keep_dims=False)
         return cost
 
 
