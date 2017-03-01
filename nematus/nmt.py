@@ -1031,6 +1031,8 @@ def train(dim_word=512,  # word vector dimensionality
           tie_decoder_embeddings=False, # Tie the input embeddings of the decoder with the softmax output embeddings
           encoder_truncate_gradient=-1, # Truncate BPTT gradients in the encoder to this value. Use -1 for no truncation
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
+          layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
+          layer_normalisation_ff=False, # layer normalisation for FF layers; merge with layer_normalisation option if this works
     ):
 
     # Model options
@@ -1642,6 +1644,10 @@ if __name__ == '__main__':
                          help="dropout source words (0: no dropout) (default: %(default)s)")
     network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
                          help="dropout target words (0: no dropout) (default: %(default)s)")
+    network.add_argument('--layer_normalisation', action="store_true",
+                         help="use layer normalisation in RNN (default: %(default)s)")
+    network.add_argument('--layer_normalisation_ff', action="store_true",
+                         help="use layer normalisation in FF layers (default: %(default)s)")
     network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
                          help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",

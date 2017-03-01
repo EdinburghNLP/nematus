@@ -43,3 +43,7 @@ def fill_options(options):
         options['output_depth'] = 1
     if not 'decoder_deep' in options:
         options['decoder_deep'] = 'gru'
+    if not 'layer_normalisation' in options:
+        options['layer_normalisation'] = False
+    if not 'layer_normalisation_ff' in options:
+        options['layer_normalisation_ff'] = False

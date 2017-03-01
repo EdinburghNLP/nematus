@@ -88,6 +88,14 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
             theano.shared(numpy.float32(value)))
     return proj
 
+# layer normalization
+# code from https://github.com/ryankiros/layer-norm
+def layer_norm(x, b, s):
+    _eps = 1e-5
+    output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
+    output = s[None, :] * output + b[None,:]
+    return output
+
 # feedforward layer: affine transformation + point-wise nonlinearity
 def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
                        ortho=True, weight_matrix=True, bias=True):
@@ -99,6 +107,12 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
         params[pp(prefix, 'W')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
     if bias:
        params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype('float32')
+
+    if options['layer_normalisation_ff']:
+        scale_add = 0.0
+        scale_mul = 1.0
+        params[pp(prefix,'ln_b')] = scale_add * numpy.ones((1*nout)).astype('float32')
+        params[pp(prefix,'ln_s')] = scale_mul * numpy.ones((1*nout)).astype('float32')
 
     return params
 
@@ -118,7 +132,11 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
         dropout_shape = state_below.shape
     dropout_mask = dropout(dropout_shape, dropout_probability)
 
-    return eval(activ)(tensor.dot(state_below*dropout_mask, W) + b)
+    preact = tensor.dot(state_below*dropout_mask, W) + b
+    if options['layer_normalisation_ff']:
+        preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
+
+    return eval(activ)(preact)
 
 # embedding layer
 def param_init_embedding_layer(options, params, n_words, dims, factors=None, prefix='', suffix=''):
@@ -176,6 +194,19 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None, **kwargs):
     Ux = ortho_weight(dim)
     params[pp(prefix, 'Ux')] = Ux
 
+    if options['layer_normalisation']:
+        # layer-normalization parameters
+        scale_add = 0.0
+        scale_mul = 1.0
+        params[pp(prefix,'ln_b1')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b2')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_b3')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b4')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s1')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s2')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s3')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s4')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+
     return params
 
 
@@ -227,9 +258,16 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
-    def _step_slice(m_, x_, xx_, h_, U, Ux, rec_dropout):
+    def _step_slice(m_, x_, xx_, h_, U, Ux, rec_dropout,
+                    ln_b1, ln_s1, ln_b2, ln_s2, ln_b3, ln_s3, ln_b4, ln_s4):
+
+        if options['layer_normalisation']:
+            x_ = layer_norm(x_, ln_b1, ln_s1)
+            xx_ = layer_norm(xx_, ln_b2, ln_s2)
 
         preact = tensor.dot(h_*rec_dropout[0], U)
+        if options['layer_normalisation']:
+            preact = layer_norm(preact, ln_b3, ln_s3)
         preact += x_
 
         # reset and update gates
@@ -238,6 +276,8 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 
         # compute the hidden state proposal
         preactx = tensor.dot(h_*rec_dropout[1], Ux)
+        if options['layer_normalisation']:
+            preactx = layer_norm(preactx, ln_b4, ln_s4)
         preactx = preactx * r
         preactx = preactx + xx_
 
@@ -256,6 +296,16 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
     shared_vars = [tparams[pp(prefix, 'U')],
                    tparams[pp(prefix, 'Ux')],
                    rec_dropout]
+
+    if options['layer_normalisation']:
+        for i in range(1, 5):
+            shared_vars += [tparams[pp(prefix,'ln_b{0}'.format(i))]]
+            shared_vars += [tparams[pp(prefix,'ln_s{0}'.format(i))]]
+    else:
+        # dummy values
+        for i in range(1, 5):
+            shared_vars += [tensor.alloc(0., 1)]
+            shared_vars += [tensor.alloc(0., 1)]
 
     if one_step:
         rval = _step(*(seqs + [init_state] + shared_vars))
@@ -336,6 +386,27 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     c_att = numpy.zeros((1,)).astype('float32')
     params[pp(prefix, 'c_tt')] = c_att
 
+    if options['layer_normalisation']:
+        # layer-normalization parameters
+        scale_add = 0.0
+        scale_mul = 1.0
+        params[pp(prefix,'ln_b1')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b2')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_b3')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b4')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_b5')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b6')] = scale_add * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_b7')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_b8')] = scale_add * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s1')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s2')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s3')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s4')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s5')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s6')] = scale_mul * numpy.ones((2*dim)).astype('float32')
+        params[pp(prefix,'ln_s7')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+        params[pp(prefix,'ln_s8')] = scale_mul * numpy.ones((1*dim)).astype('float32')
+
     return params
 
 
@@ -397,9 +468,17 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     def _step_slice(m_, x_, xx_, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout,
                     U, Wc, W_comb_att, U_att, c_tt, Ux, Wcx,
-                    U_nl, Ux_nl, b_nl, bx_nl):
+                    U_nl, Ux_nl, b_nl, bx_nl,
+                    ln_b1, ln_s1, ln_b2, ln_s2, ln_b3, ln_s3, ln_b4, ln_s4, ln_b5, ln_s5,
+                    ln_b6, ln_s6, ln_b7, ln_s7, ln_b8, ln_s8):
+
+        if options['layer_normalisation']:
+            x_ = layer_norm(x_, ln_b1, ln_s1)
+            xx_ = layer_norm(xx_, ln_b2, ln_s2)
 
         preact1 = tensor.dot(h_*rec_dropout[0], U)
+        if options['layer_normalisation']:
+            preact1 = layer_norm(preact1, ln_b3, ln_s3)
         preact1 += x_
         preact1 = tensor.nnet.sigmoid(preact1)
 
@@ -407,6 +486,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         u1 = _slice(preact1, 1, dim)
 
         preactx1 = tensor.dot(h_*rec_dropout[1], Ux)
+        if options['layer_normalisation']:
+            preactx1 = layer_norm(preactx1, ln_b4, ln_s4)
         preactx1 *= r1
         preactx1 += xx_
 
@@ -429,15 +510,25 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
         preact2 = tensor.dot(h1*rec_dropout[3], U_nl)+b_nl
-        preact2 += tensor.dot(ctx_*ctx_dropout[2], Wc)
+        if options['layer_normalisation']:
+            preact2 = layer_norm(preact2, ln_b5, ln_s5)
+        ctx1_ = tensor.dot(ctx_*ctx_dropout[2], Wc)
+        if options['layer_normalisation']:
+            ctx1_ = layer_norm(ctx1_, ln_b6, ln_s6)
+        preact2 += ctx1_
         preact2 = tensor.nnet.sigmoid(preact2)
 
         r2 = _slice(preact2, 0, dim)
         u2 = _slice(preact2, 1, dim)
 
         preactx2 = tensor.dot(h1*rec_dropout[4], Ux_nl)+bx_nl
+        if options['layer_normalisation']:
+            preactx2 = layer_norm(preactx2, ln_b7, ln_s7)
         preactx2 *= r2
-        preactx2 += tensor.dot(ctx_*ctx_dropout[3], Wcx)
+        ctx2_ = tensor.dot(ctx_*ctx_dropout[3], Wcx)
+        if options['layer_normalisation']:
+            ctx2_ = layer_norm(ctx2_, ln_b8, ln_s8)
+        preactx2 += ctx2_
 
         h2 = tensor.tanh(preactx2)
 
@@ -461,6 +552,16 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    tparams[pp(prefix, 'Ux_nl')],
                    tparams[pp(prefix, 'b_nl')],
                    tparams[pp(prefix, 'bx_nl')]]
+
+    if options['layer_normalisation']:
+        for i in range(1,9):
+            shared_vars += [tparams[pp(prefix,'ln_b{0}'.format(i))]]
+            shared_vars += [tparams[pp(prefix,'ln_s{0}'.format(i))]]
+    else:
+        # dummy values
+        for i in range(1,9):
+            shared_vars += [tensor.alloc(0., 1)]
+            shared_vars += [tensor.alloc(0., 1)]
 
     if one_step:
         rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
@@ -527,6 +628,9 @@ def param_init_gru_cond_reuse_att(options, params, prefix='gru_cond',
 
     Wcx = norm_weight(dimctx, dim)
     params[pp(prefix, 'Wcx')] = Wcx
+
+    if options['layer_normalisation']:
+        sys.stderr.write('Warning: layer normalisation not implemented for gru_cond_reuse_att\n')
 
     return params
 
@@ -719,6 +823,9 @@ def param_init_gru_local(options, params, prefix='gru_local',
 
     b_p = numpy.zeros((dim, )).astype('float32')
     params[pp(prefix, 'b_p')] = b_p
+
+    if options['layer_normalisation']:
+        sys.stderr.write('Warning: layer normalisation not implemented for gru_local\n')
 
     return params
 
