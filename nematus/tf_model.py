@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tf_layers import *
+import numpy
 
 class Decoder(object):
     def __init__(self, config, context, x_mask):
@@ -21,6 +22,7 @@ class Decoder(object):
             self.maxlen = config.maxlen
             self.embedding_size = config.embedding_size
             self.state_size = config.state_size
+            self.target_vocab_size = config.target_vocab_size
 
         with tf.name_scope("y_embeddings_layer"):
             self.y_emb_layer = EmbeddingLayer(
@@ -48,11 +50,10 @@ class Decoder(object):
        ys_array = tf.TensorArray(
                     dtype=tf.int32,
                     size=self.maxlen,
-                    clear_after_read=False,
+                    clear_after_read=True, #TODO: does this help? or will it only introduce bugs in the future?
                     name='y_sampled_array')
        init_loop_vars = [i, self.init_state, init_ys, init_embs, ys_array]
        def cond(i, states, prev_ys, prev_embs, ys_array):
-           i = tf.Print(i, [i], "in the loop")
            return tf.logical_and(
                    tf.less(i, self.maxlen),
                    tf.reduce_any(tf.not_equal(prev_ys, 0)))
@@ -82,41 +83,101 @@ class Decoder(object):
        sampled_ys = ys_array.gather(tf.range(0, i))
        return sampled_ys
 
-#   def beam_search(self, context, x_mask, maxlen, beam_size):
+    def beam_search(self, beam_size):
 
-#       def cond(i, states, prev_ys, prev_embs, ys_array):
-#           # states are of the shape (batch x beam, state_size)
-#           # prev_ys (batch x beam, target_vocab_size)
-#           # prev_embs (batch x beam, embedding_size)
-#           
-#           i = tf.Print(i, [i], "in the loop")
-#           return tf.logical_and(
-#                   tf.less(i, self.maxlen),
-#                   tf.reduce_any(tf.not_equal(prev_ys, 0)))
-#       """
-#       Strategy:
-#           tile context and init_state - do this by reshape, tile, reshape
-#           compute the log_probs - same as with sampling
-#           add previous cost to log_probs
-#           flatten cost
-#           set cost of class 0 to 0 for each beam that has already ended
-#           e.g. by:
-#               create new costs where cost of eos is 0
-#               use tf.where(mask == True, new_cost, cost)
-#           run top k -> (idxs, values)
-#           use values as new costs
-#           divide idxs by num_classes to get state_idxs
-#           use gather to get new states
-#           take the remainder of idxs after num_classes to get new_predicted words
-#           use gather to get new mask
-#           update the mask (finished?) according to new_predicted_words, e.g. tf.logical_or(mask, tf.equal(new_predicted_words, 0))
-#       Now try to do in batches:
-#       mask.shape (batch, beam)
-#       log_probs.shape(batch, beam, num_classes)
-#       context.shape (seqLen, batch, emb_size)
-#       """
-#         
-#       return None #beam_ys
+        """
+        Strategy:
+            compute the log_probs - same as with sampling
+            for sentences that are ended set log_prob(<eos>)=0, log_prob(not eos)=-inf
+            add previous cost to log_probs
+            run top k -> (idxs, values)
+            use values as new costs
+            divide idxs by num_classes to get state_idxs
+            use gather to get new states
+            take the remainder of idxs after num_classes to get new_predicted words
+        """
+
+        # Initialize loop variables
+        batch_size = tf.shape(self.init_state)[0]
+        i = tf.constant(0)
+        init_ys = -tf.ones(dtype=tf.int32, shape=[batch_size])
+        init_embs = tf.zeros(dtype=tf.float32, shape=[batch_size,self.embedding_size])
+
+        f_min = numpy.finfo(numpy.float32).min
+        init_cost = [0.] + [f_min]*(beam_size-1) # to force first top k are from first hypo only
+        init_cost = tf.constant(init_cost, dtype=tf.float32)
+        init_cost = tf.tile(init_cost, multiples=[batch_size/beam_size])
+        ys_array = tf.TensorArray(
+                    dtype=tf.int32,
+                    size=self.maxlen,
+                    clear_after_read=True,
+                    name='y_sampled_array')
+        p_array = tf.TensorArray(
+                    dtype=tf.int32,
+                    size=self.maxlen,
+                    clear_after_read=True,
+                    name='parent_idx_array')
+        init_loop_vars = [i, self.init_state, init_ys, init_embs, init_cost, ys_array, p_array]
+
+        # Prepare cost matrix for completed sentences -> Prob(EOS) = 1 and Prob(x) = 0
+        eos_log_probs = tf.constant(
+                            [[0.] + ([f_min]*(self.target_vocab_size - 1))],
+                            dtype=tf.float32)
+        eos_log_probs = tf.tile(eos_log_probs, multiples=[batch_size,1])
+
+        def cond(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
+            return tf.logical_and(
+                    tf.less(i, self.maxlen),
+                    tf.reduce_any(tf.not_equal(prev_ys, 0)))
+
+        def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
+            #If ensemble decoding is necessary replace with for loop and do model[i].{grustep1,attstep,...}
+            new_states1 = self.grustep1.forward(states, prev_embs)
+            att_ctx = self.attstep.forward(new_states1)
+            new_states2 = self.grustep2.forward(new_states1, att_ctx)
+            logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
+            log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
+
+            # set cost of EOS to zero for completed sentences so that they are in top k
+            # Need to make sure only EOS is selected because a completed sentence might
+            # kill ongoing sentences
+            log_probs = tf.where(tf.equal(prev_ys, 0), eos_log_probs, log_probs)
+
+            all_costs = log_probs + tf.expand_dims(cost, axis=1)
+
+            all_costs = tf.reshape(all_costs, shape=[-1, self.target_vocab_size * beam_size])
+            values, indices = tf.nn.top_k(all_costs, k=beam_size) #the sorted option is by default True, is this needed? 
+            new_cost = tf.reshape(values, shape=[batch_size])
+            offsets = tf.range(
+                        start = 0,
+                        delta = beam_size,
+                        limit = batch_size,
+                        dtype=tf.int32)
+            offsets = tf.expand_dims(offsets, axis=1)
+            survivor_idxs = (indices/self.target_vocab_size) + offsets
+            new_ys = indices % self.target_vocab_size
+            survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
+            new_ys = tf.reshape(new_ys, shape=[batch_size])
+            new_embs = self.y_emb_layer.forward(new_ys)
+            new_states = tf.gather(new_states2, indices=survivor_idxs)
+
+            ys_array = ys_array.write(i, value=new_ys)
+            p_array = p_array.write(i, value=survivor_idxs)
+
+            return i+1, new_states, new_ys, new_embs, new_cost, ys_array, p_array
+
+
+        final_loop_vars = tf.while_loop(
+                            cond=cond,
+                            body=body,
+                            loop_vars=init_loop_vars,
+                            back_prop=False)
+        i, _, _, _, cost, ys_array, p_array = final_loop_vars
+
+        indices = tf.range(0, i)
+        sampled_ys = ys_array.gather(indices)
+        parents = p_array.gather(indices)
+        return sampled_ys, parents, cost
 
     def score(self, y):
         with tf.name_scope("y_embeddings_layer"):
@@ -189,14 +250,14 @@ class Encoder(object):
                                 config.embedding_size)
 
         with tf.name_scope("forwardEncoder"):
-            self.gru1 = GRUStep(
-                            input_size=config.embedding_size,
-                            state_size=config.state_size)
+            self.gru_forward = GRUStep(
+                                input_size=config.embedding_size,
+                                state_size=config.state_size)
 
         with tf.name_scope("backwardEncoder"):
-            self.gru2 = GRUStep(
-                    input_size=config.embedding_size,
-                    state_size=config.state_size)
+            self.gru_backward = GRUStep(
+                                    input_size=config.embedding_size,
+                                    state_size=config.state_size)
         self.state_size = config.state_size
 
     def get_context(self, x):
@@ -208,14 +269,14 @@ class Encoder(object):
         init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
         with tf.name_scope("forwardEncoder"):
             def step_fn(prev_state, x):
-                return self.gru1.forward(prev_state, x)
+                return self.gru_forward.forward(prev_state, x)
             states = RecurrentLayer(
                         initial_state=init_state,
                         step_fn = step_fn).forward(embs)
 
         with tf.name_scope("backwardEncoder"):
             def step_fn(prev_state, x):
-                return self.gru2.forward(prev_state, x)
+                return self.gru_backward.forward(prev_state, x)
             states_reversed = RecurrentLayer(
                                 initial_state=init_state,
                                 step_fn = step_fn).forward(embs_reversed)
@@ -259,6 +320,20 @@ class StandardModel(object):
         with tf.name_scope("loss"):
             self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
+            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keep_dims=False)
+
+        #with tf.name_scope("optimizer"):
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+        self.t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
+        grad_vars = self.optimizer.compute_gradients(self.mean_loss)
+        grads, varss = zip(*grad_vars)
+        clipped_grads, global_norm = tf.clip_by_global_norm(grads, clip_norm=config.clip_c)
+        # Might be interesting to see how the global norm changes over time, attach a summary?
+        grad_vars = zip(clipped_grads, varss)
+        self.apply_grads = self.optimizer.apply_gradients(grad_vars, global_step=self.t)
+
+        self.sampled_ys = None
+        self.beam_size, self.beam_ys, self.parents, self.cost = None, None, None, None
 
     def get_score_inputs(self):
         return self.x, self.x_mask, self.y, self.y_mask
@@ -266,6 +341,75 @@ class StandardModel(object):
     def get_loss(self):
         return self.loss_per_sentence
 
-    def get_samples(self):
-        return self.decoder.sample()
+    def get_mean_loss(self):
+        return self.mean_loss
 
+    def get_global_step(self):
+        return self.t
+
+    def get_apply_grads(self):
+        return self.apply_grads
+
+    def _get_samples(self):
+        if self.sampled_ys == None:
+            self.sampled_ys = self.decoder.sample()
+        return self.sampled_ys
+
+    def sample(self, session, x_in, x_mask_in):
+        sampled_ys = self._get_samples()
+        feeds = {self.x : x_in, self.x_mask : x_mask_in}
+        sampled_ys_out = session.run(sampled_ys, feed_dict=feeds)
+        sampled_ys_out = sampled_ys_out.T
+        samples = []
+        for sample in sampled_ys_out:
+            sample = numpy.trim_zeros(list(sample), trim='b')
+            sample.append(0)
+            samples.append(sample)
+        return samples
+
+
+
+    def _get_beam_search_outputs(self, beam_size):
+        if beam_size != self.beam_size:
+            self.beam_size = beam_size
+            self.beam_ys, self.parents, self.cost =  self.decoder.beam_search(beam_size)
+        return self.beam_ys, self.parents, self.cost
+
+
+    def beam_search(self, session, x_in, x_mask_in, beam_size):
+        # x_in, x_mask_in are numpy arrays with shape (seqLen, batch)
+        x_in = numpy.repeat(x_in, repeats=beam_size, axis=1)
+        x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=1)
+        feeds = {self.x : x_in, self.x_mask : x_mask_in}
+        beam_ys, parents, cost = self._get_beam_search_outputs(beam_size)
+        beam_ys_out, parents_out, cost_out = session.run(
+                                                    [beam_ys, parents, cost],
+                                                    feed_dict=feeds)
+        hypotheses = self._reconstruct(beam_ys_out, parents_out, cost_out, beam_size)
+        return hypotheses
+
+    def _reconstruct(self, ys, parents, cost, beam_size):
+        #ys.shape = parents.shape = (seqLen, beam_size x batch_size) 
+        # output: hypothesis list with shape (batch_size, beam_size, (sequence, cost))
+
+        def reconstruct_single(ys, parents, hypoId, hypo, pos):
+            if pos < 0:
+                hypo.reverse()
+                return hypo
+            else:
+                hypo.append(ys[pos, hypoId])
+                hypoId = parents[pos, hypoId]
+                return reconstruct_single(ys, parents, hypoId, hypo, pos - 1)
+
+        hypotheses = []
+        batch_size = ys.shape[1] / beam_size
+        pos = ys.shape[0] - 1
+        for batch in range(batch_size):
+            hypotheses.append([])
+            for beam in range(beam_size):
+                i = batch*beam_size + beam
+                hypo = reconstruct_single(ys, parents, i, [], pos)
+                hypo = numpy.trim_zeros(hypo, trim='b') # b for back
+                hypo.append(0)
+                hypotheses[batch].append((hypo, cost[i]))
+        return hypotheses

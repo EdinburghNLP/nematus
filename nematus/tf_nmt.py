@@ -4,128 +4,25 @@ from data_iterator import TextIterator
 import time
 import argparse
 from tf_model import *
+from util import *
 
-
-
-
-# batch preparation
-def prepare_data(seqs_x, seqs_y, maxlen=None):
-    # x: a list of sentences
-    lengths_x = [len(s) for s in seqs_x]
-    lengths_y = [len(s) for s in seqs_y]
-
-    if maxlen is not None:
-        new_seqs_x = []
-        new_seqs_y = []
-        new_lengths_x = []
-        new_lengths_y = []
-        for l_x, s_x, l_y, s_y in zip(lengths_x, seqs_x, lengths_y, seqs_y):
-            if l_x < maxlen and l_y < maxlen:
-                new_seqs_x.append(s_x)
-                new_lengths_x.append(l_x)
-                new_seqs_y.append(s_y)
-                new_lengths_y.append(l_y)
-        lengths_x = new_lengths_x
-        seqs_x = new_seqs_x
-        lengths_y = new_lengths_y
-        seqs_y = new_seqs_y
-
-        if len(lengths_x) < 1 or len(lengths_y) < 1:
-            return None, None, None, None
-
-    n_samples = len(seqs_x)
-    n_factors = len(seqs_x[0][0])
-    assert n_factors == 1
-    maxlen_x = numpy.max(lengths_x) + 1
-    maxlen_y = numpy.max(lengths_y) + 1
-
-    x = numpy.zeros((n_factors, maxlen_x, n_samples)).astype('int64')
-    y = numpy.zeros((maxlen_y, n_samples)).astype('int64')
-    x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
-    y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
-    for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:, :lengths_x[idx], idx] = zip(*s_x)
-        x_mask[:lengths_x[idx]+1, idx] = 1.
-        y[:lengths_y[idx], idx] = s_y
-        y_mask[:lengths_y[idx]+1, idx] = 1.
-
-    # there is only one factor, get rid of that dimension
-    x = x.squeeze(axis=0)
-
-    return x, x_mask, y, y_mask
-
-
-
-def test_forward_step(config):
-    x, x_mask, y, y_mask, logits = build_model(config)
-    batch = config.batch_size
-    x_seqLen=13
-    y_seqLen=17
-    x_in = numpy.random.randint(config.source_vocab_size, size=(x_seqLen,batch))
-    y_in = numpy.random.randint(config.target_vocab_size, size=(y_seqLen,batch))
-    x_lens = numpy.random.randint(1, x_seqLen,size=batch)
-    y_lens = numpy.random.randint(1, y_seqLen,size=batch)
-    x_mask_in = numpy.zeros((x_seqLen, batch))
-    y_mask_in = numpy.zeros((y_seqLen, batch))
-
-    for i in range(x_lens.shape[0]):
-        x_mask_in[:x_lens[i], i] = 1.
-
-    for i in range(y_lens.shape[0]):
-        y_mask_in[:y_lens[i], i] = 1.0
-
-    ins = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
-    init_op = tf.global_variables_initializer()
-
-    with tf.Session() as sess:
-        sess.run(init_op)
-        ans = sess.run(logits, feed_dict=ins)
-        print 'got', ans.shape
-        print 'expected', (y_seqLen, batch, config.target_vocab_size)
-
-
-#def prepare_dictionaries(config):
-#    
-#    def check_vocabulary(vocab, size):
-#        assert range(size) == sorted(vocab.keys()), "Keys should be 0...(n-1)"
-#        assert len(set(vocab.values())) == size, "Duplicate words!"
-#
-#    def invert_dictionary(vocab):
-#        keys, values = zip(*vocab.items())
-#        return dict(zip(values,keys))
-#
-#    source_vocab = json.load(config.source_vocab)
-#    check_vocabulary(source_vocab, config.source_vocab_size)
-#    source_vocab = invert_dictionary(source_vocab)
-#
-#    target_vocab = json.load(config.target_vocab)
-#    check_vocabulary(target_vocab, target_vocab_size)
-#    target_vocab = invert_dictionary(target_vocab)
-#
-#    return source_vocab, target_vocab
-
-def train(config):
-    print 'Building model'
+def create_model(config, sess):
+    print >>sys.stderr, 'Building model...',
     model = StandardModel(config)
 
-    x,x_mask,y,y_mask = model.get_score_inputs()
-    loss_per_sentence = model.get_loss()
-    mean_loss = tf.reduce_mean(loss_per_sentence, keep_dims=False)
-    print 'Getting samples'
-    sampled_ys = model.get_samples()
-    print 'Done'
+    # initialize model
+    saver = tf.train.Saver(max_to_keep=10)
+    if not config.reload:
+        init_op = tf.global_variables_initializer()
+        sess.run(init_op)
+    else:
+        saver.restore(sess, config.reload)
+    print >>sys.stderr, 'Done',
 
-    optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
-    t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
-    grad_vars = optimizer.compute_gradients(mean_loss)
-    grads, varss = zip(*grad_vars)
+    return model, saver 
 
-    clipped_grads, global_norm = tf.clip_by_global_norm(grads, clip_norm=config.clip_c)
-    # Might be interesting to see how the global norm changes over time
-    grad_vars = zip(clipped_grads, varss)
-    apply_grads = optimizer.apply_gradients(grad_vars, global_step=t)
-
-    print 'Reading data...',
+def load_data(config):
+    print >>sys.stderr, 'Reading data...',
     text_iterator = TextIterator(
                         source=config.source_dataset,
                         target=config.target_dataset,
@@ -138,52 +35,151 @@ def train(config):
                         shuffle_each_epoch=config.shuffle_each_epoch,
                         sort_by_length=config.sort_by_length,
                         maxibatch_size=config.maxibatch_size)
-    print 'Done'
 
-    with tf.Session() as sess:
-        saver = tf.train.Saver(max_to_keep=10)
-        if not config.reload:
-            init_op = tf.global_variables_initializer()
-            sess.run(init_op)
-        else:
-            saver.restore(sess, config.reload)
+    if config.validFreq:
+        valid_text_iterator = TextIterator(
+                            source=config.valid_source_dataset,
+                            target=config.valid_target_dataset,
+                            source_dicts=[config.source_vocab],
+                            target_dict=config.target_vocab,
+                            batch_size=config.valid_batch_size,
+                            maxlen=99999, # you want to validate on all sentences
+                            n_words_source=config.source_vocab_size,
+                            n_words_target=config.target_vocab_size,
+                            shuffle_each_epoch=False,
+                            sort_by_length=True,
+                            maxibatch_size=config.maxibatch_size)
+    else:
+        valid_text_iterator = None
+    print >>sys.stderr, 'Done'
+    return text_iterator, valid_text_iterator
 
-        n_samples = 0
-        uidx = 0
-        last_time = time.time()
-        last_n_samples = n_samples
-        for eidx in xrange(config.max_epochs):
-            # get data and do the update
-            #TODO: Add sampling, checkpointing, validation
-            print 'Starting epoch', eidx
-            for source_sents, target_sents in text_iterator:
-                x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=config.maxlen)
-                if x_in is None:
-                    print 'Minibatch with zero sample under length ', config.maxlen
-                    continue
-                inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
-                out = [t, apply_grads, mean_loss]
-                t_out, _, mean_loss_out = sess.run(out, feed_dict=inn)
-                uidx += 1
-                n_samples += len(x_in)
+def load_dictionaries(config):
+    source_to_num = load_dict(config.source_vocab)
+    target_to_num = load_dict(config.target_vocab)
+    num_to_source = reverse_dict(source_to_num)
+    num_to_target = reverse_dict(target_to_num)
+    return source_to_num, target_to_num, num_to_source, num_to_target
 
-                if uidx % config.dispFreq == 0:
-                    print 'Epoch ', eidx, \
-                           'Update ', uidx, \
-                           'Cost ', mean_loss_out, \
-                           'Sents/sec', (n_samples - last_n_samples) / (time.time() - last_time)
-                    last_time = time.time()
-                    last_n_samples = n_samples
 
-                if uidx % config.saveFreq == 0:
-                    saver.save(sess, save_path=config.saveto, global_step=uidx)
 
-                if uidx % config.sampleFreq == 0:
-                    print 'TIME TO SAMPLE'
-                    samples = sess.run(sampled_ys, feed_dict=inn)
-                    print 'Samples are:'
-                    print samples
+def train(config, sess):
+    model, saver = create_model(config, sess)
 
+    x,x_mask,y,y_mask = model.get_score_inputs()
+    apply_grads = model.get_apply_grads()
+    t = model.get_global_step()
+    loss_per_sentence = model.get_loss()
+    mean_loss = model.get_mean_loss()
+
+    writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
+    tf.summary.scalar(name='mean cost', tensor=mean_loss)
+    tf.summary.scalar(name='t', tensor=t)
+    merged = tf.summary.merge_all()
+
+    text_iterator, valid_text_iterator = load_data(config)
+    source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
+    n_samples = 0
+    uidx = 0
+    last_time = time.time()
+    last_n_samples = n_samples
+    for eidx in xrange(config.max_epochs):
+        print 'Starting epoch', eidx
+        for source_sents, target_sents in text_iterator:
+            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=config.maxlen)
+            if x_in is None:
+                print >>sys.stderr, 'Minibatch with zero sample under length ', config.maxlen
+                continue
+            inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
+            out = [t, apply_grads, mean_loss]
+            if config.summaryFreq and uidx % config.summaryFreq == 0:
+                out += [merged]
+            out = sess.run(out, feed_dict=inn)
+            mean_loss_out = out[2]
+            if config.summaryFreq and uidx % config.summaryFreq == 0:
+                writer.add_summary(out[3], out[0])
+
+            uidx += 1
+            n_samples += len(x_in)
+
+            if config.dispFreq and uidx % config.dispFreq == 0:
+                print 'Epoch ', eidx, \
+                        'Update ', uidx, \
+                        'Cost ', mean_loss_out, \
+                        'Sents/sec', (n_samples - last_n_samples) / (time.time() - last_time)
+                last_time = time.time()
+                last_n_samples = n_samples
+
+            if config.saveFreq and uidx % config.saveFreq == 0:
+                saver.save(sess, save_path=config.saveto, global_step=uidx)
+
+            if config.sampleFreq and uidx % config.sampleFreq == 0:
+                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:, :10]
+                samples = model.sample(sess, x_small, x_mask_small)
+                assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
+                for xx, yy, ss in zip(x_small.T, y_small.T, samples):
+                    print 'SOURCE:', seqs2words(xx, num_to_source)
+                    print 'TARGET:', seqs2words(yy, num_to_target)
+                    print 'SAMPLE:', seqs2words(ss, num_to_target)
+
+            if config.beamFreq and uidx % config.beamFreq == 0:
+                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
+                samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
+                # samples is a list with shape batch x beam x len
+                assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
+                for xx, yy, ss in zip(x_small.T, y_small.T, samples):
+                    print 'SOURCE:', seqs2words(xx, num_to_source)
+                    print 'TARGET:', seqs2words(yy, num_to_target)
+                    for i, (sample, cost) in enumerate(ss):
+                        print 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
+
+            if config.validFreq and uidx % config.validFreq == 0:
+                total_loss = 0.
+                total_seen = 0
+                for x_v, y_v in valid_text_iterator:
+                    x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
+                    feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
+                    all_losses = tf.reduce_sum(loss_per_sentence)
+                    total_loss += sess.run(all_losses, feed_dict=feeds)
+                    total_seen += x_v_in.shape[1]
+                print 'Validation loss:', total_loss/total_seen
+
+def translate(config, sess):
+    model, saver = create_model(config, sess)
+    start_time = time.time()
+    _, _, _, num_to_target = load_dictionaries(config)
+    valid_text_iterator = TextIterator(
+                        source=config.valid_source_dataset,
+                        target=config.valid_source_dataset,
+                        source_dicts=[config.source_vocab],
+                        target_dict=config.target_vocab,
+                        batch_size=config.valid_batch_size,
+                        maxlen=99999, # you want to validate on all sentences
+                        n_words_source=config.source_vocab_size,
+                        n_words_target=config.target_vocab_size,
+                        shuffle_each_epoch=False,
+                        sort_by_length=False, #keep the order!
+                        maxibatch_size=config.maxibatch_size)
+
+    n_sent = 0
+    for x, y in valid_text_iterator:
+        x, x_mask, _, _ = prepare_data(x, y, maxlen=None)
+        samples = model.beam_search(sess, x, x_mask, config.beam_size)
+        assert len(samples) == len(x.T), (len(samples), x.shape)
+        for beam in samples:
+            n_sent += 1
+            if config.normalize:
+                beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
+            beam = sorted(beam, key=lambda (sent, cost): cost)
+            if config.n_best:
+                for sent, cost in beam:
+                    print seqs2words(sent, num_to_target), '[%f]' % cost
+            else:
+                best_hypo, cost = beam[0]
+                print seqs2words(best_hypo, num_to_target)
+        print >>sys.stderr, 'Translated {} sents'.format(n_sent)
+    duration = time.time() - start_time
+    print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -203,6 +199,10 @@ def parse_args():
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
                          help="load existing model from this path")
+    data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
+                         help="directory for saving summaries")
+    data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
+                         help="Save summaries after INT updates (default: %(default)s)")
 
     network = parser.add_argument_group('network parameters')
     network.add_argument('--embedding_size', type=int, default=512, metavar='INT',
@@ -233,18 +233,43 @@ def parse_args():
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
 
+    validation = parser.add_argument_group('validation parameters')
+    validation.add_argument('--valid_source_dataset', type=str, default=None, metavar='PATH', 
+                         help="source validation corpus (default: %(default)s)")
+    validation.add_argument('--valid_target_dataset', type=str, default=None, metavar='PATH',
+                         help="target validation corpus (default: %(default)s)")
+    validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
+                         help="validation minibatch size (default: %(default)s)")
+    validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
+                         help="validation frequency (default: %(default)s)")
+    validation.add_argument('--patience', type=int, default=10, metavar='INT',
+                         help="early stopping patience (default: %(default)s)")
+
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
                          help="display loss after INT updates (default: %(default)s)")
     display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
                          help="display some samples after INT updates (default: %(default)s)")
+    display.add_argument('--beamFreq', type=int, default=10000, metavar='INT',
+                         help="display some beam_search samples after INT updates (default: %(default)s)")
+    display.add_argument('--beam_size', type=int, default=12, metavar='INT',
+                         help="size of the beam (default: %(default)s)")
 
-
+    translate = parser.add_argument_group('translate parameters')
+    translate.add_argument('--translate_valid', action='store_true', dest='translate_valid',
+                            help='Translate source dataset instead of training')
+    translate.add_argument('--no_normalize', action='store_false', dest='normalize',
+                            help="Cost of sentences will not be normalized by length")
+    translate.add_argument('--n_best', action='store_true', dest='n_best',
+                            help="Print full beam")
     config = parser.parse_args()
     return config
 
 if __name__ == "__main__":
     config = parse_args()
-    print config
-    train(config)
-    print 'Success'
+    print >>sys.stderr, config
+    with tf.Session() as sess:
+        if config.translate_valid:
+            translate(config, sess)
+        else:
+            train(config, sess)
