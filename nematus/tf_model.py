@@ -189,10 +189,16 @@ class Decoder(object):
 
         init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
         init_state_att_ctx = (self.init_state, init_attended_context)
+        gates_x, proposal_x = self.grustep1._get_gates_x_proposal_x(y_embs)
         def step_fn(prev, x):
             prev_state = prev[0]
             prev_att_ctx = prev[1]
-            state = self.grustep1.forward(prev_state, x)
+            gates_x2d = x[0]
+            proposal_x2d = x[1]
+            state = self.grustep1._forward(
+                        prev_state,
+                        gates_x2d,
+                        proposal_x2d)
             att_ctx = self.attstep.forward(state) 
             state = self.grustep2.forward(state, att_ctx)
             #TODO: write att_ctx to tensorArray instead of having it as output of scan?
@@ -200,7 +206,7 @@ class Decoder(object):
 
         states, attended_states = RecurrentLayer(
                                     initial_state=init_state_att_ctx,
-                                    step_fn=step_fn).forward(y_embs)
+                                    step_fn=step_fn).forward((gates_x, proposal_x))
         logits = self.predictor.get_logits(y_embs, states, attended_states, multi_step=True)
         return logits
 
@@ -268,18 +274,28 @@ class Encoder(object):
         batch_size = tf.shape(x)[1]
         init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
         with tf.name_scope("forwardEncoder"):
+            gates_x, proposal_x = self.gru_forward._get_gates_x_proposal_x(embs)
             def step_fn(prev_state, x):
-                return self.gru_forward.forward(prev_state, x)
+                gates_x2d, proposal_x2d = x
+                return self.gru_forward._forward(
+                        prev_state,
+                        gates_x2d,
+                        proposal_x2d)
             states = RecurrentLayer(
                         initial_state=init_state,
-                        step_fn = step_fn).forward(embs)
+                        step_fn = step_fn).forward((gates_x, proposal_x))
 
         with tf.name_scope("backwardEncoder"):
+            gates_x, proposal_x = self.gru_backward._get_gates_x_proposal_x(embs_reversed)
             def step_fn(prev_state, x):
-                return self.gru_backward.forward(prev_state, x)
+                gates_x2d, proposal_x2d = x
+                return self.gru_backward._forward(
+                        prev_state,
+                        gates_x2d,
+                        proposal_x2d)
             states_reversed = RecurrentLayer(
                                 initial_state=init_state,
-                                step_fn = step_fn).forward(embs_reversed)
+                                step_fn = step_fn).forward((gates_x, proposal_x))
             states_reversed = tf.reverse(states_reversed, axis=[0])
 
         concat_states = tf.concat([states, states_reversed], axis=2)
@@ -378,6 +394,7 @@ class StandardModel(object):
 
     def beam_search(self, session, x_in, x_mask_in, beam_size):
         # x_in, x_mask_in are numpy arrays with shape (seqLen, batch)
+        # change init_state, context, context_in_attention_layer
         x_in = numpy.repeat(x_in, repeats=beam_size, axis=1)
         x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=1)
         feeds = {self.x : x_in, self.x_mask : x_mask_in}

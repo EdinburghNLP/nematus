@@ -88,12 +88,9 @@ class GRUStep(object):
                                     numpy.zeros((state_size,)).astype('float32'),
                                     name='proposal_bias')
 
-    def forward(self, prev_state, x):
+    def _forward(self, prev_state, gates_x, proposal_x):
         gates = tf.matmul(prev_state, self.state_to_gates)
-        #TODO: x*self.input_to_gates can be done in one matmul
-        # for all x; same for x*self.input_to_proposal
-        gates += tf.matmul(x, self.input_to_gates)
-        gates += self.gates_bias
+        gates += gates_x
         gates = tf.nn.sigmoid(gates)
         read_gate, update_gate = tf.split(gates,
                                           num_or_size_splits=2,
@@ -101,13 +98,26 @@ class GRUStep(object):
 
         proposal = tf.matmul(prev_state, self.state_to_proposal)
         proposal *= read_gate
-        proposal += tf.matmul(x, self.input_to_proposal)
-        proposal += self.proposal_bias
+        proposal += proposal_x
         proposal  = tf.tanh(proposal)
 
         new_state = update_gate*prev_state + (1-update_gate)*proposal
 
         return new_state
+
+    def forward(self, prev_state, x):
+        #TODO: x*self.input_to_gates can be done in one matmul
+        # for all x; same for x*self.input_to_proposal
+        gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
+        proposal_x = tf.matmul(x, self.input_to_proposal) + self.proposal_bias
+
+        return self._forward(prev_state, gates_x, proposal_x)
+
+    def _get_gates_x_proposal_x(self, x):
+        gates_x = matmul3d(x, self.input_to_gates) + self.gates_bias
+        proposal_x = matmul3d(x, self.input_to_proposal) + self.proposal_bias
+        return gates_x, proposal_x
+
 
 class AttentionStep(object):
     def __init__(self,
