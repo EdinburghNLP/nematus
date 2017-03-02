@@ -71,8 +71,8 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
 
     x = numpy.zeros((n_factors, maxlen_x, n_samples)).astype('int64')
     y = numpy.zeros((maxlen_y, n_samples)).astype('int64')
-    x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
-    y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
+    x_mask = numpy.zeros((maxlen_x, n_samples)).astype(floatX)
+    y_mask = numpy.zeros((maxlen_y, n_samples)).astype(floatX)
     for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
         x[:, :lengths_x[idx], idx] = zip(*s_x)
         x_mask[:lengths_x[idx]+1, idx] = 1.
@@ -86,7 +86,7 @@ def init_attn_mask(win, maxlen):
     # first dimension is middle point
     # second dimension is sentence length (middle point always less than sentence length, and sentence length == 0 is all 0)
     # last dimension is index
-    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype='float32')
+    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype=floatX)
     for i in xrange(maxlen):
         start = i - win
         end = i + win
@@ -102,7 +102,7 @@ def init_attn_mask(win, maxlen):
 def init_index_mask(win, maxlen):
     # return a maxlen * window-size matrix
     winsize = 2 * win + 1
-    mask = -1 * numpy.ones((maxlen, winsize), dtype='float32')
+    mask = -1 * numpy.ones((maxlen, winsize), dtype=floatX)
     for i in xrange(maxlen):
         start = i - win
         end = i + win
@@ -447,17 +447,17 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 def build_model(tparams, options):
 
     trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.))
+    use_noise = theano.shared(numpy_floatX(0.))
     dropout = dropout_constr(options, use_noise, trng, sampling=False)
 
-    x_mask = tensor.matrix('x_mask', dtype='float32')
+    x_mask = tensor.matrix('x_mask', dtype=floatX)
     y = tensor.matrix('y', dtype='int64')
-    y_mask = tensor.matrix('y_mask', dtype='float32')
+    y_mask = tensor.matrix('y_mask', dtype=floatX)
     # source text length 5; batch size 10
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype(floatX)
     # target text length 8; batch size 10
     y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
+    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype(floatX)
 
     x, ctx = build_encoder(tparams, options, dropout, x_mask, sampling=False)
     n_samples = x.shape[2]
@@ -526,9 +526,9 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     y = tensor.vector('y_sampler', dtype='int64')
     y.tag.test_value = -1 * numpy.ones((10,)).astype('int64')
     init_state_old = init_state
-    init_state = tensor.tensor3('init_state', dtype='float32')
+    init_state = tensor.tensor3('init_state', dtype=floatX)
     if theano.config.compute_test_value != 'off':
-        init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype('float32')
+        init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype(floatX)
 
     logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
 
@@ -557,8 +557,8 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 # assumes cost is the negative sentence-level log probability
 # and each sentence in the minibatch is a sample of the same source sentence
 def mrt_cost(cost, y_mask, options):
-    loss = tensor.vector('loss', dtype='float32')
-    alpha = theano.shared(numpy.float32(options['mrt_alpha']))
+    loss = tensor.vector('loss', dtype=floatX)
+    alpha = theano.shared(numpy_floatX(options['mrt_alpha']))
 
     if options['mrt_ml_mix'] > 0:
         ml_cost = cost[0]
@@ -596,8 +596,8 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
     dropout = dropout_constr(options, use_noise, trng, sampling=True)
 
     if greedy:
-        x_mask = tensor.matrix('x_mask', dtype='float32')
-        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
+        x_mask = tensor.matrix('x_mask', dtype=floatX)
+        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype(floatX)
     else:
         x_mask = None
 
@@ -728,7 +728,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
     hyp_samples=[ [] for i in xrange(live_k) ]
     word_probs=[ [] for i in xrange(live_k) ]
-    hyp_scores = numpy.zeros(live_k).astype('float32')
+    hyp_scores = numpy.zeros(live_k).astype(floatX)
     hyp_states = []
     if return_alignment:
         hyp_alignment = [[] for _ in xrange(live_k)]
@@ -840,7 +840,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             costs = cand_flat[ranks_flat]
 
             new_hyp_samples = []
-            new_hyp_scores = numpy.zeros(k-dead_k).astype('float32')
+            new_hyp_scores = numpy.zeros(k-dead_k).astype(floatX)
             new_word_probs = []
             new_hyp_states = []
             if return_alignment:
@@ -1033,6 +1033,8 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
           layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
           layer_normalisation_ff=False, # layer normalisation for FF layers; merge with layer_normalisation option if this works
+          layer_normalization_norm_only=False, # normalize layers by norms instead by mean and variance
+          weight_normalization=False, # normalize weights
     ):
 
     # Model options
@@ -1176,7 +1178,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     # apply L2 regularization on weights
     if decay_c > 0.:
-        decay_c = theano.shared(numpy.float32(decay_c), name='decay_c')
+        decay_c = theano.shared(numpy_floatX(decay_c), name='decay_c')
         weight_decay = 0.
         for kk, vv in tparams.iteritems():
             if kk.startswith('prior_'):
@@ -1187,15 +1189,15 @@ def train(dim_word=512,  # word vector dimensionality
 
     # regularize the alpha weights
     if alpha_c > 0. and not model_options['decoder'].endswith('simple'):
-        alpha_c = theano.shared(numpy.float32(alpha_c), name='alpha_c')
+        alpha_c = theano.shared(numpy_floatX(alpha_c), name='alpha_c')
         alpha_reg = alpha_c * (
-            (tensor.cast(y_mask.sum(0)//x_mask.sum(0), 'float32')[:, None] -
+            (tensor.cast(y_mask.sum(0)//x_mask.sum(0), floatX)[:, None] -
              opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
         cost += alpha_reg
 
     # apply L2 regularisation to loaded model (map training)
     if map_decay_c > 0:
-        map_decay_c = theano.shared(numpy.float32(map_decay_c), name="map_decay_c")
+        map_decay_c = theano.shared(numpy_floatX(map_decay_c), name="map_decay_c")
         weight_map_decay = 0.
         for kk, vv in tparams.iteritems():
             if kk.startswith('prior_'):
@@ -1218,6 +1220,9 @@ def train(dim_word=512,  # word vector dimensionality
     # allow finetuning of only last layer (becomes a linear model training problem)
     if finetune_only_last:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
+
+    # UGLY HACK
+    updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.endswith('_wns')])
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1350,7 +1355,7 @@ def train(dim_word=512,  # word vector dimensionality
                         # get negative smoothed BLEU for samples
                         scorer = ScorerProvider().get(model_options['mrt_loss'])
                         scorer.set_reference(ref)
-                        mean_loss = numpy.array(scorer.score_matrix(samples), dtype='float32').mean()
+                        mean_loss = numpy.array(scorer.score_matrix(samples), dtype=floatX).mean()
                     else:
                         mean_loss = 0.
 
@@ -1389,7 +1394,7 @@ def train(dim_word=512,  # word vector dimensionality
                     # get negative smoothed BLEU for samples
                     scorer = ScorerProvider().get(model_options['mrt_loss'])
                     scorer.set_reference(y_s)
-                    loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype='float32')
+                    loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
                     if optimizer in ['adam']: #TODO: this could also be done for other optimizers
                         # compute cost, grads and update parameters
@@ -1648,6 +1653,10 @@ if __name__ == '__main__':
                          help="use layer normalisation in RNN (default: %(default)s)")
     network.add_argument('--layer_normalisation_ff', action="store_true",
                          help="use layer normalisation in FF layers (default: %(default)s)")
+    network.add_argument('--layer_normalization_norm_only', action="store_true",
+                         help="normalize layers by norms instead by mean and variance (default: %(default)s)")
+    network.add_argument('--weight_normalization', action="store_true",
+                         help=" normalize weights (default: %(default)s)")
     network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
                          help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",

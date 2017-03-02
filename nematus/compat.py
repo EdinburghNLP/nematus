@@ -47,3 +47,8 @@ def fill_options(options):
         options['layer_normalisation'] = False
     if not 'layer_normalisation_ff' in options:
         options['layer_normalisation_ff'] = False
+    if not 'layer_normalization_norm_only' in options:
+        options['layer_normalization_norm_only'] = False
+    if not 'weight_normalization' in options:
+        options['weight_normalization'] = False
+
