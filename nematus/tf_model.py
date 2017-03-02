@@ -11,13 +11,18 @@ class Decoder(object):
             context_sum = tf.reduce_sum(
                             context * tf.expand_dims(x_mask, axis=2),
                             axis=0)
+
+            #context_sum = tf.Print(context_sum, [context, tf.reduce_sum(context, axis=1)], 'context')
+            #context_sum = tf.Print(context_sum, [context_sum, tf.reduce_sum(context_sum, axis=1)], 'context_sum')
             context_mean = context_sum / tf.expand_dims(
                                             tf.reduce_sum(x_mask, axis=0),
                                             axis=1)
+            #context_mean = tf.Print(context_mean, [context_mean, tf.reduce_sum(context_mean, axis=1)], 'context_mean')
             self.init_state_layer = FeedForwardLayer(
                                         in_size=config.state_size * 2,
                                         out_size=config.state_size)
             self.init_state = self.init_state_layer.forward(context_mean)
+            #self.init_state = tf.Print(self.init_state, [self.init_state, tf.reduce_sum(self.init_state, axis=1)], 'init_state')
 
             self.maxlen = config.maxlen
             self.embedding_size = config.embedding_size
@@ -132,18 +137,24 @@ class Decoder(object):
 
         def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
             #If ensemble decoding is necessary replace with for loop and do model[i].{grustep1,attstep,...}
+            #i = tf.Print(i, [i], 'i')
+            #i = tf.Print(i, [states], 'states')
+            #i = tf.Print(i, [prev_ys], 'prev_ys')
+            #i = tf.Print(i, [prev_embs], 'prev_embs')
+            #i = tf.Print(i, [cost], 'cost')
             new_states1 = self.grustep1.forward(states, prev_embs)
             att_ctx = self.attstep.forward(new_states1)
             new_states2 = self.grustep2.forward(new_states1, att_ctx)
             logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
             log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
+            #i = tf.Print(i, [log_probs], 'log_probs')
 
             # set cost of EOS to zero for completed sentences so that they are in top k
             # Need to make sure only EOS is selected because a completed sentence might
             # kill ongoing sentences
             log_probs = tf.where(tf.equal(prev_ys, 0), eos_log_probs, log_probs)
 
-            all_costs = log_probs + tf.expand_dims(cost, axis=1)
+            all_costs = log_probs + tf.expand_dims(cost, axis=1) # TODO: you might be getting NaNs here since -inf is in log_probs
 
             all_costs = tf.reshape(all_costs, shape=[-1, self.target_vocab_size * beam_size])
             values, indices = tf.nn.top_k(all_costs, k=beam_size) #the sorted option is by default True, is this needed? 
@@ -161,6 +172,8 @@ class Decoder(object):
             new_embs = self.y_emb_layer.forward(new_ys)
             new_states = tf.gather(new_states2, indices=survivor_idxs)
 
+            new_cost = tf.where(tf.equal(new_ys, 0), tf.abs(new_cost), new_cost)
+
             ys_array = ys_array.write(i, value=new_ys)
             p_array = p_array.write(i, value=survivor_idxs)
 
@@ -177,6 +190,7 @@ class Decoder(object):
         indices = tf.range(0, i)
         sampled_ys = ys_array.gather(indices)
         parents = p_array.gather(indices)
+        cost = tf.abs(cost) #to get negative-log-likelihood
         return sampled_ys, parents, cost
 
     def score(self, y):
@@ -266,7 +280,7 @@ class Encoder(object):
                                     state_size=config.state_size)
         self.state_size = config.state_size
 
-    def get_context(self, x):
+    def get_context(self, x, x_mask):
         with tf.name_scope("embedding"):
             embs = self.emb_layer.forward(x)
             embs_reversed = tf.reverse(embs, axis=[0], name='reverse_embeddings')
@@ -284,19 +298,30 @@ class Encoder(object):
             states = RecurrentLayer(
                         initial_state=init_state,
                         step_fn = step_fn).forward((gates_x, proposal_x))
+            #states = tf.Print(states, [tf.reduce_sum(states, axis=2)], "states", summarize=100)
 
         with tf.name_scope("backwardEncoder"):
             gates_x, proposal_x = self.gru_backward._get_gates_x_proposal_x(embs_reversed)
             def step_fn(prev_state, x):
-                gates_x2d, proposal_x2d = x
-                return self.gru_backward._forward(
-                        prev_state,
-                        gates_x2d,
-                        proposal_x2d)
+                gates_x2d, proposal_x2d, mask = x
+                new_state = self.gru_backward._forward(
+                                prev_state,
+                                gates_x2d,
+                                proposal_x2d)
+                new_state *= mask # batch x 1
+                # first couple of states of reversed encoder should be zero
+                # this is why we need to multiply by mask
+                # this way, when the reversed encoder reaches actual words
+                # the state will be zeros and not some accumulated garbage
+                return new_state
+                
+            x_mask_r = tf.reverse(x_mask, axis=[0])
+            x_mask_r = tf.expand_dims(x_mask_r, axis=[2]) #seqLen x batch x 1
             states_reversed = RecurrentLayer(
                                 initial_state=init_state,
-                                step_fn = step_fn).forward((gates_x, proposal_x))
+                                step_fn = step_fn).forward((gates_x, proposal_x, x_mask_r))
             states_reversed = tf.reverse(states_reversed, axis=[0])
+            #states_reversed = tf.Print(states_reversed, [tf.reduce_sum(states_reversed, axis=2)], "states_reversed", summarize=100)
 
         concat_states = tf.concat([states, states_reversed], axis=2)
         return concat_states
@@ -327,7 +352,7 @@ class StandardModel(object):
 
         with tf.name_scope("encoder"):
             self.encoder = Encoder(config)
-            ctx = self.encoder.get_context(self.x)
+            ctx = self.encoder.get_context(self.x, self.x_mask)
         
         with tf.name_scope("decoder"):
             self.decoder = Decoder(config, ctx, self.x_mask)

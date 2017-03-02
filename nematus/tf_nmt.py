@@ -120,9 +120,9 @@ def train(config, sess):
                 samples = model.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    print 'SOURCE:', seqs2words(xx, num_to_source)
-                    print 'TARGET:', seqs2words(yy, num_to_target)
-                    print 'SAMPLE:', seqs2words(ss, num_to_target)
+                    print >>sys.stderr, 'SOURCE:', seqs2words(xx, num_to_source)
+                    print >>sys.stderr, 'TARGET:', seqs2words(yy, num_to_target)
+                    print >>sys.stderr, 'SAMPLE:', seqs2words(ss, num_to_target)
 
             if config.beamFreq and uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
@@ -130,10 +130,10 @@ def train(config, sess):
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    print 'SOURCE:', seqs2words(xx, num_to_source)
-                    print 'TARGET:', seqs2words(yy, num_to_target)
+                    print >>sys.stderr, 'SOURCE:', seqs2words(xx, num_to_source)
+                    print >>sys.stderr, 'TARGET:', seqs2words(yy, num_to_target)
                     for i, (sample, cost) in enumerate(ss):
-                        print 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
+                        print >>sys.stderr, 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
 
             if config.validFreq and uidx % config.validFreq == 0:
                 total_loss = 0.
