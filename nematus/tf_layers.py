@@ -59,9 +59,7 @@ class RecurrentLayer(object):
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
-                 state_size,
-                 input_comes_premultiplied=False):
-        self.input_comes_premultiplied = input_comes_premultiplied #TODO
+                 state_size):
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
                                     [ortho_weight(state_size),
@@ -106,8 +104,6 @@ class GRUStep(object):
         return new_state
 
     def forward(self, prev_state, x):
-        #TODO: x*self.input_to_gates can be done in one matmul
-        # for all x; same for x*self.input_to_proposal
         gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
         proposal_x = tf.matmul(x, self.input_to_proposal) + self.proposal_bias
 
@@ -129,9 +125,9 @@ class AttentionStep(object):
         self.state_to_hidden = tf.Variable(
                                 norm_weight(state_size, hidden_size),
                                 name='state_to_hidden')
-        self.context_to_hidden = tf.Variable(
-                                norm_weight(context_state_size, hidden_size),
-                                name='context_to_hidden')
+        self.context_to_hidden = tf.Variable( #TODO: Nematus uses ortho_weight here - important?
+                                    norm_weight(context_state_size, hidden_size), 
+                                    name='context_to_hidden')
         self.hidden_bias = tf.Variable(
                             numpy.zeros((hidden_size,)).astype('float32'),
                             name='hidden_bias')
@@ -175,8 +171,6 @@ class Masked_cross_entropy_loss(object):
 
 
     def forward(self, logits):
-        # TODO: maybe first select the important logits and then compute cost? -- efficiency
-
         cost = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.y_true,
                 logits=logits)
@@ -184,27 +178,3 @@ class Masked_cross_entropy_loss(object):
         cost *= self.y_mask
         cost = tf.reduce_sum(cost, axis=0, keep_dims=False)
         return cost
-
-
-
-
-        
-
-        
-
-
-        
-
-                                    
-
-        
-
-                                
-
-
-
-
-
-
-    
-
