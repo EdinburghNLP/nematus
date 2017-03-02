@@ -124,7 +124,7 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
 
 
 def fflayer(tparams, state_below, options, dropout, prefix='rconv',
-            activ='lambda x: tensor.tanh(x)', W=None, b=None, dropout_probability=0, no_ln=False, **kwargs):
+            activ='lambda x: tensor.tanh(x)', W=None, b=None, dropout_probability=0, followed_by_softmax=False, **kwargs):
     if W == None:
         W = tparams[pp(prefix, 'W')]
     if b == None:
@@ -140,7 +140,7 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
 
     preact = tensor.dot(state_below*dropout_mask, W) + b
 
-    if options['layer_normalisation'] and not no_ln:
+    if (options['layer_normalisation'] and not followed_by_softmax) or (options['layer_normalisation_softmax'] and followed_by_softmax):
             if state_below.ndim == 3:
                 preact = layer_norm3d(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
             else:
