@@ -104,7 +104,7 @@ def layer_norm3d(x, b, s):
 
 # feedforward layer: affine transformation + point-wise nonlinearity
 def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
-                       ortho=True, weight_matrix=True, bias=True, no_ln=False):
+                       ortho=True, weight_matrix=True, bias=True, followed_by_softmax=False):
     if nin is None:
         nin = options['dim_proj']
     if nout is None:
@@ -114,7 +114,7 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
     if bias:
        params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype('float32')
 
-    if options['layer_normalisation'] and not no_ln:
+    if (options['layer_normalisation'] and not followed_by_softmax) or (options['layer_normalisation_softmax'] and followed_by_softmax):
         scale_add = 0.0
         scale_mul = 1.0
         params[pp(prefix,'ln_b')] = scale_add * numpy.ones((1*nout)).astype('float32')

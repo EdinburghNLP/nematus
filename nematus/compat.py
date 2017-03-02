@@ -45,3 +45,5 @@ def fill_options(options):
         options['decoder_deep'] = 'gru'
     if not 'layer_normalisation' in options:
         options['layer_normalisation'] = False
+    if not 'layer_normalisation_softmax' in options:
+        options['layer_normalisation_softmax'] = False

@@ -205,7 +205,7 @@ def init_params(options):
                                 nin=options['dim_word'],
                                 nout=options['n_words'],
                                 weight_matrix = not options['tie_decoder_embeddings'],
-                                no_ln=True)
+                                followed_by_softmax=True)
 
     return params
 
@@ -440,7 +440,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
     logit = get_layer_constr('ff')(tparams, logit, options, dropout,
                             dropout_probability=options['dropout_hidden'],
-                            prefix='ff_logit', activ='linear', no_ln=True, W=logit_W)
+                            prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
     return logit, opt_ret, ret_state
 
@@ -1033,6 +1033,7 @@ def train(dim_word=512,  # word vector dimensionality
           encoder_truncate_gradient=-1, # Truncate BPTT gradients in the encoder to this value. Use -1 for no truncation
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
           layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
+          layer_normalisation_softmax=False, # layer normalisation before softmax layer
     ):
 
     # Model options
@@ -1645,7 +1646,9 @@ if __name__ == '__main__':
     network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
                          help="dropout target words (0: no dropout) (default: %(default)s)")
     network.add_argument('--layer_normalisation', action="store_true",
-                         help="use layer normalisation in RNN (default: %(default)s)")
+                         help="use layer normalisation (default: %(default)s)")
+    network.add_argument('--layer_normalisation_softmax', action="store_true",
+                         help="use layer normalisation in last layer (before softmax) (default: %(default)s)")
     network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
                          help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
