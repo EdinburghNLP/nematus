@@ -82,37 +82,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
 
     return x, x_mask, y, y_mask
 
-def init_attn_mask(win, maxlen):
-    # return a maxlen * maxlen matrix
-    # first dimension is middle point
-    # second dimension is sentence length (middle point always less than sentence length, and sentence length == 0 is all 0)
-    # last dimension is index
-    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype='float32')
-    for i in xrange(maxlen):
-        start = i - win
-        end = i + win
-        for k in xrange(maxlen):
-            idx = 0
-            for j in xrange(start, end + 1):
-                if j in xrange(k):
-                    if i < k:
-                        mask[i][k][idx] = 1
-                idx += 1
-    return mask
-
-def init_index_mask(win, maxlen):
-    # return a maxlen * window-size matrix
-    winsize = 2 * win + 1
-    mask = -1 * numpy.ones((maxlen, winsize), dtype='float32')
-    for i in xrange(maxlen):
-        start = i - win
-        end = i + win
-        idx = 0
-        for j in xrange(start, end + 1):
-            if j in xrange(maxlen):
-                mask[i][idx] = j
-            idx += 1
-    return mask
 
 # initialize all parameters
 def init_params(options):
@@ -122,10 +91,6 @@ def init_params(options):
     params = get_layer_param('embedding')(options, params, options['n_words_src'], options['dim_per_factor'], options['factors'], suffix='')
     if not options['tie_encoder_decoder_embeddings']:
         params = get_layer_param('embedding')(options, params, options['n_words'], options['dim_word'], suffix='_dec')
-
-    if options['decoder'] == 'gru_local':
-        params['Attention_mask'] = init_attn_mask(options['pos_win'], options['maxlen'])
-        params['Indices_mask'] = init_index_mask(options['pos_win'], options['maxlen'])
 
     # encoder: bidirectional RNN
     params = get_layer_param(options['encoder'])(options, params,
@@ -473,7 +438,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next...',
+    print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
 
@@ -954,7 +919,6 @@ def train(dim_word=512,  # word vector dimensionality
           n_words_src=None,  # source vocabulary size
           n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
-          pos_win=10, # half window size of local attenton
           optimizer='adam',
           batch_size=16,
           valid_batch_size=16,
@@ -1605,15 +1569,13 @@ if __name__ == '__main__':
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
-    network.add_argument('--decoder', type=str, default='gru_cond',
-                         choices=['gru_cond', 'gru_local'],
-                         help='decoder recurrent layer')
+    #network.add_argument('--decoder', type=str, default='gru_cond',
+                         #choices=['gru_cond'],
+                         #help='decoder recurrent layer')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
-    training.add_argument('--pos_win', type=int, default=10, metavar='INT',
-                         help="half window size of local attention (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
                          help="optimizer (default: %(default)s)")

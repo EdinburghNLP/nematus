@@ -142,8 +142,6 @@ execute nematus/nmt.py to train a model.
 | --optimizer {adam,adadelta,rmsprop,sgd} | optimizer (default: adam) |
 | --batch_size INT     | minibatch size (default: 80) |
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
-| --pos_win INT        | half window size of local attention (default: 10)|
-| --decoder {gru_cond, gru_local}        | decoder type (default: gru_cond)|
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
 | --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
