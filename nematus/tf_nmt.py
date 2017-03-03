@@ -17,7 +17,7 @@ def create_model(config, sess):
         sess.run(init_op)
     else:
         saver.restore(sess, config.reload)
-    print >>sys.stderr, 'Done',
+    print >>sys.stderr, 'Done'
 
     return model, saver 
 
