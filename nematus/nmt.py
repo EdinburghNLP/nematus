@@ -204,7 +204,8 @@ def init_params(options):
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
                                 nout=options['n_words'],
-                                weight_matrix = not options['tie_decoder_embeddings'])
+                                weight_matrix = not options['tie_decoder_embeddings'],
+                                followed_by_softmax=True)
 
     return params
 
@@ -439,7 +440,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
     logit = get_layer_constr('ff')(tparams, logit, options, dropout,
                             dropout_probability=options['dropout_hidden'],
-                            prefix='ff_logit', activ='linear', W=logit_W)
+                            prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
     return logit, opt_ret, ret_state
 
@@ -1220,9 +1221,6 @@ def train(dim_word=512,  # word vector dimensionality
     # allow finetuning of only last layer (becomes a linear model training problem)
     if finetune_only_last:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
-
-    # UGLY HACK
-    updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.endswith('_wns')])
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
