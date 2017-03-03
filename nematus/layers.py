@@ -114,7 +114,7 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
     if bias:
        params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype('float32')
 
-    if (options['layer_normalisation'] and not followed_by_softmax) or (options['layer_normalisation_softmax'] and followed_by_softmax):
+    if options['layer_normalisation'] and not followed_by_softmax:
         scale_add = 0.0
         scale_mul = 1.0
         params[pp(prefix,'ln_b')] = scale_add * numpy.ones((1*nout)).astype('float32')
@@ -140,7 +140,7 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
 
     preact = tensor.dot(state_below*dropout_mask, W) + b
 
-    if (options['layer_normalisation'] and not followed_by_softmax) or (options['layer_normalisation_softmax'] and followed_by_softmax):
+    if options['layer_normalisation'] and not followed_by_softmax:
             if state_below.ndim == 3:
                 preact = layer_norm3d(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
             else:
