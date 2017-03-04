@@ -59,7 +59,8 @@ class RecurrentLayer(object):
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
-                 state_size):
+                 state_size,
+                 nematus_compat=False):
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
                                     [ortho_weight(state_size),
@@ -85,6 +86,7 @@ class GRUStep(object):
         self.proposal_bias = tf.Variable(
                                     numpy.zeros((state_size,)).astype('float32'),
                                     name='proposal_bias')
+        self.nematus_compat = nematus_compat
 
     def _forward(self, prev_state, gates_x, proposal_x):
         gates = tf.matmul(prev_state, self.state_to_gates)
@@ -95,6 +97,8 @@ class GRUStep(object):
                                           axis=1)
 
         proposal = tf.matmul(prev_state, self.state_to_proposal)
+        if self.nematus_compat:
+            proposal += self.proposal_bias
         proposal *= read_gate
         proposal += proposal_x
         proposal  = tf.tanh(proposal)
@@ -105,7 +109,10 @@ class GRUStep(object):
 
     def forward(self, prev_state, x):
         gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
-        proposal_x = tf.matmul(x, self.input_to_proposal) + self.proposal_bias
+        if self.nematus_compat:
+            proposal_x = tf.matmul(x, self.input_to_proposal)
+        else:
+            proposal_x = tf.matmul(x, self.input_to_proposal) + self.proposal_bias
 
         return self._forward(prev_state, gates_x, proposal_x)
 

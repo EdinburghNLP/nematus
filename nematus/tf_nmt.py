@@ -223,6 +223,8 @@ def parse_args():
                          help="source vocabulary size (default: %(default)s)")
     network.add_argument('--target_vocab_size', type=int, required=True, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
+    network.add_argument('--nematus_compat', action='store_true',
+                         help="Add this flag to have the same model architecture as Nematus(default: %(default)s)")
 
 
     training = parser.add_argument_group('training parameters')
