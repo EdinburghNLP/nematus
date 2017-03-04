@@ -137,15 +137,7 @@ def train(config, sess):
                         print >>sys.stderr, 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
 
             if config.validFreq and uidx % config.validFreq == 0:
-                total_loss = 0.
-                total_seen = 0
-                for x_v, y_v in valid_text_iterator:
-                    x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
-                    feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
-                    all_losses = tf.reduce_sum(loss_per_sentence)
-                    total_loss += sess.run(all_losses, feed_dict=feeds)
-                    total_seen += x_v_in.shape[1]
-                print 'Validation loss:', total_loss/total_seen
+                validate(sess, valid_text_iterator, model)
 
             if config.finish_after and uidx % config.finish_after == 0:
                 print >>sys.stderr, "Maximum number of updates reached"
@@ -158,6 +150,7 @@ def translate(config, sess):
     model, saver = create_model(config, sess)
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
+    print >>sys.stderr, "NOTE: Length of translations is capped to {}".format(config.maxlen)
     valid_text_iterator = TextIterator(
                         source=config.valid_source_dataset,
                         target=config.valid_source_dataset,
@@ -190,6 +183,44 @@ def translate(config, sess):
         print >>sys.stderr, 'Translated {} sents'.format(n_sent)
     duration = time.time() - start_time
     print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
+
+def validate(sess, valid_text_iterator, model):
+    costs = []
+    total_loss = 0.
+    total_seen = 0
+    x,x_mask,y,y_mask = model.get_score_inputs()
+    loss_per_sentence = model.get_loss()
+    for x_v, y_v in valid_text_iterator:
+        x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
+        feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
+        loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
+        total_loss += loss_per_sentence_out.sum()
+        total_seen += x_v_in.shape[1]
+        costs += list(loss_per_sentence_out)
+        print >>sys.stderr, "Seen", total_seen
+    print 'Validation loss (AVG/SUM/N_SENT):', total_loss/total_seen, total_loss, total_seen
+    return costs
+
+def validate_helper(config, sess):
+    model, saver = create_model(config, sess)
+    valid_text_iterator = TextIterator(
+                        source=config.valid_source_dataset,
+                        target=config.valid_target_dataset,
+                        source_dicts=[config.source_vocab],
+                        target_dict=config.target_vocab,
+                        batch_size=config.valid_batch_size,
+                        maxlen= 99999, # you want to validate on all sentences
+                        n_words_source=config.source_vocab_size,
+                        n_words_target=config.target_vocab_size,
+                        shuffle_each_epoch=False,
+                        sort_by_length=False, #TODO
+                        maxibatch_size=config.maxibatch_size)
+    costs = validate(sess, valid_text_iterator, model)
+    lines = open(config.valid_target_dataset).readlines()
+    for cost, line in zip(costs, lines):
+        print cost, line.strip()
+
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -258,6 +289,8 @@ def parse_args():
                          help="validation frequency (default: %(default)s)")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
+    validation.add_argument('--run_validation', action='store_true',
+                         help="Compute validation score on validation dataset")
 
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
@@ -285,5 +318,7 @@ if __name__ == "__main__":
     with tf.Session() as sess:
         if config.translate_valid:
             translate(config, sess)
+        elif config.run_validation:
+            validate_helper(config, sess)
         else:
             train(config, sess)
