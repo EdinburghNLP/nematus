@@ -220,15 +220,18 @@ class Predictor(object):
         with tf.name_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = FeedForwardLayer(
                                 in_size=config.embedding_size,
-                                out_size=config.embedding_size)
+                                out_size=config.embedding_size,
+                                non_linearity=lambda y: y)
         with tf.name_scope("state_to_hidden"):
             self.state_to_hidden = FeedForwardLayer(
                                     in_size=config.state_size,
-                                    out_size=config.embedding_size)
+                                    out_size=config.embedding_size,
+                                    non_linearity=lambda y: y)
         with tf.name_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = FeedForwardLayer(
                                     in_size=2*config.state_size,
-                                    out_size=config.embedding_size)
+                                    out_size=config.embedding_size,
+                                    non_linearity=lambda y: y)
         with tf.name_scope("hidden_to_logits"):
             self.hidden_to_logits = FeedForwardLayer(
                             in_size=config.embedding_size,
@@ -246,6 +249,7 @@ class Predictor(object):
             hidden_att_ctx = self.att_ctx_to_hidden.forward(attended_states,input_is_3d=multi_step)
 
         hidden = hidden_emb + hidden_state + hidden_att_ctx
+        hidden = tf.tanh(hidden)
 
         with tf.name_scope("hidden_to_logits"):
             logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
