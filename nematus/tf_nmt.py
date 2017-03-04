@@ -5,6 +5,7 @@ import time
 import argparse
 from tf_model import *
 from util import *
+import os
 
 def create_model(config, sess):
     print >>sys.stderr, 'Building model...',
@@ -16,7 +17,7 @@ def create_model(config, sess):
         init_op = tf.global_variables_initializer()
         sess.run(init_op)
     else:
-        saver.restore(sess, config.reload)
+        saver.restore(sess, os.path.abspath(config.reload))
     print >>sys.stderr, 'Done'
 
     return model, saver 

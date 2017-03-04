@@ -1,8 +1,8 @@
 #!/usr/bin/env python 
-import numpy as np
-import tensorflow as tf
-from tf_nmt import create_model
+
 import argparse
+import os
+
 
 th2tf = {
     'Wemb' : 'encoder/embedding/embeddings:0',
@@ -64,6 +64,9 @@ class FakeConfig(object):
 
 
 def theano_to_tensorflow_model(in_path, out_path):
+    import numpy as np
+    import tensorflow as tf
+    from tf_nmt import create_model
     saved_model = np.load(in_path)
 
     # Create fake config
@@ -91,6 +94,9 @@ def theano_to_tensorflow_model(in_path, out_path):
 
 
 def tensorflow_to_theano_model(in_path, out_path):
+    import numpy as np
+    import tensorflow as tf
+    from tf_nmt import create_model
     keys, values = zip(*th2tf.items())
     with tf.Session() as sess:
         new_saver = tf.train.import_meta_graph(in_path + '.meta')
@@ -122,6 +128,8 @@ if __name__ == '__main__':
     data.add_argument('--out', type=str, required=True, metavar='PATH')
 
     opts = parser.parse_args()
+    opts.inn = os.path.abspath(opts.inn)
+    opts.out = os.path.abspath(opts.out)
     
     if opts.from_theano:
         theano_to_tensorflow_model(opts.inn, opts.out)
