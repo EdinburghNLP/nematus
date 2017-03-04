@@ -12,17 +12,13 @@ class Decoder(object):
                             context * tf.expand_dims(x_mask, axis=2),
                             axis=0)
 
-            #context_sum = tf.Print(context_sum, [context, tf.reduce_sum(context, axis=1)], 'context')
-            #context_sum = tf.Print(context_sum, [context_sum, tf.reduce_sum(context_sum, axis=1)], 'context_sum')
             context_mean = context_sum / tf.expand_dims(
                                             tf.reduce_sum(x_mask, axis=0),
                                             axis=1)
-            #context_mean = tf.Print(context_mean, [context_mean, tf.reduce_sum(context_mean, axis=1)], 'context_mean')
             self.init_state_layer = FeedForwardLayer(
                                         in_size=config.state_size * 2,
                                         out_size=config.state_size)
             self.init_state = self.init_state_layer.forward(context_mean)
-            #self.init_state = tf.Print(self.init_state, [self.init_state, tf.reduce_sum(self.init_state, axis=1)], 'init_state')
 
             self.maxlen = config.maxlen
             self.embedding_size = config.embedding_size
@@ -138,17 +134,11 @@ class Decoder(object):
 
         def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
             #If ensemble decoding is necessary replace with for loop and do model[i].{grustep1,attstep,...}
-            #i = tf.Print(i, [i], 'i')
-            #i = tf.Print(i, [states], 'states')
-            #i = tf.Print(i, [prev_ys], 'prev_ys')
-            #i = tf.Print(i, [prev_embs], 'prev_embs')
-            #i = tf.Print(i, [cost], 'cost')
             new_states1 = self.grustep1.forward(states, prev_embs)
             att_ctx = self.attstep.forward(new_states1)
             new_states2 = self.grustep2.forward(new_states1, att_ctx)
             logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
             log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
-            #i = tf.Print(i, [log_probs], 'log_probs')
 
             # set cost of EOS to zero for completed sentences so that they are in top k
             # Need to make sure only EOS is selected because a completed sentence might
@@ -299,7 +289,6 @@ class Encoder(object):
             states = RecurrentLayer(
                         initial_state=init_state,
                         step_fn = step_fn).forward((gates_x, proposal_x))
-            #states = tf.Print(states, [tf.reduce_sum(states, axis=2)], "states", summarize=100)
 
         with tf.name_scope("backwardEncoder"):
             gates_x, proposal_x = self.gru_backward._get_gates_x_proposal_x(embs_reversed)
@@ -322,7 +311,6 @@ class Encoder(object):
                                 initial_state=init_state,
                                 step_fn = step_fn).forward((gates_x, proposal_x, x_mask_r))
             states_reversed = tf.reverse(states_reversed, axis=[0])
-            #states_reversed = tf.Print(states_reversed, [tf.reduce_sum(states_reversed, axis=2)], "states_reversed", summarize=100)
 
         concat_states = tf.concat([states, states_reversed], axis=2)
         return concat_states
