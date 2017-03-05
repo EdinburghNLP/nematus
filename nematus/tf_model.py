@@ -30,7 +30,11 @@ class Decoder(object):
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)
 
-        self.grustep1 = GRUStep(
+        if config.use_layer_norm:
+            GRUctor = GRUStepWithNormalization
+        else:
+            GRUctor = GRUStep
+        self.grustep1 = GRUctor(
                             input_size=config.embedding_size,
                             state_size=config.state_size)
         self.attstep = AttentionStep(
@@ -39,7 +43,7 @@ class Decoder(object):
                         context_mask=x_mask,
                         state_size=config.state_size,
                         hidden_size=2*config.state_size)
-        self.grustep2 = GRUStep(
+        self.grustep2 = GRUctor(
                             input_size=2*config.state_size,
                             state_size=config.state_size,
                             nematus_compat=config.nematus_compat)
@@ -194,16 +198,16 @@ class Decoder(object):
 
         init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
         init_state_att_ctx = (self.init_state, init_attended_context)
-        gates_x, proposal_x = self.grustep1._get_gates_x_proposal_x(y_embs)
+        gates_x, proposal_x = self.grustep1.precompute_from_x(y_embs)
         def step_fn(prev, x):
             prev_state = prev[0]
             prev_att_ctx = prev[1]
             gates_x2d = x[0]
             proposal_x2d = x[1]
-            state = self.grustep1._forward(
+            state = self.grustep1.forward(
                         prev_state,
-                        gates_x2d,
-                        proposal_x2d)
+                        gates_x=gates_x2d,
+                        proposal_x=proposal_x2d)
             att_ctx = self.attstep.forward(state) 
             state = self.grustep2.forward(state, att_ctx)
             #TODO: write att_ctx to tensorArray instead of having it as output of scan?
@@ -264,13 +268,17 @@ class Encoder(object):
                                 config.source_vocab_size,
                                 config.embedding_size)
 
+        if config.use_layer_norm:
+            GRUctor = GRUStepWithNormalization
+        else:
+            GRUctor = GRUStep
         with tf.name_scope("forwardEncoder"):
-            self.gru_forward = GRUStep(
+            self.gru_forward = GRUctor(
                                 input_size=config.embedding_size,
                                 state_size=config.state_size)
 
         with tf.name_scope("backwardEncoder"):
-            self.gru_backward = GRUStep(
+            self.gru_backward = GRUctor(
                                     input_size=config.embedding_size,
                                     state_size=config.state_size)
         self.state_size = config.state_size
@@ -283,25 +291,25 @@ class Encoder(object):
         batch_size = tf.shape(x)[1]
         init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
         with tf.name_scope("forwardEncoder"):
-            gates_x, proposal_x = self.gru_forward._get_gates_x_proposal_x(embs)
+            gates_x, proposal_x = self.gru_forward.precompute_from_x(embs)
             def step_fn(prev_state, x):
                 gates_x2d, proposal_x2d = x
-                return self.gru_forward._forward(
+                return self.gru_forward.forward(
                         prev_state,
-                        gates_x2d,
-                        proposal_x2d)
+                        gates_x=gates_x2d,
+                        proposal_x=proposal_x2d)
             states = RecurrentLayer(
                         initial_state=init_state,
                         step_fn = step_fn).forward((gates_x, proposal_x))
 
         with tf.name_scope("backwardEncoder"):
-            gates_x, proposal_x = self.gru_backward._get_gates_x_proposal_x(embs_reversed)
+            gates_x, proposal_x = self.gru_backward.precompute_from_x(embs_reversed)
             def step_fn(prev_state, x):
                 gates_x2d, proposal_x2d, mask = x
-                new_state = self.gru_backward._forward(
+                new_state = self.gru_backward.forward(
                                 prev_state,
-                                gates_x2d,
-                                proposal_x2d)
+                                gates_x=gates_x2d,
+                                proposal_x=proposal_x2d)
                 new_state *= mask # batch x 1
                 # first couple of states of reversed encoder should be zero
                 # this is why we need to multiply by mask

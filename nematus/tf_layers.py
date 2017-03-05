@@ -55,6 +55,28 @@ class RecurrentLayer(object):
                          elems=x,
                          initializer=self.initial_state)
         return states
+
+class LayerNormLayer(object):
+    def __init__(self,
+                 layer_size,
+                 eps=1e-5):
+        new_mean = numpy.zeros(shape=[layer_size], dtype=numpy.float32)
+        self.new_mean = tf.Variable(new_mean,
+                                    dtype=tf.float32,
+                                    name='new_mean')
+        new_std = numpy.ones(shape=[layer_size], dtype=numpy.float32)
+        self.new_std = tf.Variable(new_std,
+                                   dtype=tf.float32,
+                                   name='new_std')
+        self.eps = eps
+    def forward(self, x, input_is_3d=False):
+        #NOTE: tf.nn.moments does not support axes=[-1] or axes=[tf.rank(x)-1] :-(
+        axis = 2 if input_is_3d else 1
+        m, v = tf.nn.moments(x, axes=[axis], keep_dims=True)
+        std = tf.sqrt(v + self.eps)
+        norm_x = (x-m)/std
+        new_x = norm_x*self.new_std + self.new_mean
+        return new_x
     
 class GRUStep(object):
     def __init__(self, 
@@ -88,39 +110,109 @@ class GRUStep(object):
                                     name='proposal_bias')
         self.nematus_compat = nematus_compat
 
-    def _forward(self, prev_state, gates_x, proposal_x):
-        gates = tf.matmul(prev_state, self.state_to_gates)
-        gates += gates_x
+    
+
+    def _get_gates_x(self, x, input_is_3d=False):
+        if input_is_3d:
+            gates_x = matmul3d(x, self.input_to_gates) + self.gates_bias
+        else:
+            gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
+        return gates_x
+
+    def _get_gates_state(self, prev_state):
+        gates_state = tf.matmul(prev_state, self.state_to_gates)
+        return gates_state
+
+    def _get_proposal_x(self,x, input_is_3d=False):
+        if input_is_3d: 
+            proposal_x = matmul3d(x, self.input_to_proposal)
+        else:
+            proposal_x = tf.matmul(x, self.input_to_proposal)
+        if not self.nematus_compat:
+            proposal_x += self.proposal_bias
+        return proposal_x
+
+    def _get_proposal_state(self, prev_state):
+        proposal_state = tf.matmul(prev_state, self.state_to_proposal)
+        if self.nematus_compat:
+            proposal_state += self.proposal_bias
+        return proposal_state
+
+    def precompute_from_x(self, x):
+        # compute gates_x and proposal_x in one big matrix multiply
+        # if x is fully known upfront 
+        # this method exists only for efficiency reasons:W
+
+        gates_x = self._get_gates_x(x, input_is_3d=True)
+        proposal_x = self._get_proposal_x(x, input_is_3d=True)
+        return gates_x, proposal_x
+
+    def forward(self,
+                prev_state,
+                x=None,
+                gates_x=None,
+                gates_state=None,
+                proposal_x=None,
+                proposal_state=None):
+        if gates_x is None:
+            gates_x = self._get_gates_x(x) 
+        if proposal_x is None:
+            proposal_x = self._get_proposal_x(x) 
+        if gates_state is None:
+            gates_state = self._get_gates_state(prev_state) 
+        if proposal_state is None:
+            proposal_state = self._get_proposal_state(prev_state) 
+
+        gates = gates_x + gates_state
         gates = tf.nn.sigmoid(gates)
         read_gate, update_gate = tf.split(gates,
                                           num_or_size_splits=2,
                                           axis=1)
 
-        proposal = tf.matmul(prev_state, self.state_to_proposal)
-        if self.nematus_compat:
-            proposal += self.proposal_bias
-        proposal *= read_gate
-        proposal += proposal_x
-        proposal  = tf.tanh(proposal)
-
+        proposal = proposal_state*read_gate + proposal_x
+        proposal = tf.tanh(proposal)
         new_state = update_gate*prev_state + (1-update_gate)*proposal
 
         return new_state
 
-    def forward(self, prev_state, x):
-        gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
-        if self.nematus_compat:
-            proposal_x = tf.matmul(x, self.input_to_proposal)
+class GRUStepWithNormalization(GRUStep):
+    def __init__(self, 
+                 input_size, 
+                 state_size,
+                 nematus_compat=False):
+        super(GRUStepWithNormalization, self).__init__(input_size, state_size, nematus_compat)
+        #NOTE: GRUStep initializes bias terms which are not used in this class
+        #instead norm layers are used
+        with tf.name_scope('gates_x_norm'):
+            self.gates_x_norm = LayerNormLayer(2*state_size)
+        with tf.name_scope('gates_state_norm'):
+            self.gates_state_norm = LayerNormLayer(2*state_size)
+        with tf.name_scope('proposal_x_norm'):
+            self.proposal_x_norm = LayerNormLayer(state_size)
+        with tf.name_scope('proposal_state_norm'):
+            self.proposal_state_norm = LayerNormLayer(state_size)
+
+    def _get_gates_x(self, x, input_is_3d=False):
+        if input_is_3d:
+            gates_x = matmul3d(x, self.input_to_gates) 
         else:
-            proposal_x = tf.matmul(x, self.input_to_proposal) + self.proposal_bias
+            gates_x = tf.matmul(x, self.input_to_gates)
+        return self.gates_x_norm.forward(gates_x, input_is_3d=input_is_3d)
 
-        return self._forward(prev_state, gates_x, proposal_x)
+    def _get_gates_state(self, prev_state):
+        gates_state = tf.matmul(prev_state, self.state_to_gates)
+        return self.gates_state_norm.forward(gates_state)
 
-    def _get_gates_x_proposal_x(self, x):
-        gates_x = matmul3d(x, self.input_to_gates) + self.gates_bias
-        proposal_x = matmul3d(x, self.input_to_proposal) + self.proposal_bias
-        return gates_x, proposal_x
+    def _get_proposal_x(self,x, input_is_3d=False):
+        if input_is_3d: 
+            proposal_x = matmul3d(x, self.input_to_proposal)
+        else:
+            proposal_x = tf.matmul(x, self.input_to_proposal)
+        return self.proposal_x_norm.forward(proposal_x, input_is_3d=input_is_3d)
 
+    def _get_proposal_state(self, prev_state):
+        proposal_state = tf.matmul(prev_state, self.state_to_proposal)
+        return self.proposal_state_norm.forward(proposal_state)
 
 class AttentionStep(object):
     def __init__(self,

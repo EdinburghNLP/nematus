@@ -73,7 +73,8 @@ def train(config, sess):
     loss_per_sentence = model.get_loss()
     mean_loss = model.get_mean_loss()
 
-    writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
+    if config.summaryFreq:
+        writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
     tf.summary.scalar(name='mean cost', tensor=mean_loss)
     tf.summary.scalar(name='t', tensor=t)
     merged = tf.summary.merge_all()
@@ -277,6 +278,8 @@ def parse_args():
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    training.add_argument('--use_layer_norm', action="store_true", dest="use_layer_norm",
+                         help="Set to use layer normalization in encoder and decoder")
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_source_dataset', type=str, default=None, metavar='PATH', 
