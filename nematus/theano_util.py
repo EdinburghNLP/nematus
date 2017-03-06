@@ -11,6 +11,9 @@ import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
+floatX = theano.config.floatX
+numpy_floatX = numpy.typeDict[floatX]
+
 # push parameters to Theano shared variables
 def zip_to_theano(params, tparams):
     for kk, vv in params.iteritems():

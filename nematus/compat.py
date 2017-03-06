@@ -45,6 +45,8 @@ def fill_options(options):
         options['decoder_deep'] = 'gru'
     if not 'layer_normalisation' in options:
         options['layer_normalisation'] = False
+    if not 'weight_normalisation' in options:
+        options['weight_normalisation'] = False
     if not 'reload_training_progress' in options:
         options['reload_training_progress'] = True
     if not 'use_domain_interpolation' in options:
@@ -57,3 +59,5 @@ def fill_options(options):
         options['decoder_truncate_gradient'] = 0.1
     if not 'domain_interpolation_indomain_datasets' in options:
         options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
+
+
