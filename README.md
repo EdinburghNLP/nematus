@@ -14,6 +14,7 @@ The changes to Nematus include:
  - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
  - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
  - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
+ - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
  - command line interface for training
  - automatic training set reshuffling between epochs
  - n-best output for decoder
@@ -133,6 +134,7 @@ execute nematus/nmt.py to train a model.
 | --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
+| --layer_normalisation        |  use layer normalisation (default: False) |
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 | --enc_depth INT | number of encoder layers (default: 1) |
@@ -148,8 +150,6 @@ execute nematus/nmt.py to train a model.
 | --optimizer {adam,adadelta,rmsprop,sgd} | optimizer (default: adam) |
 | --batch_size INT     | minibatch size (default: 80) |
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
-| --pos_win INT        | half window size of local attention (default: 10)|
-| --decoder {gru_cond, gru_local}        | decoder type (default: gru_cond)|
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
 | --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
@@ -261,3 +261,7 @@ the code is based on the following model:
 Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio (2015): Neural Machine Translation by Jointly Learning to Align and Translate, Proceedings of the International Conference on Learning Representations (ICLR).
 
 please refer to the Nematus paper for a description of implementation differences
+
+ACKNOWLEDGMENTS
+---------------
+This project has received funding from the European Union’s Horizon 2020 research and innovation programme under grant agreements 645452 (QT21), 644333 (TraMOOC), 644402 (HimL) and 688139 (SUMMA).

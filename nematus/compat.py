@@ -45,3 +45,22 @@ def fill_options(options):
         options['output_depth'] = 1
     if not 'output_depth' in options:
         options['output_depth'] = 1
+    if not 'decoder_deep' in options:
+        options['decoder_deep'] = 'gru'
+    if not 'layer_normalisation' in options:
+        options['layer_normalisation'] = False
+    if not 'weight_normalisation' in options:
+        options['weight_normalisation'] = False
+    if not 'reload_training_progress' in options:
+        options['reload_training_progress'] = True
+    if not 'use_domain_interpolation' in options:
+        options['use_domain_interpolation'] = False
+    if not 'domain_interpolation_min' in options:
+        options['decoder_truncate_gradient'] = 0.1
+    if not 'domain_interpolation_max' in options:
+        options['decoder_truncate_gradient'] = 1.0
+    if not 'domain_interpolation_inc' in options:
+        options['decoder_truncate_gradient'] = 0.1
+    if not 'domain_interpolation_indomain_datasets' in options:
+        options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
+
