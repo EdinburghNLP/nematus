@@ -27,6 +27,7 @@ from collections import OrderedDict
 profile = False
 
 from data_iterator import TextIterator
+from training_progress import TrainingProgress
 from util import *
 from theano_util import *
 from alignment_util import *
@@ -81,37 +82,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
 
     return x, x_mask, y, y_mask
 
-def init_attn_mask(win, maxlen):
-    # return a maxlen * maxlen matrix
-    # first dimension is middle point
-    # second dimension is sentence length (middle point always less than sentence length, and sentence length == 0 is all 0)
-    # last dimension is index
-    mask = numpy.zeros((maxlen, maxlen, 2*win + 1), dtype='float32')
-    for i in xrange(maxlen):
-        start = i - win
-        end = i + win
-        for k in xrange(maxlen):
-            idx = 0
-            for j in xrange(start, end + 1):
-                if j in xrange(k):
-                    if i < k:
-                        mask[i][k][idx] = 1
-                idx += 1
-    return mask
-
-def init_index_mask(win, maxlen):
-    # return a maxlen * window-size matrix
-    winsize = 2 * win + 1
-    mask = -1 * numpy.ones((maxlen, winsize), dtype='float32')
-    for i in xrange(maxlen):
-        start = i - win
-        end = i + win
-        idx = 0
-        for j in xrange(start, end + 1):
-            if j in xrange(maxlen):
-                mask[i][idx] = j
-            idx += 1
-    return mask
 
 # initialize all parameters
 def init_params(options):
@@ -121,10 +91,6 @@ def init_params(options):
     params = get_layer_param('embedding')(options, params, options['n_words_src'], options['dim_per_factor'], options['factors'], suffix='')
     if not options['tie_encoder_decoder_embeddings']:
         params = get_layer_param('embedding')(options, params, options['n_words'], options['dim_word'], suffix='_dec')
-
-    if options['decoder'] == 'gru_local':
-        params['Attention_mask'] = init_attn_mask(options['pos_win'], options['maxlen'])
-        params['Indices_mask'] = init_index_mask(options['pos_win'], options['maxlen'])
 
     # encoder: bidirectional RNN
     params = get_layer_param(options['encoder'])(options, params,
@@ -541,7 +507,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next...',
+    print >>sys.stderr, 'Building f_next..',
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, ret_state]
 
@@ -986,7 +952,6 @@ def train(dim_word=512,  # word vector dimensionality
           n_words_src=None,  # source vocabulary size
           n_words=None,  # target vocabulary size
           maxlen=100,  # maximum length of the description
-          pos_win=10, # half window size of local attenton
           optimizer='adam',
           batch_size=16,
           valid_batch_size=16,
@@ -1008,16 +973,18 @@ def train(dim_word=512,  # word vector dimensionality
           dropout_source=0, # dropout source words (0: no dropout)
           dropout_target=0, # dropout target words (0: no dropout)
           reload_=False,
+          reload_training_progress=True, # reload trainig progress (only used if reload_ is True)
           overwrite=False,
           external_validation_script=None,
           shuffle_each_epoch=True,
           finetune=False,
           finetune_only_last=False,
           sort_by_length=True,
-          use_domain_interpolation=False,
-          domain_interpolation_min=0.1,
-          domain_interpolation_inc=0.1,
-          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
+          use_domain_interpolation=False, # interpolate between an out-domain training corpus and an in-domain training corpus
+          domain_interpolation_min=0.1, # minimum (initial) fraction of in-domain training data
+          domain_interpolation_max=1.0, # maximum fraction of in-domain training data
+          domain_interpolation_inc=0.1, # interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached
+          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'], # in-domain parallel training corpus
           maxibatch_size=20, #How many minibatches to load at one time
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
@@ -1084,11 +1051,29 @@ def train(dim_word=512,  # word vector dimensionality
         print 'Running in MRT mode, minibatch size set to 1 sentence'
         batch_size = 1
 
+    # initialize training progress
+    training_progress = TrainingProgress()
+    best_p = None
+    best_opt_p = None
+    training_progress.bad_counter = 0
+    training_progress.uidx = 0
+    training_progress.eidx = 0
+    training_progress.estop = False
+    training_progress.history_errs = []
+    training_progress.domain_interpolation_cur = domain_interpolation_min if use_domain_interpolation else None
+    # reload training progress
+    training_progress_file = saveto + '.progress.json'
+    if reload_ and reload_training_progress and os.path.exists(training_progress_file):
+        print 'Reloading training progress'
+        training_progress.load_from_json(training_progress_file)
+        if (training_progress.estop == True) or (training_progress.eidx > max_epochs) or (training_progress.uidx >= finish_after):
+            print >> sys.stderr, 'Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % training_progress_file
+            return numpy.inf
+
+
     print 'Loading data'
-    domain_interpolation_cur = None
     if use_domain_interpolation:
-        print 'Using domain interpolation with initial ratio %s, increase rate %s' % (domain_interpolation_min, domain_interpolation_inc)
-        domain_interpolation_cur = domain_interpolation_min
+        print 'Using domain interpolation with initial ratio %s, final ratio %s, increase rate %s' % (training_progress.domain_interpolation_cur, domain_interpolation_max, domain_interpolation_inc)
         train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
                          dictionaries[:-1], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
@@ -1099,7 +1084,7 @@ def train(dim_word=512,  # word vector dimensionality
                          sort_by_length=sort_by_length,
                          indomain_source=domain_interpolation_indomain_datasets[0],
                          indomain_target=domain_interpolation_indomain_datasets[1],
-                         interpolation_rate=domain_interpolation_cur,
+                         interpolation_rate=training_progress.domain_interpolation_cur,
                          maxibatch_size=maxibatch_size)
     else:
         train = TextIterator(datasets[0], datasets[1],
@@ -1249,19 +1234,6 @@ def train(dim_word=512,  # word vector dimensionality
 
     print 'Optimization'
 
-    best_p = None
-    best_opt_p = None
-    bad_counter = 0
-    uidx = 0
-    estop = False
-    history_errs = []
-    # reload history
-    if reload_ and os.path.exists(saveto):
-        rmodel = numpy.load(saveto)
-        history_errs = list(rmodel['history_errs'])
-        if 'uidx' in rmodel:
-            uidx = rmodel['uidx']
-
     #save model options
     json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
 
@@ -1280,11 +1252,11 @@ def train(dim_word=512,  # word vector dimensionality
     last_words = 0
     ud_start = time.time()
     p_validation = None
-    for eidx in xrange(max_epochs):
+    for training_progress.eidx in xrange(training_progress.eidx, max_epochs):
         n_samples = 0
 
         for x, y in train:
-            uidx += 1
+            training_progress.uidx += 1
             use_noise.set_value(1.)
 
             #ensure consistency in number of factors
@@ -1303,7 +1275,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                 if x is None:
                     print 'Minibatch with zero sample under length ', maxlen
-                    uidx -= 1
+                    training_progress.uidx -= 1
                     continue
 
                 cost_batches += 1
@@ -1326,7 +1298,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
                 if not xy_pairs:
-                    uidx -= 1
+                    training_progress.uidx -= 1
                     continue
 
                 for x_s, y_s in xy_pairs:
@@ -1409,12 +1381,12 @@ def train(dim_word=512,  # word vector dimensionality
                 return 1., 1., 1.
 
             # verbose
-            if numpy.mod(uidx, dispFreq) == 0:
+            if numpy.mod(training_progress.uidx, dispFreq) == 0:
                 ud = time.time() - ud_start
                 sps = last_disp_samples / float(ud)
                 wps = last_words / float(ud)
                 cost_avg = cost_sum / float(cost_batches)
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
+                print 'Epoch ', training_progress.eidx, 'Update ', training_progress.uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
                 ud_start = time.time()
                 cost_batches = 0
                 last_disp_samples = 0
@@ -1423,7 +1395,7 @@ def train(dim_word=512,  # word vector dimensionality
 
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
-            if numpy.mod(uidx, saveFreq) == 0:
+            if numpy.mod(training_progress.uidx, saveFreq) == 0:
                 print 'Saving the best model...',
                 if best_p is not None:
                     params = best_p
@@ -1433,23 +1405,24 @@ def train(dim_word=512,  # word vector dimensionality
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
                 both_params = dict(params, **optimizer_params)
-                numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **both_params)
+                numpy.savez(saveto, **both_params)
+                training_progress.save_to_json(training_progress_file)
                 print 'Done'
 
                 # save with uidx
                 if not overwrite:
-                    print 'Saving the model at iteration {}...'.format(uidx),
+                    print 'Saving the model at iteration {}...'.format(training_progress.uidx),
                     saveto_uidx = '{}.iter{}.npz'.format(
-                        os.path.splitext(saveto)[0], uidx)
+                        os.path.splitext(saveto)[0], training_progress.uidx)
 
                     both_params = dict(unzip_from_theano(tparams, excluding_prefix='prior_'), **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
-                    numpy.savez(saveto_uidx, history_errs=history_errs,
-                                uidx=uidx, **both_params)
+                    numpy.savez(saveto_uidx, **both_params)
+                    training_progress.save_to_json(saveto_uidx+'.progress.json')
                     print 'Done'
 
 
             # generate some samples with the model and display them
-            if sampleFreq and numpy.mod(uidx, sampleFreq) == 0:
+            if sampleFreq and numpy.mod(training_progress.uidx, sampleFreq) == 0:
                 # FIXME: random selection?
                 for jj in xrange(numpy.minimum(5, x.shape[2])):
                     stochastic = True
@@ -1506,32 +1479,32 @@ def train(dim_word=512,  # word vector dimensionality
                     print
 
             # validate model on validation set and early stop if necessary
-            if valid and validFreq and numpy.mod(uidx, validFreq) == 0:
+            if valid and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
                 use_noise.set_value(0.)
                 valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
                 valid_err = valid_errs.mean()
-                history_errs.append(valid_err)
+                training_progress.history_errs.append(float(valid_err))
 
-                if uidx == 0 or valid_err <= numpy.array(history_errs).min():
+                if training_progress.uidx == 0 or valid_err <= numpy.array(training_progress.history_errs).min():
                     best_p = unzip_from_theano(tparams, excluding_prefix='prior_')
                     best_opt_p = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
-                    bad_counter = 0
-                if len(history_errs) > patience and valid_err >= \
-                        numpy.array(history_errs)[:-patience].min():
-                    bad_counter += 1
-                    if bad_counter > patience:
-                        if use_domain_interpolation and (domain_interpolation_cur < 1.0):
-                            domain_interpolation_cur = min(domain_interpolation_cur + domain_interpolation_inc, 1.0)
-                            print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % domain_interpolation_cur
-                            train.adjust_domain_interpolation_rate(domain_interpolation_cur)
+                    training_progress.bad_counter = 0
+                if valid_err >= numpy.array(training_progress.history_errs).min():
+                    training_progress.bad_counter += 1
+                    if training_progress.bad_counter > patience:
+                        if use_domain_interpolation and (training_progress.domain_interpolation_cur < 1.0):
+                            training_progress.domain_interpolation_cur = min(training_progress.domain_interpolation_cur + domain_interpolation_inc, domain_interpolation_max)
+                            print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur
+                            train.adjust_domain_interpolation_rate(training_progress.domain_interpolation_cur)
                             if best_p is not None:
                                 zip_to_theano(best_p, tparams)
                                 zip_to_theano(best_opt_p, optimizer_tparams)
-                            bad_counter = 0
+                            training_progress.bad_counter = 0
                         else:
+                            print 'Valid ', valid_err
                             print 'Early Stop!'
-                            estop = True
+                            training_progress.estop = True
                             break
 
                 print 'Valid ', valid_err
@@ -1548,20 +1521,21 @@ def train(dim_word=512,  # word vector dimensionality
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
                     both_params = dict(params, **optimizer_params)
-                    numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **both_params)
+                    numpy.savez(saveto +'.dev', **both_params)
+                    training_progress.save_to_json(saveto+'.dev.progress.json')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
                     p_validation = Popen([external_validation_script])
 
             # finish after this many updates
-            if uidx >= finish_after:
-                print 'Finishing after %d iterations!' % uidx
-                estop = True
+            if training_progress.uidx >= finish_after:
+                print 'Finishing after %d iterations!' % training_progress.uidx
+                training_progress.estop = True
                 break
 
         print 'Seen %d samples' % n_samples
 
-        if estop:
+        if training_progress.estop:
             break
 
     if best_p is not None:
@@ -1586,9 +1560,8 @@ def train(dim_word=512,  # word vector dimensionality
 
     both_params = dict(params, **optimizer_params)
     numpy.savez(saveto, zipped_params=best_p,
-                history_errs=history_errs,
-                uidx=uidx,
                 **both_params)
+    training_progress.save_to_json(training_progress_file)
 
     return valid_err
 
@@ -1607,6 +1580,8 @@ if __name__ == '__main__':
                          help="save frequency (default: %(default)s)")
     data.add_argument('--reload', action='store_true',  dest='reload_',
                          help="load existing model (if '--model' points to existing model)")
+    data.add_argument('--no_reload_training_progress', action='store_false',  dest='reload_training_progress',
+                         help="don't reload training progress (only used if --reload is enabled)")
     data.add_argument('--overwrite', action='store_true',
                          help="write all models to same file")
 
@@ -1653,9 +1628,9 @@ if __name__ == '__main__':
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
-    network.add_argument('--decoder', type=str, default='gru_cond',
-                         choices=['gru_cond', 'gru_local'],
-                         help='first decoder recurrent layer')
+    #network.add_argument('--decoder', type=str, default='gru_cond',
+                         #choices=['gru_cond'],
+                         #help='first decoder recurrent layer')
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond', 'gru_cond_reuse_att'],
                          help='decoder recurrent layer after first one')
@@ -1663,8 +1638,6 @@ if __name__ == '__main__':
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
-    training.add_argument('--pos_win', type=int, default=10, metavar='INT',
-                         help="half window size of local attention (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
                          help="optimizer (default: %(default)s)")
@@ -1735,8 +1708,21 @@ if __name__ == '__main__':
     mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
                      help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
+    domain_interpolation = parser.add_argument_group('domain interpolation parameters')
+    domain_interpolation.add_argument('--use_domain_interpolation', action='store_true',  dest='use_domain_interpolation',
+                         help="interpolate between an out-domain training corpus and an in-domain training corpus")
+    domain_interpolation.add_argument('--domain_interpolation_min', type=float, default=0.1, metavar='FLOAT',
+                         help="minimum (initial) fraction of in-domain training data (default: %(default)s)")
+    domain_interpolation.add_argument('--domain_interpolation_max', type=float, default=1.0, metavar='FLOAT',
+                         help="maximum fraction of in-domain training data (default: %(default)s)")
+    domain_interpolation.add_argument('--domain_interpolation_inc', type=float, default=0.1, metavar='FLOAT',
+                         help="interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached (default: %(default)s)")
+    domain_interpolation.add_argument('--domain_interpolation_indomain_datasets', type=str, default=['indomain.en', 'indomain.fr'], metavar='PATH', nargs=2,
+                         help="indomain parallel training corpus (source and target)")
+
     args = parser.parse_args()
 
+    #print vars(args)
     train(**vars(args))
 
 #    Profile peak GPU memory usage by uncommenting next line and enabling theano CUDA memory profiling (http://deeplearning.net/software/theano/tutorial/profiling.html)
