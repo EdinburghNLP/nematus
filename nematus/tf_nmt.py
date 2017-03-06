@@ -62,6 +62,24 @@ def load_dictionaries(config):
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
 
+def read_all_lines(config, path):
+    source_to_num, _, _, _ = load_dictionaries(config)
+    lines = map(lambda l: l.strip().split(), open(path, 'r').readlines())
+    fn = lambda w: [source_to_num[w] if w in source_to_num else 1] # extra [ ] brackets for factor dimension
+    lines = map(lambda l: map(lambda w: fn(w), l), lines)
+    lines = numpy.array(lines)
+    lengths = numpy.array(map(lambda l: len(l), lines))
+    lengths = numpy.array(lengths)
+    idxs = lengths.argsort()
+    lines = lines[idxs]
+
+    #merge into batches
+    batches = []
+    for i in range(0, len(lines), config.valid_batch_size):
+        batch = lines[i:i+config.valid_batch_size]
+        batches.append(batch)
+
+    return batches, idxs
 
 
 def train(config, sess):
@@ -152,36 +170,31 @@ def translate(config, sess):
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
     print >>sys.stderr, "NOTE: Length of translations is capped to {}".format(config.maxlen)
-    valid_text_iterator = TextIterator(
-                        source=config.valid_source_dataset,
-                        target=config.valid_source_dataset,
-                        source_dicts=[config.source_vocab],
-                        target_dict=config.target_vocab,
-                        batch_size=config.valid_batch_size,
-                        maxlen=99999, # you want to validate on all sentences
-                        n_words_source=config.source_vocab_size,
-                        n_words_target=config.target_vocab_size,
-                        shuffle_each_epoch=False,
-                        sort_by_length=False, #keep the order!
-                        maxibatch_size=config.maxibatch_size)
 
     n_sent = 0
-    for x, y in valid_text_iterator:
-        x, x_mask, _, _ = prepare_data(x, y, maxlen=None)
+    batches, idxs = read_all_lines(config, config.valid_source_dataset)
+    outputs = []
+    for x in batches:
+        y_dummy = numpy.zeros(shape=(len(x),1))
+        x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
         samples = model.beam_search(sess, x, x_mask, config.beam_size)
         assert len(samples) == len(x.T), (len(samples), x.shape)
-        for beam in samples:
-            n_sent += 1
-            if config.normalize:
-                beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
-            beam = sorted(beam, key=lambda (sent, cost): cost)
-            if config.n_best:
-                for sent, cost in beam:
-                    print seqs2words(sent, num_to_target), '[%f]' % cost
-            else:
-                best_hypo, cost = beam[0]
-                print seqs2words(best_hypo, num_to_target)
+        outputs += list(samples)
+        n_sent += len(samples)
         print >>sys.stderr, 'Translated {} sents'.format(n_sent)
+    outputs = numpy.array(outputs, dtype=numpy.object)
+    outputs = outputs[idxs.argsort()]
+
+    for beam in outputs:
+        if config.normalize:
+            beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
+        beam = sorted(beam, key=lambda (sent, cost): cost)
+        if config.n_best:
+            for sent, cost in beam:
+                print seqs2words(sent, num_to_target), '[%f]' % cost
+        else:
+            best_hypo, cost = beam[0]
+            print seqs2words(best_hypo, num_to_target)
     duration = time.time() - start_time
     print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
 
