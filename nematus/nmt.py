@@ -1034,7 +1034,6 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
           layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
           layer_normalisation_ff=False, # layer normalisation for FF layers; merge with layer_normalisation option if this works
-          layer_normalization_norm_only=False, # normalize layers by norms instead by mean and variance
           weight_normalization=False, # normalize weights
     ):
 
@@ -1651,8 +1650,6 @@ if __name__ == '__main__':
                          help="use layer normalisation in RNN (default: %(default)s)")
     network.add_argument('--layer_normalisation_ff', action="store_true",
                          help="use layer normalisation in FF layers (default: %(default)s)")
-    network.add_argument('--layer_normalization_norm_only', action="store_true",
-                         help="normalize layers by norms instead by mean and variance (default: %(default)s)")
     network.add_argument('--weight_normalization', action="store_true",
                          help=" normalize weights (default: %(default)s)")
     network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
