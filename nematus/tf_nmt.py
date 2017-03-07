@@ -6,6 +6,8 @@ import argparse
 from tf_model import *
 from util import *
 import os
+from threading import Thread
+from Queue import Queue
 
 def create_model(config, sess):
     print >>sys.stderr, 'Building model...',
@@ -173,15 +175,42 @@ def translate(config, sess):
 
     n_sent = 0
     batches, idxs = read_all_lines(config, config.valid_source_dataset)
-    outputs = []
-    for x in batches:
-        y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
-        samples = model.beam_search(sess, x, x_mask, config.beam_size)
-        assert len(samples) == len(x.T), (len(samples), x.shape)
-        outputs += list(samples)
+    in_queue, out_queue = Queue(), Queue()
+    model._get_beam_search_outputs(config.beam_size)
+    
+    def translate_worker(in_queue, out_queue, model, sess, config):
+        while True:
+            job = in_queue.get()
+            if job is None:
+                break
+            idx, x = job
+            y_dummy = numpy.zeros(shape=(len(x),1))
+            x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
+            try:
+                samples = model.beam_search(sess, x, x_mask, config.beam_size)
+                out_queue.put((idx, samples))
+            except:
+                in_queue.put(job)
+
+    threads = [None] * config.n_threads
+    for i in xrange(config.n_threads):
+        threads[i] = Thread(
+                        target=translate_worker,
+                        args=(in_queue, out_queue, model, sess, config))
+        threads[i].deamon = True
+        threads[i].start()
+
+    for i, batch in enumerate(batches):
+        in_queue.put((i,batch))
+    for _ in range(config.n_threads):
+        in_queue.put(None)
+    outputs = [None]*len(batches)
+    for _ in range(len(batches)):
+        i, samples = out_queue.get()
+        outputs[i] = list(samples)
         n_sent += len(samples)
         print >>sys.stderr, 'Translated {} sents'.format(n_sent)
+    outputs = [beam for batch in outputs for beam in batch]
     outputs = numpy.array(outputs, dtype=numpy.object)
     outputs = outputs[idxs.argsort()]
 
@@ -197,6 +226,7 @@ def translate(config, sess):
             print seqs2words(best_hypo, num_to_target)
     duration = time.time() - start_time
     print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
+
 
 def validate(sess, valid_text_iterator, model):
     costs = []
@@ -325,6 +355,8 @@ def parse_args():
                             help="Cost of sentences will not be normalized by length")
     translate.add_argument('--n_best', action='store_true', dest='n_best',
                             help="Print full beam")
+    translate.add_argument('--n_threads', type=int, default=5, metavar='INT',
+                         help="Number of threads to use for beam search (default: %(default)s)")
     config = parser.parse_args()
     return config
 
