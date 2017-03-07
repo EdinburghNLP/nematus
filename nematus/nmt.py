@@ -94,11 +94,15 @@ def init_params(options):
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder',
                                               nin=options['dim_word'],
-                                              dim=options['dim'])
+                                              dim=options['dim'],
+                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                              recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'])
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder_r',
                                               nin=options['dim_word'],
-                                              dim=options['dim'])
+                                              dim=options['dim'],
+                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                              recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'])
     if options['enc_depth'] > 1:
         for level in range(2, options['enc_depth'] + 1):
             prefix_f = pp('encoder', level)
@@ -108,16 +112,22 @@ def init_params(options):
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_f,
                                                              nin=options['dim'],
-                                                             dim=options['dim'])
+                                                             dim=options['dim'],
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'])
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_r,
                                                              nin=options['dim'],
-                                                             dim=options['dim'])
+                                                             dim=options['dim'],
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'])
             else:
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_f,
                                                              nin=options['dim'] * 2,
-                                                             dim=options['dim'] * 2)
+                                                             dim=options['dim'] * 2,
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'])
 
 
     ctxdim = 2 * options['dim']
@@ -146,7 +156,9 @@ def init_params(options):
                                             prefix=pp('decoder', level),
                                             nin=input_dim,
                                             dim=options['dim'],
-                                            dimctx=ctxdim)
+                                            dimctx=ctxdim,
+                                            recurrence_transition_depth=options['dec_high_recurrence_transition_depth'],
+                                            recurrence_transition_deep_context=options['dec_high_recurrence_transition_deep_context'])
 
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
@@ -218,6 +230,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                 mask=x_mask,
                                                 dropout_probability_below=options['dropout_embedding'],
                                                 dropout_probability_rec=options['dropout_hidden'],
+                                                recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'],
                                                 truncate_gradient=options['encoder_truncate_gradient'],
                                                 profile=profile)
     projr = get_layer_constr(options['encoder'])(tparams, embr, options, dropout,
@@ -225,6 +239,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                  mask=xr_mask,
                                                  dropout_probability_below=options['dropout_embedding'],
                                                  dropout_probability_rec=options['dropout_hidden'],
+                                                 recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                 recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'],
                                                  truncate_gradient=options['encoder_truncate_gradient'],
                                                  profile=profile)
 
@@ -242,6 +258,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                     mask=x_mask,
                                                     dropout_probability_below=options['dropout_hidden'],
                                                     dropout_probability_rec=options['dropout_hidden'],
+                                                    recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                    recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'],
                                                     truncate_gradient=options['encoder_truncate_gradient'],
                                                     profile=profile)
         projr = get_layer_constr(options['encoder'])(tparams, input_r, options, dropout,
@@ -249,6 +267,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                      mask=xr_mask,
                                                      dropout_probability_below=options['dropout_hidden'],
                                                      dropout_probability_rec=options['dropout_hidden'],
+                                                     recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                     recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'],
                                                      truncate_gradient=options['encoder_truncate_gradient'],
                                                      profile=profile)
 
@@ -268,6 +288,8 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                    mask=x_mask,
                                                    dropout_probability_below=options['dropout_hidden'],
                                                    dropout_probability_rec=options['dropout_hidden'],
+                                                   recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                   recurrence_transition_deep_input=options['enc_recurrence_transition_deep_input'],
                                                    truncate_gradient=options['encoder_truncate_gradient'],
                                                    profile=profile)[0]
 
@@ -367,6 +389,8 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                               init_state=init_state[level-1],
                                               dropout_probability_below=options['dropout_hidden'],
                                               dropout_probability_rec=options['dropout_hidden'],
+                                              recurrence_transition_depth=options['dec_high_recurrence_transition_depth'],
+                                              recurrence_transition_deep_input=options['dec_high_recurrence_transition_deep_input'],
                                               truncate_gradient=options['decoder_truncate_gradient'],
                                               profile=profile)[0]
 
@@ -934,8 +958,14 @@ def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
           dec_depth=1, # number of layers in the decoder
+
+          enc_recurrence_transition_depth=1, # number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru)
+          enc_recurrence_transition_deep_input=False, # include input vectors in the GRU transitions after the second one in the encoder. (Only applies to gru)
           dec_base_recurrence_transition_depth=2, # number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond)
           dec_base_recurrence_transition_deep_context=False, # include context vectors in the GRU transitions after the second one in the first layer of the decoder. (Only applies to gru_cond)
+          dec_high_recurrence_transition_depth=1, # number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru)
+          dec_high_recurrence_transition_deep_input=False, # include input vectors in the GRU transitions after the second one in the higher layers of the decoder. (Only applies to gru)
+
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
           enc_depth_bidirectional=None, # first n encoder layers are bidirectional (default: all)
           output_depth=1, # number of layers in deep output
@@ -1021,7 +1051,10 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
     assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
-    assert(dec_base_recurrence_transition_depth >= 2) # recurrence transition depth must be at least 2.
+    
+    assert(enc_recurrence_transition_depth >= 1) # enc recurrence transition depth must be at least 1.
+    assert(dec_base_recurrence_transition_depth >= 2) # dec base recurrence transition depth must be at least 2.
+    assert(dec_high_recurrence_transition_depth >= 1) # dec higher recurrence transition depth must be at least 1.
 
     if model_options['enc_depth_bidirectional'] is None:
         model_options['enc_depth_bidirectional'] = model_options['enc_depth']
@@ -1604,10 +1637,20 @@ if __name__ == '__main__':
                          help="number of encoder layers (default: %(default)s)")
     network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
                          help="number of decoder layers (default: %(default)s)")
+
+    network.add_argument('--enc_recurrence_transition_depth', type=int, default=1, metavar='INT',
+                         help="number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
+    network.add_argument('--enc_recurrence_transition_deep_input', action='store_true',
+                         help="include input vectors in the GRU transitions after the second one in the encoder. (Only applies to gru)")
     network.add_argument('--dec_base_recurrence_transition_depth', type=int, default=2, metavar='INT',
                          help="number of GRU transition operations applied in the first layer of the decoder. Minimum is 2.  (Only applies to gru_cond). (default: %(default)s)")
     network.add_argument('--dec_base_recurrence_transition_deep_context', action='store_true',
                          help="include context vectors in the GRU transitions after the second one in the first layer of the decoder. (Only applies to gru_cond)")
+    network.add_argument('--dec_high_recurrence_transition_depth', type=int, default=1, metavar='INT',
+                         help="number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
+    network.add_argument('--dec_high_recurrence_transition_deep_input', action='store_true',
+                         help="include input vectors in the GRU transitions after the second one in the higher layers of the decoder. (Only applies to gru)")
+
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--enc_depth_bidirectional', type=int, default=None, metavar='INT',

@@ -26,10 +26,20 @@ def fill_options(options):
         options['enc_depth'] = 1
     if not 'dec_depth' in options:
         options['dec_depth'] = 1
+
+    if not 'enc_recurrence_transition_depth' in options:
+        options['enc_recurrence_transition_depth'] = 1
+    if not 'enc_recurrence_transition_deep_input' in options:
+        options['enc_recurrence_transition_deep_input'] = False
     if not 'dec_base_recurrence_transition_depth' in options:
         options['dec_base_recurrence_transition_depth'] = 2
     if not 'dec_base_recurrence_transition_deep_context' in options:
         options['dec_base_recurrence_transition_deep_context'] = False
+    if not 'dec_high_recurrence_transition_depth' in options:
+        options['dec_high_recurrence_transition_depth'] = 1
+    if not 'dec_high_recurrence_transition_deep_input' in options:
+        options['dec_high_recurrence_transition_deep_input'] = False
+
     if not 'dec_deep_context' in options:
         if 'deep_include_ctx' in options:
            options['dec_deep_context'] = options['deep_include_ctx']
