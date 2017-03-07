@@ -1193,17 +1193,22 @@ def train(dim_word=512,  # word vector dimensionality
 
     print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
 
+    if validFreq == -1 or saveFreq == -1 or sampleFreq == -1:
+        print 'Computing number of training batches'
+        num_batches = len(train)
+        print 'There are {} batches in the train set'.format(num_batches)
+
+        if validFreq == -1:
+            validFreq = num_batches
+        if saveFreq == -1:
+            saveFreq = num_batches
+        if sampleFreq == -1:
+            sampleFreq = num_batches
+    
     print 'Optimization'
 
     #save model options
     json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
-
-    if validFreq == -1:
-        validFreq = len(train[0])/batch_size
-    if saveFreq == -1:
-        saveFreq = len(train[0])/batch_size
-    if sampleFreq == -1:
-        sampleFreq = len(train[0])/batch_size
 
     valid_err = None
 
