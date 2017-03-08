@@ -913,7 +913,6 @@ def train(dim_word=512,  # word vector dimensionality
           dispFreq=1000,
           decay_c=0.,  # L2 regularization penalty
           map_decay_c=0., # L2 regularization penalty towards original weights
-          alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
           lrate=0.0001,  # learning rate
           n_words_src=None,  # source vocabulary size
@@ -1128,14 +1127,6 @@ def train(dim_word=512,  # word vector dimensionality
             weight_decay += (vv ** 2).sum()
         weight_decay *= decay_c
         cost += weight_decay
-
-    # regularize the alpha weights
-    if alpha_c > 0. and not model_options['decoder'].endswith('simple'):
-        alpha_c = theano.shared(numpy.float32(alpha_c), name='alpha_c')
-        alpha_reg = alpha_c * (
-            (tensor.cast(y_mask.sum(0)//x_mask.sum(0), 'float32')[:, None] -
-             opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
-        cost += alpha_reg
 
     # apply L2 regularisation to loaded model (map training)
     if map_decay_c > 0:
@@ -1584,8 +1575,6 @@ if __name__ == '__main__':
                          help="L2 regularization penalty (default: %(default)s)")
     training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
                          help="L2 regularization penalty towards original weights (default: %(default)s)")
-    training.add_argument('--alpha_c', type=float, default=0, metavar='FLOAT',
-                         help="alignment regularization (default: %(default)s)")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
