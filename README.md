@@ -152,8 +152,6 @@ execute nematus/nmt.py to train a model.
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
-| --finetune           |  train with fixed embedding layer |
-| --finetune_only_last |  train with all layers except output layer fixed |
 
 #### validation parameters
 | parameter            | description |
