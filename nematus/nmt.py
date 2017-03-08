@@ -967,7 +967,7 @@ def train(dim_word=512,  # word vector dimensionality
     ):
 
     # Model options
-    model_options = locals().copy()
+    model_options = OrderedDict(sorted(locals().copy().items()))
 
 
     if model_options['dim_per_factor'] == None:
