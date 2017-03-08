@@ -202,14 +202,14 @@ def translate(config, sess):
 
     for i, batch in enumerate(batches):
         in_queue.put((i,batch))
-    for _ in range(config.n_threads):
-        in_queue.put(None)
     outputs = [None]*len(batches)
     for _ in range(len(batches)):
         i, samples = out_queue.get()
         outputs[i] = list(samples)
         n_sent += len(samples)
         print >>sys.stderr, 'Translated {} sents'.format(n_sent)
+    for _ in range(config.n_threads):
+        in_queue.put(None)
     outputs = [beam for batch in outputs for beam in batch]
     outputs = numpy.array(outputs, dtype=numpy.object)
     outputs = outputs[idxs.argsort()]
