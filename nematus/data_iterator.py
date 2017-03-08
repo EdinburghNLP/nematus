@@ -65,6 +65,9 @@ class TextIterator:
     def __iter__(self):
         return self
 
+    def __len__(self):
+        return sum([1 for _ in self])
+    
     def reset(self):
         if self.shuffle:
             self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
