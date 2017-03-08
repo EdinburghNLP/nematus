@@ -46,7 +46,7 @@ def load_data(config):
                             source_dicts=[config.source_vocab],
                             target_dict=config.target_vocab,
                             batch_size=config.valid_batch_size,
-                            maxlen=99999, # you want to validate on all sentences
+                            maxlen=config.validation_maxlen,
                             n_words_source=config.source_vocab_size,
                             n_words_target=config.target_vocab_size,
                             shuffle_each_epoch=False,
@@ -171,7 +171,7 @@ def translate(config, sess):
     model, saver = create_model(config, sess)
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
-    print >>sys.stderr, "NOTE: Length of translations is capped to {}".format(config.maxlen)
+    print >>sys.stderr, "NOTE: Length of translations is capped to {}".format(config.translation_maxlen)
 
     n_sent = 0
     batches, idxs = read_all_lines(config, config.valid_source_dataset)
@@ -253,7 +253,7 @@ def validate_helper(config, sess):
                         source_dicts=[config.source_vocab],
                         target_dict=config.target_vocab,
                         batch_size=config.valid_batch_size,
-                        maxlen= 99999, # you want to validate on all sentences
+                        maxlen=config.validation_maxlen,
                         n_words_source=config.source_vocab_size,
                         n_words_target=config.target_vocab_size,
                         shuffle_each_epoch=False,
@@ -304,7 +304,7 @@ def parse_args():
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
-                         help="maximum sequence length (default: %(default)s)")
+                         help="maximum sequence length for training (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
     training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
@@ -337,6 +337,8 @@ def parse_args():
                          help="early stopping patience (default: %(default)s)")
     validation.add_argument('--run_validation', action='store_true',
                          help="Compute validation score on validation dataset")
+    validation.add_argument('--validation_maxlen', type=int, default=999999, metavar='INT',
+                         help="Sequences longer than this will not be used for validation (default: %(default)s)")
 
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
@@ -357,6 +359,8 @@ def parse_args():
                             help="Print full beam")
     translate.add_argument('--n_threads', type=int, default=5, metavar='INT',
                          help="Number of threads to use for beam search (default: %(default)s)")
+    translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
+                         help="Maximum length of translation output sentence (default: %(default)s)")
     config = parser.parse_args()
     return config
 

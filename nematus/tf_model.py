@@ -20,7 +20,7 @@ class Decoder(object):
                                         out_size=config.state_size)
             self.init_state = self.init_state_layer.forward(context_mean)
 
-            self.maxlen = config.maxlen
+            self.translation_maxlen = config.translation_maxlen
             self.embedding_size = config.embedding_size
             self.state_size = config.state_size
             self.target_vocab_size = config.target_vocab_size
@@ -55,13 +55,13 @@ class Decoder(object):
        init_embs = tf.zeros(dtype=tf.float32, shape=[batch_size,self.embedding_size])
        ys_array = tf.TensorArray(
                     dtype=tf.int32,
-                    size=self.maxlen,
+                    size=self.translation_maxlen,
                     clear_after_read=True, #TODO: does this help? or will it only introduce bugs in the future?
                     name='y_sampled_array')
        init_loop_vars = [i, self.init_state, init_ys, init_embs, ys_array]
        def cond(i, states, prev_ys, prev_embs, ys_array):
            return tf.logical_and(
-                   tf.less(i, self.maxlen),
+                   tf.less(i, self.translation_maxlen),
                    tf.reduce_any(tf.not_equal(prev_ys, 0)))
 
        def body(i, states, prev_ys, prev_embs, ys_array):
@@ -115,12 +115,12 @@ class Decoder(object):
         init_cost = tf.tile(init_cost, multiples=[batch_size/beam_size])
         ys_array = tf.TensorArray(
                     dtype=tf.int32,
-                    size=self.maxlen,
+                    size=self.translation_maxlen,
                     clear_after_read=True,
                     name='y_sampled_array')
         p_array = tf.TensorArray(
                     dtype=tf.int32,
-                    size=self.maxlen,
+                    size=self.translation_maxlen,
                     clear_after_read=True,
                     name='parent_idx_array')
         init_loop_vars = [i, self.init_state, init_ys, init_embs, init_cost, ys_array, p_array]
@@ -133,7 +133,7 @@ class Decoder(object):
 
         def cond(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
             return tf.logical_and(
-                    tf.less(i, self.maxlen),
+                    tf.less(i, self.translation_maxlen),
                     tf.reduce_any(tf.not_equal(prev_ys, 0)))
 
         def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
