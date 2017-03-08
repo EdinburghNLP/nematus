@@ -1011,8 +1011,6 @@ def train(dim_word=512,  # word vector dimensionality
           overwrite=False,
           external_validation_script=None,
           shuffle_each_epoch=True,
-          finetune=False,
-          finetune_only_last=False,
           sort_by_length=True,
           use_domain_interpolation=False, # interpolate between an out-domain training corpus and an in-domain training corpus
           domain_interpolation_min=0.1, # minimum (initial) fraction of in-domain training data
@@ -1234,14 +1232,6 @@ def train(dim_word=512,  # word vector dimensionality
     # don't update prior model parameters
     if prior_model:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
-
-    # allow finetuning with fixed embeddings
-    if finetune:
-        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('Wemb')])
-
-    # allow finetuning of only last layer (becomes a linear model training problem)
-    if finetune_only_last:
-        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1729,12 +1719,6 @@ if __name__ == '__main__':
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
-
-    finetune = training.add_mutually_exclusive_group()
-    finetune.add_argument('--finetune', action="store_true",
-                        help="train with fixed embedding layer")
-    finetune.add_argument('--finetune_only_last', action="store_true",
-                        help="train with all layers except output layer fixed")
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
