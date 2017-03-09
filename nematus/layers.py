@@ -93,14 +93,12 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
 # code from https://github.com/ryankiros/layer-norm
 def layer_norm(x, b, s):
     _eps = numpy_floatX(1e-5)
-    output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
-    output = s[None, :] * output + b[None,:]
-    return output
-
-def layer_norm3d(x, b, s):
-    _eps = numpy_floatX(1e-5)
-    output = (x - x.mean(2)[:,:,None]) / tensor.sqrt((x.var(2)[:,:,None] + _eps))
-    output = s[None, None, :] * output + b[None, None,:]
+    if x.ndim == 3:
+        output = (x - x.mean(2)[:,:,None]) / numpy.sqrt((x.var(2)[:,:,None] + _eps))
+        output = s[None, None, :] * output + b[None, None,:]
+    else:
+        output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
+        output = s[None, :] * output + b[None,:]
     return output
 
 def weight_norm(W, s):
@@ -157,10 +155,7 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
     preact = tensor.dot(state_below*dropout_mask, W) + b
 
     if options['layer_normalisation'] and not followed_by_softmax:
-        if state_below.ndim == 3:
-            preact = layer_norm3d(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
-        else:
-            preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
+        preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
 
     return eval(activ)(preact)
 
@@ -303,8 +298,8 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         # input to compute the hidden state proposal
         state_belowx = tensor.dot(state_below*below_dropout[1+2*i], wn(pp(prefix, 'Wx'+suffix))) + tparams[pp(prefix, 'bx'+suffix)]
         if options['layer_normalisation']:
-             state_below_ = layer_norm3d(state_below_, tparams[pp(prefix, 'W%s_lnb' % suffix)], tparams[pp(prefix, 'W%s_lns' % suffix)])
-             state_belowx = layer_norm3d(state_belowx, tparams[pp(prefix, 'Wx%s_lnb' % suffix)], tparams[pp(prefix, 'Wx%s_lns' % suffix)])
+             state_below_ = layer_norm(state_below_, tparams[pp(prefix, 'W%s_lnb' % suffix)], tparams[pp(prefix, 'W%s_lns' % suffix)])
+             state_belowx = layer_norm(state_belowx, tparams[pp(prefix, 'Wx%s_lnb' % suffix)], tparams[pp(prefix, 'Wx%s_lns' % suffix)])
         state_below_list.append(state_below_)
         state_belowx_list.append(state_belowx)
     state_below_v = tensor.stack(state_below_list, axis=1)
@@ -539,7 +534,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             tparams[pp(prefix, 'b_att')]
 
     if options['layer_normalisation']:
-        pctx_ = layer_norm3d(pctx_, tparams[pp(prefix,'Wc_att_lnb')], tparams[pp(prefix,'Wc_att_lns')])
+        pctx_ = layer_norm(pctx_, tparams[pp(prefix,'Wc_att_lnb')], tparams[pp(prefix,'Wc_att_lns')])
 
     def _slice(_x, n, dim):
         if _x.ndim == 3:
