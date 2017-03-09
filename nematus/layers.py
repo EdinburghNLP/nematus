@@ -94,7 +94,7 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
 def layer_norm(x, b, s):
     _eps = numpy_floatX(1e-5)
     if x.ndim == 3:
-        output = (x - x.mean(2)[:,:,None]) / numpy.sqrt((x.var(2)[:,:,None] + _eps))
+        output = (x - x.mean(2)[:,:,None]) / tensor.sqrt((x.var(2)[:,:,None] + _eps))
         output = s[None, None, :] * output + b[None, None,:]
     else:
         output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
