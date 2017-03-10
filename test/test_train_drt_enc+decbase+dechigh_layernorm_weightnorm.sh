@@ -23,10 +23,10 @@ mkdir -p models
   --no_shuffle \
   --dispFreq 500 \
   --finish_after 500 \
-  --enc_recurrence_transition_depth 4 \
-  --dec_base_recurrence_transition_depth 4 \
+  --enc_recurrence_transition_depth 2 \
+  --dec_base_recurrence_transition_depth 3 \
   --dec_base_recurrence_transition_deep_context \
-  --dec_high_recurrence_transition_depth 4 \
+  --dec_high_recurrence_transition_depth 3 \
   --dec_high_recurrence_transition_deep_input \
   --layer_normalisation \
   --weight_normalisation

@@ -16,7 +16,7 @@ from util import *
 from theano_util import *
 from alignment_util import *
 
-from theano import printing
+#from theano import printing
 
 # layers: 'name': ('parameter initializer', 'feedforward')
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
@@ -293,7 +293,6 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
     for i in xrange(recurrence_transition_depth if recurrence_transition_deep_input else 1):
         suffix = '' if i == 0 else ('_drt_%s' % i)
         # state_below is the input word embeddings
-        #state_below = printing.Print(prefix+" state_below.sum()", ["sum"])(state_below)
         # input to the gates, concatenated
         state_below_ = tensor.dot(state_below*below_dropout[0+2*i], wn(pp(prefix, 'W'+suffix))) + tparams[pp(prefix, 'b'+suffix)]
         # input to compute the hidden state proposal
@@ -303,16 +302,10 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
              state_belowx = layer_norm(state_belowx, tparams[pp(prefix, 'Wx%s_lnb' % suffix)], tparams[pp(prefix, 'Wx%s_lns' % suffix)])
         state_below_list.append(state_below_)
         state_belowx_list.append(state_belowx)
-    #state_below_v = tensor.stack(state_below_list, axis=1)
-    #state_belowx_v = tensor.stack(state_belowx_list, axis=1)
-    #state_below_v = printing.Print(prefix+" state_below_.sum()", ["sum"])(state_below_v)
-    #state_belowx_v = printing.Print(prefix+" state_belowx.sum()", ["sum"])(state_belowx_v)
 
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
     def _step_slice(*args):
-        #print "prefix:", prefix
-
         n_ins = recurrence_transition_depth if recurrence_transition_deep_input else 1
         m_ = args[0]
         x_list = args[1:1+n_ins]
@@ -372,12 +365,6 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
                                 truncate_gradient=truncate_gradient,
                                 profile=profile,
                                 strict=False)
-    #rval = printing.Print(prefix+" rval.sum()", ["sum"])(rval)
-    #print prefix
-    #printing.debugprint(rval)
-    #theano.pp(rval)
-    #print ''
-
     rval = [rval]
     return rval
 
@@ -661,11 +648,6 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                                     truncate_gradient=truncate_gradient,
                                     profile=profile,
                                     strict=False)
-    #rval = list(rval)
-    #rval[0] = printing.Print(prefix+" rval[0].sum() (h2)", ["sum"])(rval[0])
-    #rval[1] = printing.Print(prefix+" rval[1].sum() (ctx_)", ["sum"])(rval[1])
-    #rval[2] = printing.Print(prefix+" rval[2].sum() (alpha.T)", ["sum"])(rval[2])
-    #rval = tuple(rval)
     return rval
 
 
