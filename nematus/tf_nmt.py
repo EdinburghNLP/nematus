@@ -36,6 +36,7 @@ def load_data(config):
                         maxlen=config.maxlen,
                         n_words_source=config.source_vocab_size,
                         n_words_target=config.target_vocab_size,
+                        skip_empty=True,
                         shuffle_each_epoch=config.shuffle_each_epoch,
                         sort_by_length=config.sort_by_length,
                         maxibatch_size=config.maxibatch_size)
