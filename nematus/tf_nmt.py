@@ -8,6 +8,7 @@ from util import *
 import os
 from threading import Thread
 from Queue import Queue
+from datetime import datetime
 
 def create_model(config, sess):
     print >>sys.stderr, 'Building model...',
@@ -102,11 +103,10 @@ def train(config, sess):
     text_iterator, valid_text_iterator = load_data(config)
     source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
     total_loss = 0.
-    n_samples = 0
+    n_sents, n_words = 0, 0
+    last_time = time.time()
     uidx = sess.run(t)
     print >>sys.stderr, "Initial uidx={}".format(uidx)
-    last_time = time.time()
-    last_n_samples = n_samples
     STOP = False
     for eidx in xrange(config.max_epochs):
         print 'Starting epoch', eidx
@@ -123,20 +123,25 @@ def train(config, sess):
             out = sess.run(out, feed_dict=inn)
             mean_loss_out = out[2]
             total_loss += mean_loss_out*batch_size
-            n_samples += batch_size
+            n_sents += batch_size
+            n_words += int(numpy.sum(y_mask_in))
             uidx += 1
 
             if config.summaryFreq and uidx % config.summaryFreq == 0:
                 writer.add_summary(out[3], out[0])
 
             if config.dispFreq and uidx % config.dispFreq == 0:
-                print 'Epoch ', eidx, \
-                      'Update ', uidx, \
-                      'Train. cost per sent. ', total_loss / (n_samples - last_n_samples), \
-                      'Sents/sec', (n_samples - last_n_samples) / (time.time() - last_time)
+                duration = time.time() - last_time
+                disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
+                print disp_time, \
+                      'Epoch:', eidx, \
+                      'Update:', uidx, \
+                      'Loss/word:', total_loss/n_words, \
+                      'Words/sec:', n_words/duration
                 last_time = time.time()
-                last_n_samples = n_samples
                 total_loss = 0.
+                n_sents = 0
+                n_words = 0
 
             if config.saveFreq and uidx % config.saveFreq == 0:
                 saver.save(sess, save_path=config.saveto, global_step=uidx)
