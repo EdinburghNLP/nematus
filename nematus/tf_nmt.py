@@ -303,7 +303,7 @@ def parse_args():
 
 
     training = parser.add_argument_group('training parameters')
-    training.add_argument('--maxlen', type=int, default=100, metavar='INT',
+    training.add_argument('--maxlen', type=int, default=50, metavar='INT',
                          help="maximum sequence length for training (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
