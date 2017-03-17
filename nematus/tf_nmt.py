@@ -113,10 +113,10 @@ def train(config, sess):
         print 'Starting epoch', eidx
         for source_sents, target_sents in text_iterator:
             x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=config.maxlen)
-            (seqLen, batch_size) = x_in.shape
             if x_in is None:
                 print >>sys.stderr, 'Minibatch with zero sample under length ', config.maxlen
                 continue
+            (seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
             out = [t, apply_grads, mean_loss]
             if config.summaryFreq and uidx % config.summaryFreq == 0:
