@@ -88,16 +88,24 @@ class TextIterator:
         assert len(self.source_buffer) == len(self.target_buffer), 'Buffer size mismatch!'
 
         if len(self.source_buffer) == 0:
-            for k_ in xrange(self.k):
-                ss = self.source.readline()
-                if ss == "":
-                    break
-                tt = self.target.readline()
-                if tt == "":
+            for ss in self.source:
+                ss = ss.split()
+                tt = self.target.readline().split()
+                
+                if self.skip_empty and (len(ss) == 0 or len(tt) == 0):
+                    continue
+                if len(ss) > self.maxlen or len(tt) > self.maxlen:
+                    continue
+
+                self.source_buffer.append(ss)
+                self.target_buffer.append(tt)
+                if len(self.source_buffer) == self.k:
                     break
 
-                self.source_buffer.append(ss.strip().split())
-                self.target_buffer.append(tt.strip().split())
+        if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
+            self.end_of_data = False
+            self.reset()
+            raise StopIteration
 
             # sort by target buffer
             if self.sort_by_length:
@@ -114,13 +122,8 @@ class TextIterator:
                 self.source_buffer.reverse()
                 self.target_buffer.reverse()
 
-        if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
-            self.end_of_data = False
-            self.reset()
-            raise StopIteration
 
         try:
-
             # actual work here
             while True:
 
@@ -142,11 +145,6 @@ class TextIterator:
                 if self.n_words_target > 0:
                     tt = [w if w < self.n_words_target else 1 for w in tt]
 
-                if len(ss) > self.maxlen and len(tt) > self.maxlen:
-                    continue
-                if self.skip_empty and (not ss or not tt):
-                    continue
-
                 source.append(ss)
                 target.append(tt)
 
@@ -155,9 +153,5 @@ class TextIterator:
                     break
         except IOError:
             self.end_of_data = True
-
-        # all sentence pairs in maxibatch filtered out because of length
-        if len(source) == 0 or len(target) == 0:
-            source, target = self.next()
 
         return source, target
