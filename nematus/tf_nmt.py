@@ -15,7 +15,7 @@ def create_model(config, sess):
     model = StandardModel(config)
 
     # initialize model
-    saver = tf.train.Saver(max_to_keep=10)
+    saver = tf.train.Saver(max_to_keep=None)
     if not config.reload:
         init_op = tf.global_variables_initializer()
         sess.run(init_op)
