@@ -138,7 +138,8 @@ def train(config, sess):
                       'Epoch:', eidx, \
                       'Update:', uidx, \
                       'Loss/word:', total_loss/n_words, \
-                      'Words/sec:', n_words/duration
+                      'Words/sec:', n_words/duration, \
+                      'Sents/sec:', n_sents/duration
                 last_time = time.time()
                 total_loss = 0.
                 n_sents = 0
