@@ -102,10 +102,10 @@ class TextIterator:
                 if len(self.source_buffer) == self.k:
                     break
 
-        if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
-            self.end_of_data = False
-            self.reset()
-            raise StopIteration
+            if len(self.source_buffer) == 0 or len(self.target_buffer) == 0:
+                self.end_of_data = False
+                self.reset()
+                raise StopIteration
 
             # sort by target buffer
             if self.sort_by_length:
