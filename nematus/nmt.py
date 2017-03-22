@@ -1504,8 +1504,7 @@ def train(dim_word=512,  # word vector dimensionality
         optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
     both_params = dict(params, **optimizer_params)
-    numpy.savez(saveto, zipped_params=best_p,
-                **both_params)
+    numpy.savez(saveto, **both_params)
     training_progress.save_to_json(training_progress_file)
 
     return valid_err
