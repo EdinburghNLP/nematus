@@ -112,7 +112,7 @@ def train(config, sess):
     for eidx in xrange(config.max_epochs):
         print 'Starting epoch', eidx
         for source_sents, target_sents in text_iterator:
-            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=config.maxlen)
+            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
             if x_in is None:
                 print >>sys.stderr, 'Minibatch with zero sample under length ', config.maxlen
                 continue
