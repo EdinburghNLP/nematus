@@ -1238,6 +1238,8 @@ def train(dim_word=512,  # word vector dimensionality
                     # do the update on parameters
                     f_update(lrate)
 
+                cost_sum += cost
+
             elif model_options['objective'] == 'MRT':
                 assert maxlen is not None and maxlen > 0
 
