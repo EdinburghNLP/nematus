@@ -117,9 +117,6 @@ def train(config, sess):
                 print >>sys.stderr, 'Minibatch with zero sample under length ', config.maxlen
                 continue
             (seqLen, batch_size) = x_in.shape
-            if batch_size != config.batch_size:
-                print >>sys.stderr, 'Skipping this batch because it only contained', batch_size, 'samples'
-                print >>sys.stderr, 'You should see this message only with the last batch in each epoch'
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
             out = [t, apply_grads, mean_loss]
             if config.summaryFreq and uidx % config.summaryFreq == 0:
@@ -172,7 +169,7 @@ def train(config, sess):
                         print >>sys.stderr, 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
 
             if config.validFreq and uidx % config.validFreq == 0:
-                validate(sess, config, valid_text_iterator, model)
+                validate(sess, valid_text_iterator, model)
 
             if config.finish_after and uidx % config.finish_after == 0:
                 print >>sys.stderr, "Maximum number of updates reached"
@@ -242,24 +239,16 @@ def translate(config, sess):
     print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
 
 
-def validate(sess, config, valid_text_iterator, model):
+def validate(sess, valid_text_iterator, model):
     costs = []
     total_loss = 0.
     total_seen = 0
     x,x_mask,y,y_mask = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
     for x_v, y_v in valid_text_iterator:
-        batch_size = len(x_v)
-        if batch_size != config.batch_size:
-            print >>sys.stderr, 'Batch is too small, only', batch_size, 'samples'
-            print >>sys.stderr, 'You should see this message only with the last batch'
-            pad = config.batch_size - batch_size
-            x_v += [[0]] * pad
-            y_v += [0] * pad
         x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
         feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
-        loss_per_sentence_out = loss_per_sentence_out[:batch_size] # remove possible padding
         total_loss += loss_per_sentence_out.sum()
         total_seen += x_v_in.shape[1]
         costs += list(loss_per_sentence_out)
@@ -281,7 +270,7 @@ def validate_helper(config, sess):
                         shuffle_each_epoch=False,
                         sort_by_length=False, #TODO
                         maxibatch_size=config.maxibatch_size)
-    costs = validate(sess, config, valid_text_iterator, model)
+    costs = validate(sess, valid_text_iterator, model)
     lines = open(config.valid_target_dataset).readlines()
     for cost, line in zip(costs, lines):
         print cost, line.strip()
