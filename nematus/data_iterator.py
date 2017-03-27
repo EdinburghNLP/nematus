@@ -10,6 +10,32 @@ def fopen(filename, mode='r'):
         return gzip.open(filename, mode)
     return open(filename, mode)
 
+class FileWrapper(object):
+    def __init__(self, fname):
+        self.pos = 0
+        self.lines = fopen(fname).readlines()
+        self.lines = numpy.array(self.lines, dtype=numpy.object)
+    def __iter__(self):
+        return self
+    def next(self):
+        if self.pos >= len(self.lines):
+            raise StopIteration
+        l = self.lines[self.pos]
+        self.pos += 1
+        return l
+    def reset(self):
+        self.pos = 0
+    def seek(self, pos):
+        assert pos == 0
+        self.pos = 0
+    def readline(self):
+        return self.next()
+    def shuffle_lines(self, perm):
+        self.lines = self.lines[perm]
+        self.pos = 0
+    def __len__(self):
+        return len(self.lines)
+
 class TextIterator:
     """Simple Bitext iterator."""
     def __init__(self, source, target,
@@ -21,8 +47,15 @@ class TextIterator:
                  skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
-                 maxibatch_size=20):
-        if shuffle_each_epoch:
+                 maxibatch_size=20,
+                 keep_data_in_memory=False):
+        if keep_data_in_memory:
+            self.source, self.target = FileWrapper(source), FileWrapper(target)
+            if shuffle_each_epoch:
+                r = numpy.random.permutation(len(self.source))
+                self.source.shuffle_lines(r)
+                self.target.shuffle_lines(r)
+        elif shuffle_each_epoch:
             self.source_orig = source
             self.target_orig = target
             self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
@@ -34,6 +67,7 @@ class TextIterator:
             self.source_dicts.append(load_dict(source_dict))
         self.target_dict = load_dict(target_dict)
 
+        self.keep_data_in_memory = keep_data_in_memory
         self.batch_size = batch_size
         self.maxlen = maxlen
         self.skip_empty = skip_empty
@@ -67,7 +101,12 @@ class TextIterator:
 
     def reset(self):
         if self.shuffle:
-            self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
+            if self.keep_data_in_memory:
+                r = numpy.random.permutation(len(self.source))
+                self.source.shuffle_lines(r)
+                self.target.shuffle_lines(r)
+            else:
+                self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
         else:
             self.source.seek(0)
             self.target.seek(0)

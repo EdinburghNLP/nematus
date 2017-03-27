@@ -39,7 +39,8 @@ def load_data(config):
                         skip_empty=True,
                         shuffle_each_epoch=config.shuffle_each_epoch,
                         sort_by_length=config.sort_by_length,
-                        maxibatch_size=config.maxibatch_size)
+                        maxibatch_size=config.maxibatch_size,
+                        keep_data_in_memory=config.keep_train_set_in_memory)
 
     if config.validFreq:
         valid_text_iterator = TextIterator(
@@ -328,6 +329,8 @@ def parse_args():
                          help="learning rate (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
+    training.add_argument('--keep_train_set_in_memory', action="store_true", 
+                         help="Keep training dataset lines stores in RAM during training")
     training.add_argument('--no_sort_by_length', action="store_false", dest="sort_by_length",
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
