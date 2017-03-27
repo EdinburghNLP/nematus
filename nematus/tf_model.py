@@ -332,7 +332,10 @@ class StandardModel(object):
 
         #variable dimensions
         seqLen = None
-        batch_size = None
+        batch_size = config.batch_size
+
+        if config.translate_valid:
+            batch_size = None
 
         self.x = tf.placeholder(
                     dtype=tf.int32,
