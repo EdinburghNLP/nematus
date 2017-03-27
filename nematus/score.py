@@ -64,7 +64,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
         return scores, alignments
 
     pairs = TextIterator(source_file.name, target_file.name,
-                    options[0]['dictionaries'][:-1], options[0]['dictionaries'][1],
+                    options[0]['dictionaries'][:-1], options[0]['dictionaries'][-1],
                      n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                      batch_size=b,
                      maxlen=float('inf'),
