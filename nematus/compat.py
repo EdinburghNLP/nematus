@@ -35,10 +35,6 @@ def fill_options(options):
         options['dec_base_recurrence_transition_depth'] = 2
     if not 'dec_base_recurrence_transition_deep_context' in options:
         options['dec_base_recurrence_transition_deep_context'] = False
-    if not 'dec_high_recurrence_transition_depth' in options:
-        options['dec_high_recurrence_transition_depth'] = 1
-    if not 'dec_high_recurrence_transition_deep_input' in options:
-        options['dec_high_recurrence_transition_deep_input'] = False
 
     if not 'dec_deep_context' in options:
         if 'deep_include_ctx' in options:
@@ -73,4 +69,12 @@ def fill_options(options):
         options['decoder_truncate_gradient'] = 0.1
     if not 'domain_interpolation_indomain_datasets' in options:
         options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
+
+    if not 'dec_high_recurrence_transition_depth' in options:
+        if options['decoder_deep'] in ['gru_cond', 'gru_cond_reuse_att']:
+            options['dec_high_recurrence_transition_depth'] = 2
+        else:
+            options['dec_high_recurrence_transition_depth'] = 1
+    if not 'dec_high_recurrence_transition_deep_input' in options:
+        options['dec_high_recurrence_transition_deep_input'] = False
 
