@@ -9,19 +9,16 @@ from subprocess import call
 
 def main(files, temporary=False):
 
-    tf_os, tpath = tempfile.mkstemp()
-    tf = open(tpath, 'w')
 
     fds = [open(ff) for ff in files]
 
+    lines = []
     for l in fds[0]:
-        lines = [l.strip()] + [ff.readline().strip() for ff in fds[1:]]
-        print >>tf, "|||".join(lines)
+        line = [l.strip()] + [ff.readline().strip() for ff in fds[1:]]
+        lines.append(line)
 
     [ff.close() for ff in fds]
-    tf.close()
 
-    lines = open(tpath, 'r').readlines()
     random.shuffle(lines)
 
     if temporary:
@@ -33,17 +30,13 @@ def main(files, temporary=False):
         fds = [open(ff+'.shuf','w') for ff in files]
 
     for l in lines:
-        s = l.strip().split('|||')
         for ii, fd in enumerate(fds):
-            print >>fd, s[ii]
+            print >>fd, l[ii]
 
     if temporary:
         [ff.seek(0) for ff in fds]
     else:
         [ff.close() for ff in fds]
-
-    os.close(tf_os)
-    os.remove(tpath)
 
     return fds
 
