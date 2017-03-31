@@ -147,7 +147,7 @@ def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
 
     return f_grad_shared, f_update, {}
 
-def sgdmomentum(lr, tparams, grads, inp, cost, optimizer_params={}, momentum=0.5):
+def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
     assert momentum >= 0. and momentum < 1.
     gshared = [theano.shared(p.get_value() * 0.,
                              name='%s_grad' % k)
