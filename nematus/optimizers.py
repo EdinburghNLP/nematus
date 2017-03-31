@@ -147,3 +147,31 @@ def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
 
     return f_grad_shared, f_update, {}
 
+def sgdmomentum(lr, tparams, grads, inp, cost, optimizer_params={}, momentum=0.5):
+    assert momentum >= 0. and momentum < 1.
+    gshared = [theano.shared(p.get_value() * 0.,
+                             name='%s_grad' % k)
+               for k, p in tparams.iteritems()]
+
+    # init theano sharedvariables for updates, previous
+    previous_steps = [theano.shared(p.get_value() * 0., 
+                                    name='%s_paramup' % k)
+                      for k, p in tparams.iteritems()]
+
+    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+
+    # update grads to sharedvariables
+    f_grad_shared = theano.function(inp, cost, updates=gsup,
+                                    profile=profile)
+
+    current_steps = [momentum * previous_step - lr * g
+                     for previous_step, g in zip(previous_steps, gshared)]
+
+    pup1 = [(previous_step, current_step)
+            for previous_step, current_step in zip(previous_steps, current_steps)]
+
+    pup2 = [(p, p + step)
+            for p, step in zip(itemlist(tparams), current_steps)]
+
+    f_update = theano.function([lr], [], updates=pup1+pup2, profile=profile)
+    return f_grad_shared, f_update, optimizer_params
