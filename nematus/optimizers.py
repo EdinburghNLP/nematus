@@ -170,8 +170,8 @@ def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}
     pup1 = [(previous_step, current_step)
             for previous_step, current_step in zip(previous_steps, current_steps)]
 
-    pup2 = [(p, p + step)
-            for p, step in zip(itemlist(tparams), current_steps)]
+    pup2 = [(p, p + current_step)
+            for p, current_step in zip(itemlist(tparams), current_steps)]
 
     f_update = theano.function([lr], [], updates=pup1+pup2, profile=profile)
-    return f_grad_shared, f_update, optimizer_params
+    return f_grad_shared, f_update, {}
