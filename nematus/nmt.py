@@ -1440,7 +1440,7 @@ def train(dim_word=512,  # word vector dimensionality
                 if valid_err >= numpy.array(training_progress.history_errs).min():
                     training_progress.bad_counter += 1
                     if training_progress.bad_counter > patience:
-                        if use_domain_interpolation and (training_progress.domain_interpolation_cur < 1.0):
+                        if use_domain_interpolation and (training_progress.domain_interpolation_cur < domain_interpolation_max):
                             training_progress.domain_interpolation_cur = min(training_progress.domain_interpolation_cur + domain_interpolation_inc, domain_interpolation_max)
                             print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur
                             train.adjust_domain_interpolation_rate(training_progress.domain_interpolation_cur)
