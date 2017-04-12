@@ -145,7 +145,6 @@ execute nematus/nmt.py to train a model.
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
 | --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
-| --alpha_c FLOAT      |  alignment regularization (default: 0) |
 | --clip_c FLOAT       |  gradient clipping threshold (default: 1) |
 | --lrate FLOAT        |  learning rate (default: 0.0001) |
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
