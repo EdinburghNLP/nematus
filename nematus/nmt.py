@@ -158,7 +158,7 @@ def init_params(options):
                                             dim=options['dim'],
                                             dimctx=ctxdim,
                                             recurrence_transition_depth=options['dec_high_recurrence_transition_depth'],
-                                            recurrence_transition_deep_context=options['dec_high_recurrence_transition_deep_context'])
+                                            recurrence_transition_deep_context=options['dec_high_recurrence_transition_deep_input'])
 
     # readout
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
