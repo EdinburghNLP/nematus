@@ -1328,10 +1328,13 @@ def train(dim_word=512,  # word vector dimensionality
 
                 for x_s, y_s in xy_pairs:
 
+                    # add EOS and prepare factored data
+                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None, n_words_src=n_words_src, n_words=n_words)
+
                     # draw independent samples to compute mean reward
                     if model_options['mrt_samples_meanloss']:
                         use_noise.set_value(0.)
-                        samples, _ = f_sampler([x_s], model_options['mrt_samples_meanloss'], maxlen)
+                        samples, _ = f_sampler(x, model_options['mrt_samples_meanloss'], maxlen)
                         use_noise.set_value(1.)
 
                         samples = [numpy.trim_zeros(item) for item in zip(*samples)]
@@ -1353,7 +1356,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # create k samples
                     use_noise.set_value(0.)
-                    samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
+                    samples, _ = f_sampler(x, model_options['mrt_samples'], maxlen)
                     use_noise.set_value(1.)
 
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
