@@ -199,6 +199,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --suppress-unk       | Suppress hypotheses containing UNK. |
 | --print-word-probabilities, -wp | Print probabilities of each word |
 | --search_graph, -sg  | Output file for search graph rendered as PNG image |
+| --gpu-list, -gl      | User specified GPU list for multi-thread decoding. For example: 'gpu0 gpu1 gpu2' |
 
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus

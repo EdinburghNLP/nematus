@@ -310,7 +310,7 @@ if __name__ == "__main__":
     parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
     parser.add_argument('--search_graph', '-sg', help="Output file for search graph rendered as PNG image")
     parser.add_argument('--gpu-list', '-gl', type=str, default='', required=False,
-                        help="User specified GPU list for multi-thread decoding (default: %(default)s))")
+                        help="User specified GPU list for multi-thread decoding (default: None)")
 
     args = parser.parse_args()
 
