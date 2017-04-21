@@ -16,7 +16,21 @@ from compat import fill_options
 from hypgraph import HypGraphRenderer
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph, gpuid):
+
+    # if the --gpu-list argument is set
+    if gpuid.startswith('gpu'):
+        import os
+        theano_flags = os.environ['THEANO_FLAGS'].split(',')
+        exist = False
+        for i in xrange(len(theano_flags)):
+            if theano_flags[i].strip().startswith('device'):
+                exist = True
+                theano_flags[i] = '%s=%s' % ('device', gpuid)
+                break
+        if exist == False:
+            theano_flags.append('%s=%s' % ('device', gpuid))
+        os.environ['THEANO_FLAGS'] = ','.join(theano_flags)
 
     from theano_util import (load_params, init_theano_params)
     from nmt import (build_sampler, gen_sample, init_params)
@@ -104,7 +118,7 @@ def print_matrices(mm, file):
 
 
 def main(models, source_file, saveto, save_alignment=None, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False, gpu_list=''):
     # load model model_options
     options = []
     for model in models:
@@ -147,9 +161,13 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     rqueue = Queue()
     processes = [None] * n_process
     for midx in xrange(n_process):
+        gpulist = gpu_list.split()
+        gpuid = ''
+        if len(gpulist) != 0:
+            gpuid = gpulist[midx % len(gpulist)].strip()
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph, gpuid))
         processes[midx].start()
 
     # utility function
@@ -291,10 +309,12 @@ if __name__ == "__main__":
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
     parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
     parser.add_argument('--search_graph', '-sg', help="Output file for search graph rendered as PNG image")
+    parser.add_argument('--gpu-list', '-gl', type=str, default='', required=False,
+                        help="User specified GPU list for multi-thread decoding (default: %(default)s))")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, 
-         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph)
+         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph, gpu_list=args.gpu_list)
