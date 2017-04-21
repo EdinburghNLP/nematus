@@ -118,7 +118,7 @@ def print_matrices(mm, file):
 
 
 def main(models, source_file, saveto, save_alignment=None, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False, gpu_list=''):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False, gpu_list=[]):
     # load model model_options
     options = []
     for model in models:
@@ -161,10 +161,9 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     rqueue = Queue()
     processes = [None] * n_process
     for midx in xrange(n_process):
-        gpulist = gpu_list.split()
         gpuid = ''
-        if len(gpulist) != 0:
-            gpuid = gpulist[midx % len(gpulist)].strip()
+        if len(gpu_list) != 0:
+            gpuid = gpu_list[midx % len(gpu_list)].strip()
         processes[midx] = Process(
             target=translate_model,
             args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph, gpuid))
@@ -309,8 +308,8 @@ if __name__ == "__main__":
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
     parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
     parser.add_argument('--search_graph', '-sg', help="Output file for search graph rendered as PNG image")
-    parser.add_argument('--gpu-list', '-gl', type=str, default='', required=False,
-                        help="User specified GPU list for multi-thread decoding (default: None)")
+    parser.add_argument('--gpu-list', '-gl', type=str, nargs='*', required=False,
+                        help="User specified GPU list for multi-thread decoding (default: [])")
 
     args = parser.parse_args()
 
