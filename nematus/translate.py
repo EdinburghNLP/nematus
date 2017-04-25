@@ -93,28 +93,28 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
 # prints alignment weights for a hypothesis
 # dimension (target_words+1 * source_words+1)
 def print_matrix(hyp, file):
-  # each target word has corresponding alignment weights
-  for target_word_alignment in hyp:
-    # each source hidden state has a corresponding weight
-    for w in target_word_alignment:
-      print >>file, w,
+    # each target word has corresponding alignment weights
+    for target_word_alignment in hyp:
+        # each source hidden state has a corresponding weight
+        for w in target_word_alignment:
+            print >>file, w,
+        print >> file, ""
     print >> file, ""
-  print >> file, ""
 
 def print_matrix_json(hyp, source, target, sid, tid, file):
-  source.append("</s>")
-  target.append("</s>")
-  links = []
-  for ti, target_word_alignment in enumerate(hyp):
-    for si,w in enumerate(target_word_alignment):
-      links.append((target[ti], source[si], str(w), sid, tid))
-  json.dump(links,file, ensure_ascii=False, indent=2)
+    source.append("</s>")
+    target.append("</s>")
+    links = []
+    for ti, target_word_alignment in enumerate(hyp):
+        for si,w in enumerate(target_word_alignment):
+            links.append((target[ti], source[si], str(w), sid, tid))
+    json.dump(links,file, ensure_ascii=False, indent=2)
 
 
 def print_matrices(mm, file):
-  for hyp in mm:
-    print_matrix(hyp, file)
-    print >>file, "\n"
+    for hyp in mm:
+        print_matrix(hyp, file)
+        print >>file, "\n"
 
 
 def main(models, source_file, saveto, save_alignment=None, k=5,
