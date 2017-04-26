@@ -16,20 +16,20 @@ from compat import fill_options
 from hypgraph import HypGraphRenderer
 
 
-def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph, gpuid):
+def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph, deviceid):
 
-    # if the --gpu-list argument is set
-    if gpuid != '':
+    # if the --device-list argument is set
+    if deviceid != '':
         import os
         theano_flags = os.environ['THEANO_FLAGS'].split(',')
         exist = False
         for i in xrange(len(theano_flags)):
             if theano_flags[i].strip().startswith('device'):
                 exist = True
-                theano_flags[i] = '%s=%s' % ('device', gpuid)
+                theano_flags[i] = '%s=%s' % ('device', deviceid)
                 break
         if exist == False:
-            theano_flags.append('%s=%s' % ('device', gpuid))
+            theano_flags.append('%s=%s' % ('device', deviceid))
         os.environ['THEANO_FLAGS'] = ','.join(theano_flags)
 
     from theano_util import (load_params, init_theano_params)
@@ -116,7 +116,7 @@ def print_matrices(mm, file):
 
 
 def main(models, source_file, saveto, save_alignment=None, k=5,
-         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False, gpu_list=[]):
+         normalize=False, n_process=5, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False, device_list=[]):
     # load model model_options
     options = []
     for model in models:
@@ -158,12 +158,12 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     rqueue = Queue()
     processes = [None] * n_process
     for midx in xrange(n_process):
-        gpuid = ''
-        if len(gpu_list) != 0:
-            gpuid = gpu_list[midx % len(gpu_list)].strip()
+        deviceid = ''
+        if len(device_list) != 0:
+            deviceid = device_list[midx % len(device_list)].strip()
         processes[midx] = Process(
             target=translate_model,
-            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph, gpuid))
+            args=(queue, rqueue, midx, models, options, k, normalize, verbose, nbest, save_alignment is not None, suppress_unk, return_hyp_graph, deviceid))
         processes[midx].start()
 
     # utility function
@@ -313,4 +313,4 @@ if __name__ == "__main__":
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, 
-         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph, gpu_list=args.device_list)
+         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph, device_list=args.device_list)
