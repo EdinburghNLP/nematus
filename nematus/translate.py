@@ -44,8 +44,6 @@ def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, 
     fs_next = []
 
     for model, option in zip(models, options):
-
-
         # load model parameters and set theano shared variables
         param_list = numpy.load(model).files
         param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
@@ -123,7 +121,6 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     options = []
     for model in models:
         options.append(load_config(model))
-
         fill_options(options[-1])
 
     dictionaries = options[0]['dictionaries']
@@ -270,12 +267,12 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                     saveto.write("{} ".format(prob))
                 saveto.write('\n')
             if save_alignment is not None:
-              if a_json:
-                print_matrix_json(alignment, source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
-              else:
-                save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                      i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
-                print_matrix(alignment, save_alignment)
+                if a_json:
+                    print_matrix_json(alignment, source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
+                else:
+                    save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                         i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
+                    print_matrix(alignment, save_alignment)
 
     sys.stderr.write('Done\n')
 
