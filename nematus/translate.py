@@ -19,7 +19,7 @@ from hypgraph import HypGraphRenderer
 def translate_model(queue, rqueue, pid, models, options, k, normalize, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph, gpuid):
 
     # if the --gpu-list argument is set
-    if gpuid.startswith('gpu'):
+    if gpuid != '':
         import os
         theano_flags = os.environ['THEANO_FLAGS'].split(',')
         exist = False
@@ -305,12 +305,12 @@ if __name__ == "__main__":
     parser.add_argument('--suppress-unk', action="store_true", help="Suppress hypotheses containing UNK.")
     parser.add_argument('--print-word-probabilities', '-wp',action="store_true", help="Print probabilities of each word")
     parser.add_argument('--search_graph', '-sg', help="Output file for search graph rendered as PNG image")
-    parser.add_argument('--gpu-list', '-gl', type=str, nargs='*', required=False,
-                        help="User specified GPU list for multi-thread decoding (default: [])")
+    parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False,
+                        help="User specified device list for multi-thread decoding (default: [])")
 
     args = parser.parse_args()
 
     main(args.models, args.input,
          args.output, k=args.k, normalize=args.n, n_process=args.p,
          chr_level=args.c, verbose=args.v, nbest=args.n_best, suppress_unk=args.suppress_unk, 
-         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph, gpu_list=args.gpu_list)
+         print_word_probabilities = args.print_word_probabilities, save_alignment=args.output_alignment, a_json=args.json_alignment, return_hyp_graph=args.search_graph, gpu_list=args.device_list)
