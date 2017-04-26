@@ -159,7 +159,7 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
     processes = [None] * n_process
     for midx in xrange(n_process):
         deviceid = ''
-        if len(device_list) != 0:
+        if device_list is not None:
             deviceid = device_list[midx % len(device_list)].strip()
         processes[midx] = Process(
             target=translate_model,
