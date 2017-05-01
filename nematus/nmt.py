@@ -980,7 +980,6 @@ def train(dim_word=512,  # word vector dimensionality
           dispFreq=1000,
           decay_c=0.,  # L2 regularization penalty
           map_decay_c=0., # L2 regularization penalty towards original weights
-          alpha_c=0.,  # alignment regularization
           clip_c=-1.,  # gradient clipping threshold
           lrate=0.0001,  # learning rate
           n_words_src=None,  # source vocabulary size
@@ -1011,8 +1010,6 @@ def train(dim_word=512,  # word vector dimensionality
           overwrite=False,
           external_validation_script=None,
           shuffle_each_epoch=True,
-          finetune=False,
-          finetune_only_last=False,
           sort_by_length=True,
           use_domain_interpolation=False, # interpolate between an out-domain training corpus and an in-domain training corpus
           domain_interpolation_min=0.1, # minimum (initial) fraction of in-domain training data
@@ -1038,7 +1035,7 @@ def train(dim_word=512,  # word vector dimensionality
     ):
 
     # Model options
-    model_options = locals().copy()
+    model_options = OrderedDict(sorted(locals().copy().items()))
 
     if model_options['dim_per_factor'] == None:
         if factors == 1:
@@ -1209,14 +1206,6 @@ def train(dim_word=512,  # word vector dimensionality
         weight_decay *= decay_c
         cost += weight_decay
 
-    # regularize the alpha weights
-    if alpha_c > 0. and not model_options['decoder'].endswith('simple'):
-        alpha_c = theano.shared(numpy_floatX(alpha_c), name='alpha_c')
-        alpha_reg = alpha_c * (
-            (tensor.cast(y_mask.sum(0)//x_mask.sum(0), floatX)[:, None] -
-             opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
-        cost += alpha_reg
-
     # apply L2 regularisation to loaded model (map training)
     if map_decay_c > 0:
         map_decay_c = theano.shared(numpy_floatX(map_decay_c), name="map_decay_c")
@@ -1234,14 +1223,6 @@ def train(dim_word=512,  # word vector dimensionality
     # don't update prior model parameters
     if prior_model:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
-
-    # allow finetuning with fixed embeddings
-    if finetune:
-        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('Wemb')])
-
-    # allow finetuning of only last layer (becomes a linear model training problem)
-    if finetune_only_last:
-        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
 
     print 'Computing gradient...',
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1271,17 +1252,22 @@ def train(dim_word=512,  # word vector dimensionality
 
     print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
 
+    if validFreq == -1 or saveFreq == -1 or sampleFreq == -1:
+        print 'Computing number of training batches'
+        num_batches = len(train)
+        print 'There are {} batches in the train set'.format(num_batches)
+
+        if validFreq == -1:
+            validFreq = num_batches
+        if saveFreq == -1:
+            saveFreq = num_batches
+        if sampleFreq == -1:
+            sampleFreq = num_batches
+    
     print 'Optimization'
 
     #save model options
     json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
-
-    if validFreq == -1:
-        validFreq = len(train[0])/batch_size
-    if saveFreq == -1:
-        saveFreq = len(train[0])/batch_size
-    if sampleFreq == -1:
-        sampleFreq = len(train[0])/batch_size
 
     valid_err = None
 
@@ -1342,10 +1328,13 @@ def train(dim_word=512,  # word vector dimensionality
 
                 for x_s, y_s in xy_pairs:
 
+                    # add EOS and prepare factored data
+                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None, n_words_src=n_words_src, n_words=n_words)
+
                     # draw independent samples to compute mean reward
                     if model_options['mrt_samples_meanloss']:
                         use_noise.set_value(0.)
-                        samples, _ = f_sampler([x_s], model_options['mrt_samples_meanloss'], maxlen)
+                        samples, _ = f_sampler(x, model_options['mrt_samples_meanloss'], maxlen)
                         use_noise.set_value(1.)
 
                         samples = [numpy.trim_zeros(item) for item in zip(*samples)]
@@ -1367,7 +1356,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # create k samples
                     use_noise.set_value(0.)
-                    samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
+                    samples, _ = f_sampler(x, model_options['mrt_samples'], maxlen)
                     use_noise.set_value(1.)
 
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
@@ -1532,7 +1521,7 @@ def train(dim_word=512,  # word vector dimensionality
                 if valid_err >= numpy.array(training_progress.history_errs).min():
                     training_progress.bad_counter += 1
                     if training_progress.bad_counter > patience:
-                        if use_domain_interpolation and (training_progress.domain_interpolation_cur < 1.0):
+                        if use_domain_interpolation and (training_progress.domain_interpolation_cur < domain_interpolation_max):
                             training_progress.domain_interpolation_cur = min(training_progress.domain_interpolation_cur + domain_interpolation_inc, domain_interpolation_max)
                             print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur
                             train.adjust_domain_interpolation_rate(training_progress.domain_interpolation_cur)
@@ -1598,8 +1587,7 @@ def train(dim_word=512,  # word vector dimensionality
         optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
     both_params = dict(params, **optimizer_params)
-    numpy.savez(saveto, zipped_params=best_p,
-                **both_params)
+    numpy.savez(saveto, **both_params)
     training_progress.save_to_json(training_progress_file)
 
     return valid_err
@@ -1706,8 +1694,6 @@ if __name__ == '__main__':
                          help="L2 regularization penalty (default: %(default)s)")
     training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
                          help="L2 regularization penalty towards original weights (default: %(default)s)")
-    training.add_argument('--alpha_c', type=float, default=0, metavar='FLOAT',
-                         help="alignment regularization (default: %(default)s)")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
@@ -1724,12 +1710,6 @@ if __name__ == '__main__':
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
-
-    finetune = training.add_mutually_exclusive_group()
-    finetune.add_argument('--finetune', action="store_true",
-                        help="train with fixed embedding layer")
-    finetune.add_argument('--finetune_only_last', action="store_true",
-                        help="train with all layers except output layer fixed")
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,

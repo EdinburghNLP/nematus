@@ -126,4 +126,3 @@ if __name__ == "__main__":
         read_plot_alignment_json(args.input, 10)   ##n is the maximum number of sentences to process.
     else:
         read_plot_alignment_matrices(args.input,10)
->>>>>>> origin/nematus-liucan

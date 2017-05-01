@@ -153,15 +153,12 @@ execute nematus/nmt.py to train a model.
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
 | --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
-| --alpha_c FLOAT      |  alignment regularization (default: 0) |
 | --clip_c FLOAT       |  gradient clipping threshold (default: 1) |
 | --lrate FLOAT        |  learning rate (default: 0.0001) |
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
-| --finetune           |  train with fixed embedding layer |
-| --finetune_only_last |  train with all layers except output layer fixed |
 
 #### validation parameters
 | parameter            | description |
@@ -210,6 +207,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --suppress-unk       | Suppress hypotheses containing UNK. |
 | --print-word-probabilities, -wp | Print probabilities of each word |
 | --search_graph, -sg  | Output file for search graph rendered as PNG image |
+| --device-list, -dl      | User specified device list for multi-thread decoding. For example: --device-list gpu0 gpu1 gpu2 |
 
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus
@@ -246,14 +244,18 @@ PUBLICATIONS
 
 if you use Nematus, please cite the following paper:
 
-Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain.
+Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Software Demonstrations of the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain, pp. 65-68.
 
-@inproceedings{nematus,
-	address = "Valencia, Spain",
-	author = "Sennrich, Rico and Firat, Orhan and Cho, Kyunghyun and Birch, Alexandra and Haddow, Barry and Hitschler, Julian and Junczys-Dowmunt, Marcin and L{\"a}ubli, Samuel and {Miceli Barone}, Antonio Valerio and Mokry, Jozef and Nadejde, Maria",
-	booktitle = "{Proceedings of the Demonstrations at the 15th Conference of the European Chapter of the Association for Computational Linguistics}",
-	title = "{Nematus: a Toolkit for Neural Machine Translation}",
-	year = "2017"
+@InProceedings{sennrich-EtAl:2017:EACLDemo,
+  author    = {Sennrich, Rico  and  Firat, Orhan  and  Cho, Kyunghyun  and  Birch, Alexandra  and  Haddow, Barry  and  Hitschler, Julian  and  Junczys-Dowmunt, Marcin  and  L\"{a}ubli, Samuel  and  Miceli Barone, Antonio Valerio  and  Mokry, Jozef  and  Nadejde, Maria},
+  title     = {Nematus: a Toolkit for Neural Machine Translation},
+  booktitle = {Proceedings of the Software Demonstrations of the 15th Conference of the European Chapter of the Association for Computational Linguistics},
+  month     = {April},
+  year      = {2017},
+  address   = {Valencia, Spain},
+  publisher = {Association for Computational Linguistics},
+  pages     = {65--68},
+  url       = {http://aclweb.org/anthology/E17-3017}
 }
 
 the code is based on the following model:
