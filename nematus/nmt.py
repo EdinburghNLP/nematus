@@ -1234,7 +1234,7 @@ def train(dim_word=512,  # word vector dimensionality
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
-                if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask)
                 else:
@@ -1318,7 +1318,7 @@ def train(dim_word=512,  # word vector dimensionality
                     scorer.set_reference(y_s)
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype='float32')
 
-                    if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                    if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
                         # compute cost, grads and update parameters
                         cost = f_update(lrate, x, x_mask, y, y_mask, loss)
                     else:
@@ -1578,7 +1578,7 @@ if __name__ == '__main__':
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
-                         choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
+                         choices=['adam', 'adadelta', 'rmsprop', 'sgd', 'sgdmomentum'],
                          help="optimizer (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
