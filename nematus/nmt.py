@@ -1076,10 +1076,10 @@ def train(dim_word=512,  # word vector dimensionality
         params = load_params(saveto, params)
         print 'Reloading optimizer parameters'
         try:
-            print 'trying to load optimizer params from {0}'.format(saveto + '.gradinfo')
+            print 'trying to load optimizer params from {0} or {1}'.format(saveto + '.gradinfo', saveto + '.gradinfo.npz')
             optimizer_params = load_optimizer_params(saveto + '.gradinfo', optimizer)
         except IOError:
-            print '{0} not found. Trying to load optimizer params from {1}'.format(saveto + '.gradinfo', saveto)
+            print '{0}(.npz) not found. Trying to load optimizer params from {1}(.npz)'.format(saveto + '.gradinfo', saveto)
             optimizer_params = load_optimizer_params(saveto, optimizer)
     elif prior_model:
         print 'Initializing model parameters from prior'
