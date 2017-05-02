@@ -1075,7 +1075,12 @@ def train(dim_word=512,  # word vector dimensionality
         print 'Reloading model parameters'
         params = load_params(saveto, params)
         print 'Reloading optimizer parameters'
-        optimizer_params = load_optimizer_params(saveto, optimizer)
+        try:
+            print 'trying to load optimizer params from {0}'.format(saveto + '.gradinfo')
+            optimizer_params = load_optimizer_params(saveto + '.gradinfo', optimizer)
+        except IOError:
+            print '{0} not found. Trying to load optimizer params from {1}'.format(saveto + '.gradinfo', saveto)
+            optimizer_params = load_optimizer_params(saveto, optimizer)
     elif prior_model:
         print 'Initializing model parameters from prior'
         params = load_params(prior_model, params)
@@ -1354,8 +1359,8 @@ def train(dim_word=512,  # word vector dimensionality
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-                both_params = dict(params, **optimizer_params)
-                numpy.savez(saveto, **both_params)
+                numpy.savez(saveto, **params)
+                numpy.savez(saveto + '.gradinfo', **optimizer_params)
                 training_progress.save_to_json(training_progress_file)
                 print 'Done'
 
@@ -1365,8 +1370,8 @@ def train(dim_word=512,  # word vector dimensionality
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], training_progress.uidx)
 
-                    both_params = dict(unzip_from_theano(tparams, excluding_prefix='prior_'), **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
-                    numpy.savez(saveto_uidx, **both_params)
+                    numpy.savez(saveto_uidx, **unzip_from_theano(tparams, excluding_prefix='prior_'))
+                    numpy.savez(saveto_uidx + '.gradinfo', **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
                     training_progress.save_to_json(saveto_uidx+'.progress.json')
                     print 'Done'
 
@@ -1470,8 +1475,8 @@ def train(dim_word=512,  # word vector dimensionality
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
-                    both_params = dict(params, **optimizer_params)
-                    numpy.savez(saveto +'.dev', **both_params)
+                    numpy.savez(saveto +'.dev', **params)
+                    numpy.savez(saveto +'.dev.gradinfo', **optimizer_params)
                     training_progress.save_to_json(saveto+'.dev.progress.json')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
@@ -1508,8 +1513,8 @@ def train(dim_word=512,  # word vector dimensionality
         params = unzip_from_theano(tparams, excluding_prefix='prior_')
         optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-    both_params = dict(params, **optimizer_params)
-    numpy.savez(saveto, **both_params)
+    numpy.savez(saveto, **params)
+    numpy.savez(saveto + '.gradinfo', **optimizer_params)
     training_progress.save_to_json(training_progress_file)
 
     return valid_err
