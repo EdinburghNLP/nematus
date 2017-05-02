@@ -925,14 +925,14 @@ def train(dim_word=512,  # word vector dimensionality
           validFreq=10000,
           saveFreq=30000,   # save the parameters after every saveFreq updates
           sampleFreq=10000,   # generate some samples after every sampleFreq
-          datasets=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
-          valid_datasets=['../data/dev/newstest2011.en.tok',
-                          '../data/dev/newstest2011.fr.tok'],
-          dictionaries=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok.pkl',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
+          datasets=[ # path to training datasets (source and target)
+              None,
+              None],
+          valid_datasets=[None, # path to validation datasets (source and target)
+                          None],
+          dictionaries=[ # path to dictionaries (json file created with ../data/build_dictionary.py). One dictionary per input factor; last dictionary is target-side dictionary.
+              None,
+              None],
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
           dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
@@ -948,7 +948,7 @@ def train(dim_word=512,  # word vector dimensionality
           domain_interpolation_min=0.1, # minimum (initial) fraction of in-domain training data
           domain_interpolation_max=1.0, # maximum fraction of in-domain training data
           domain_interpolation_inc=0.1, # interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached
-          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'], # in-domain parallel training corpus
+          domain_interpolation_indomain_datasets=[None, None], # in-domain parallel training corpus (source and target)
           maxibatch_size=20, #How many minibatches to load at one time
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
@@ -1648,7 +1648,7 @@ if __name__ == '__main__':
                          help="maximum fraction of in-domain training data (default: %(default)s)")
     domain_interpolation.add_argument('--domain_interpolation_inc', type=float, default=0.1, metavar='FLOAT',
                          help="interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached (default: %(default)s)")
-    domain_interpolation.add_argument('--domain_interpolation_indomain_datasets', type=str, default=['indomain.en', 'indomain.fr'], metavar='PATH', nargs=2,
+    domain_interpolation.add_argument('--domain_interpolation_indomain_datasets', type=str, metavar='PATH', nargs=2,
                          help="indomain parallel training corpus (source and target)")
 
     args = parser.parse_args()
