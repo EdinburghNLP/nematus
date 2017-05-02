@@ -153,14 +153,6 @@ def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}
 
     optimizer_tparams = {}
 
-    t_prev_name = PREFIX + 't_prev'
-    if t_prev_name in optimizer_params:
-        t_prev_init = optimizer_params[t_prev_name]
-    else:
-        t_prev_init = 0.
-    t_prev = theano.shared(numpy.float32(t_prev_init), t_prev_name)
-    optimizer_tparams[t_prev_name] = t_prev
-
     updates = []
     for p, g in zip(tparams.values(), grads):
         prev_name = PREFIX + p.name + '_prev'
