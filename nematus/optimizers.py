@@ -148,30 +148,33 @@ def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
     return f_grad_shared, f_update, {}
 
 def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
-    assert momentum >= 0. and momentum < 1.
-    gshared = [theano.shared(p.get_value() * 0.,
-                             name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
+    assert momentum >= 0 and momentum < 1
+    PREFIX = 'sgdmomentum_'
 
-    # init theano sharedvariables for updates, previous
-    previous_steps = [theano.shared(p.get_value() * 0., 
-                                    name='%s_paramup' % k)
-                      for k, p in tparams.iteritems()]
+    optimizer_tparams = {}
 
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    t_prev_name = PREFIX + 't_prev'
+    if t_prev_name in optimizer_params:
+        t_prev_init = optimizer_params[t_prev_name]
+    else:
+        t_prev_init = 0.
+    t_prev = theano.shared(numpy.float32(t_prev_init), t_prev_name)
+    optimizer_tparams[t_prev_name] = t_prev
 
-    # update grads to sharedvariables
-    f_grad_shared = theano.function(inp, cost, updates=gsup,
-                                    profile=profile)
+    updates = []
+    for p, g in zip(tparams.values(), grads):
+        prev_name = PREFIX + p.name + '_prev'
+        if prev_name in optimizer_params:
+            prev_init = optimizer_params[prev_name]
+        else:
+            prev_init = p.get_value() * 0.
+        prev = theano.shared(prev_init, prev_name)
+        optimizer_tparams[prev_name] = prev
+        step = momentum * prev - lr * g
+        updates.append((prev, step))
+        updates.append((p, p + step))
 
-    current_steps = [momentum * previous_step - lr * g
-                     for previous_step, g in zip(previous_steps, gshared)]
+    f_update = theano.function([lr]+inp, cost, updates=updates,
+                               on_unused_input='ignore', profile=profile)
 
-    pup1 = [(previous_step, current_step)
-            for previous_step, current_step in zip(previous_steps, current_steps)]
-
-    pup2 = [(p, p + current_step)
-            for p, current_step in zip(itemlist(tparams), current_steps)]
-
-    f_update = theano.function([lr], [], updates=pup1+pup2, profile=profile)
-    return f_grad_shared, f_update, {}
+    return None, f_update, optimizer_tparams
