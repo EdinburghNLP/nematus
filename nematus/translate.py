@@ -271,7 +271,7 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                     print_matrix_json(alignment, source_sentences[i], _seqs2words(trans[0]).split(), i, i,save_alignment)
                 else:
                     save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                          i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
+                                         i, _seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
                     print_matrix(alignment, save_alignment)
 
     sys.stderr.write('Done\n')
