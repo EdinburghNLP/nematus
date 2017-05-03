@@ -992,14 +992,14 @@ def train(dim_word=512,  # word vector dimensionality
           validFreq=10000,
           saveFreq=30000,   # save the parameters after every saveFreq updates
           sampleFreq=10000,   # generate some samples after every sampleFreq
-          datasets=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
-          valid_datasets=['../data/dev/newstest2011.en.tok',
-                          '../data/dev/newstest2011.fr.tok'],
-          dictionaries=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok.pkl',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
+          datasets=[ # path to training datasets (source and target)
+              None,
+              None],
+          valid_datasets=[None, # path to validation datasets (source and target)
+                          None],
+          dictionaries=[ # path to dictionaries (json file created with ../data/build_dictionary.py). One dictionary per input factor; last dictionary is target-side dictionary.
+              None,
+              None],
           use_dropout=False,
           dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
           dropout_hidden=0.2, # dropout for hidden layers (0: no dropout)
@@ -1015,7 +1015,7 @@ def train(dim_word=512,  # word vector dimensionality
           domain_interpolation_min=0.1, # minimum (initial) fraction of in-domain training data
           domain_interpolation_max=1.0, # maximum fraction of in-domain training data
           domain_interpolation_inc=0.1, # interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached
-          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'], # in-domain parallel training corpus
+          domain_interpolation_indomain_datasets=[None, None], # in-domain parallel training corpus (source and target)
           maxibatch_size=20, #How many minibatches to load at one time
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
@@ -1153,7 +1153,12 @@ def train(dim_word=512,  # word vector dimensionality
         print 'Reloading model parameters'
         params = load_params(saveto, params)
         print 'Reloading optimizer parameters'
-        optimizer_params = load_optimizer_params(saveto, optimizer)
+        try:
+            print 'trying to load optimizer params from {0} or {1}'.format(saveto + '.gradinfo', saveto + '.gradinfo.npz')
+            optimizer_params = load_optimizer_params(saveto + '.gradinfo', optimizer)
+        except IOError:
+            print '{0}(.npz) not found. Trying to load optimizer params from {1}(.npz)'.format(saveto + '.gradinfo', saveto)
+            optimizer_params = load_optimizer_params(saveto, optimizer)
     elif prior_model:
         print 'Initializing model parameters from prior'
         params = load_params(prior_model, params)
@@ -1307,7 +1312,7 @@ def train(dim_word=512,  # word vector dimensionality
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
-                if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask)
                 else:
@@ -1391,7 +1396,7 @@ def train(dim_word=512,  # word vector dimensionality
                     scorer.set_reference(y_s)
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
-                    if optimizer in ['adam']: #TODO: this could also be done for other optimizers
+                    if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
                         # compute cost, grads and update parameters
                         cost = f_update(lrate, x, x_mask, y, y_mask, loss)
                     else:
@@ -1432,8 +1437,8 @@ def train(dim_word=512,  # word vector dimensionality
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-                both_params = dict(params, **optimizer_params)
-                numpy.savez(saveto, **both_params)
+                numpy.savez(saveto, **params)
+                numpy.savez(saveto + '.gradinfo', **optimizer_params)
                 training_progress.save_to_json(training_progress_file)
                 print 'Done'
 
@@ -1443,8 +1448,8 @@ def train(dim_word=512,  # word vector dimensionality
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], training_progress.uidx)
 
-                    both_params = dict(unzip_from_theano(tparams, excluding_prefix='prior_'), **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
-                    numpy.savez(saveto_uidx, **both_params)
+                    numpy.savez(saveto_uidx, **unzip_from_theano(tparams, excluding_prefix='prior_'))
+                    numpy.savez(saveto_uidx + '.gradinfo', **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
                     training_progress.save_to_json(saveto_uidx+'.progress.json')
                     print 'Done'
 
@@ -1548,8 +1553,8 @@ def train(dim_word=512,  # word vector dimensionality
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
-                    both_params = dict(params, **optimizer_params)
-                    numpy.savez(saveto +'.dev', **both_params)
+                    numpy.savez(saveto +'.dev', **params)
+                    numpy.savez(saveto +'.dev.gradinfo', **optimizer_params)
                     training_progress.save_to_json(saveto+'.dev.progress.json')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
@@ -1586,8 +1591,8 @@ def train(dim_word=512,  # word vector dimensionality
         params = unzip_from_theano(tparams, excluding_prefix='prior_')
         optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-    both_params = dict(params, **optimizer_params)
-    numpy.savez(saveto, **both_params)
+    numpy.savez(saveto, **params)
+    numpy.savez(saveto + '.gradinfo', **optimizer_params)
     training_progress.save_to_json(training_progress_file)
 
     return valid_err
@@ -1682,7 +1687,7 @@ if __name__ == '__main__':
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
-                         choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
+                         choices=['adam', 'adadelta', 'rmsprop', 'sgd', 'sgdmomentum'],
                          help="optimizer (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
@@ -1752,7 +1757,7 @@ if __name__ == '__main__':
                          help="maximum fraction of in-domain training data (default: %(default)s)")
     domain_interpolation.add_argument('--domain_interpolation_inc', type=float, default=0.1, metavar='FLOAT',
                          help="interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached (default: %(default)s)")
-    domain_interpolation.add_argument('--domain_interpolation_indomain_datasets', type=str, default=['indomain.en', 'indomain.fr'], metavar='PATH', nargs=2,
+    domain_interpolation.add_argument('--domain_interpolation_indomain_datasets', type=str, metavar='PATH', nargs=2,
                          help="indomain parallel training corpus (source and target)")
 
     args = parser.parse_args()

@@ -48,7 +48,10 @@ def init_theano_params(params):
 
 # load parameters
 def load_params(path, params, with_prefix=''):
-    pp = numpy.load(path)
+    try:
+        pp = numpy.load(path)
+    except IOError:
+        pp = numpy.load(path + '.npz')
     new_params = OrderedDict()
     for kk, vv in params.iteritems():
         if kk not in pp:
@@ -62,7 +65,10 @@ def load_params(path, params, with_prefix=''):
 # load parameters of the optimizer
 def load_optimizer_params(path, optimizer_name):
     params = {}
-    pp = numpy.load(path)
+    try:
+        pp = numpy.load(path)
+    except IOError:
+        pp = numpy.load(path + '.npz')
     for kk in pp:
         if kk.startswith(optimizer_name):
             params[kk] = pp[kk]

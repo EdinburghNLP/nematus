@@ -213,7 +213,7 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                 # if queue is empty after 5s, check if processes are still alive
                 except Empty:
                     for midx in xrange(n_process):
-                        if not processes[midx].is_alive():
+                        if not processes[midx].is_alive() and processes[midx].exitcode != 0:
                             # kill all other processes and raise exception if one dies
                             queue.cancel_join_thread()
                             rqueue.cancel_join_thread()
