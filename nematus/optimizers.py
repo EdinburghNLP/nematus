@@ -163,20 +163,18 @@ def rmsprop(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     return None, f_update, optimizer_tparams
 
 def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
-    PREFIX = 'sgd_'
-    optimizer_tparams = {}
     updates = [(p, p - lr * g) for p, g in zip(tparams.values(), grads)]
     f_update = theano.function([lr]+inp, cost, updates=updates, profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return None, f_update, {}
 
 def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
     assert momentum >= 0 and momentum < 1
     PREFIX = 'sgdmomentum_'
 
+    updates = []
     optimizer_tparams = {}
 
-    updates = []
     for p, g in zip(tparams.values(), grads):
         prev_name = PREFIX + p.name + '_prev'
         if prev_name in optimizer_params:
