@@ -163,18 +163,12 @@ def rmsprop(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     return None, f_update, optimizer_tparams
 
 def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
-    gshared = [theano.shared(p.get_value() * 0.,
-                             name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    PREFIX = 'sgd_'
+    optimizer_tparams = {}
+    updates = [(p, p - lr * g) for p, g in zip(tparams.values(), grads)]
+    f_update = theano.function([lr]+inp, cost, updates=updates, profile=profile)
 
-    f_grad_shared = theano.function(inp, cost, updates=gsup,
-                                    profile=profile)
-
-    pup = [(p, p - lr * g) for p, g in zip(itemlist(tparams), gshared)]
-    f_update = theano.function([lr], [], updates=pup, profile=profile)
-
-    return f_grad_shared, f_update, {}
+    return None, f_update, optimizer_tparams
 
 def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
     assert momentum >= 0 and momentum < 1
