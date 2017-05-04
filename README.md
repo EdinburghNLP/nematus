@@ -15,6 +15,7 @@ The changes to Nematus include:
  - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
  - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
  - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
+ - weight normalisation (Salimans and Kingma, 2016) https://arxiv.org/abs/1602.07868
  - command line interface for training
  - automatic training set reshuffling between epochs
  - n-best output for decoder
@@ -134,13 +135,18 @@ execute nematus/nmt.py to train a model.
 | --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
-| --layer_normalisation        |  use layer normalisation (default: False) |
+| --layer_normalisation    | use layer normalisation (default: False) |
+| --weight_normalisation   | use weight normalisation (default: False) | 
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 | --enc_depth INT | number of encoder layers (default: 1) |
 | --enc_depth_bidirectional | number of bidirectional encoder layers; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional. |
 | --dec_depth INT | number of decoder layers (default: 1) |
 | --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
+| --decoder_deep | type of recurrent layer for decoder layers after the first (default: gru) |
+| --enc_recurrence_transition_depth | number of GRU transition operations applied in an encoder layer (default: 1) |
+| --dec_base_recurrence_transition_depth | number of GRU transition operations applied in first decoder layer (default: 2) |
+| --dec_high_recurrence_transition_depth | number of GRU transition operations applied in decoder layers after the first (default: 1) |
 
 #### training parameters
 | parameter            | description |
