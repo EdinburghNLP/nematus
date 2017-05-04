@@ -164,14 +164,6 @@ def init_params(options):
                                 nin=ctxdim, nout=options['dim_word'],
                                 ortho=False)
 
-    # additional deep output layers
-    for level in range(1, options['output_depth']):
-        prefix = pp('ff_deep_output', level)
-        params = get_layer_param('ff')(options, params, prefix=prefix,
-                                       nin=options['dim_word'],
-                                       nout=options['dim_word'],
-                                       ortho=False)
-
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
                                 nout=options['n_words'],
@@ -401,15 +393,6 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
     logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-
-
-    # additional deep output layers (with tanh activations)
-    for level in range(1, options['output_depth']):
-        prefix = pp('ff_deep_output', level)
-
-        logit += get_layer_constr('ff')(tparams, logit, options, dropout,
-                                       dropout_probability=options['dropout_hidden'],
-                                       prefix=prefix)
 
     # last layer
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
@@ -946,7 +929,6 @@ def train(dim_word=512,  # word vector dimensionality
           dec_high_recurrence_transition_depth=1, # number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru)
           dec_deep_context=False, # include context vectors in deeper layers of the decoder
           enc_depth_bidirectional=None, # first n encoder layers are bidirectional (default: all)
-          output_depth=1, # number of layers in deep output
           factors=1, # input factors
           dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
           encoder='gru',
@@ -1035,7 +1017,6 @@ def train(dim_word=512,  # word vector dimensionality
         model_options['enc_depth_bidirectional'] = model_options['enc_depth']
     # first layer is always bidirectional; make sure people don't forget to increase enc_depth as well
     assert(model_options['enc_depth_bidirectional'] >= 1 and model_options['enc_depth_bidirectional'] <= model_options['enc_depth'])
-    assert(model_options['output_depth'] >= 1)
 
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
@@ -1620,8 +1601,6 @@ if __name__ == '__main__':
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--enc_depth_bidirectional', type=int, default=None, metavar='INT',
                          help="number of bidirectional encoder layer; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional.")
-    network.add_argument('--output_depth', type=int, default=1, metavar='INT',
-                         help="number of deep output layers (default: %(default)s)")
 
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")

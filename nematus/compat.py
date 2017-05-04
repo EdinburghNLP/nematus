@@ -43,10 +43,6 @@ def fill_options(options):
         options['decoder_truncate_gradient'] = -1
     if not 'enc_depth_bidirectional' in options:
         options['enc_depth_bidirectional'] = options['enc_depth']
-    if not 'output_depth' in options:
-        options['output_depth'] = 1
-    if not 'output_depth' in options:
-        options['output_depth'] = 1
     if not 'decoder_deep' in options:
         options['decoder_deep'] = 'gru'
     if not 'layer_normalisation' in options:
@@ -67,7 +63,7 @@ def fill_options(options):
         options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
 
     if not 'dec_high_recurrence_transition_depth' in options:
-        if options['decoder_deep'] in ['gru_cond', 'gru_cond_reuse_att']:
+        if options['decoder_deep'] == 'gru_cond':
             options['dec_high_recurrence_transition_depth'] = 2
         else:
             options['dec_high_recurrence_transition_depth'] = 1
