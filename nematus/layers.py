@@ -191,7 +191,6 @@ def embedding_layer(tparams, ids, factors=None, prefix='', suffix=''):
 # GRU layer
 def param_init_gru(options, params, prefix='gru', nin=None, dim=None,
                    recurrence_transition_depth=1,
-                   recurrence_transition_deep_input=False,
                    **kwargs):
     if nin is None:
         nin = options['dim_proj']
@@ -221,7 +220,7 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None,
             params[pp(prefix,'U%s_wns' % suffix)] = scale_mul * numpy.ones((2*dim)).astype(floatX)
             params[pp(prefix,'Ux%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
 
-        if recurrence_transition_deep_input or (i == 0):
+        if i == 0:
             # embedding to gates transformation weights, biases
             W = numpy.concatenate([norm_weight(nin, dim),
                            norm_weight(nin, dim)], axis=1)
@@ -247,7 +246,6 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
               dropout_probability_below=0,
               dropout_probability_rec=0,
               recurrence_transition_depth=1,
-              recurrence_transition_deep_input=False,
               truncate_gradient=-1,
               profile=False,
               **kwargs):
@@ -280,7 +278,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
     if mask is None:
         mask = tensor.alloc(1., state_below.shape[0], 1)
 
-    below_dropout = dropout((n_samples, dim_below), dropout_probability_below, num=2*(recurrence_transition_depth if recurrence_transition_deep_input else 1))
+    below_dropout = dropout((n_samples, dim_below), dropout_probability_below, num=2)
     rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=2*(recurrence_transition_depth))
 
     # utility function to slice a tensor
@@ -290,23 +288,22 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         return _x[:, n*dim:(n+1)*dim]
 
     state_below_list, state_belowx_list = [], []
-    for i in xrange(recurrence_transition_depth if recurrence_transition_deep_input else 1):
-        suffix = '' if i == 0 else ('_drt_%s' % i)
-        # state_below is the input word embeddings
-        # input to the gates, concatenated
-        state_below_ = tensor.dot(state_below*below_dropout[0+2*i], wn(pp(prefix, 'W'+suffix))) + tparams[pp(prefix, 'b'+suffix)]
-        # input to compute the hidden state proposal
-        state_belowx = tensor.dot(state_below*below_dropout[1+2*i], wn(pp(prefix, 'Wx'+suffix))) + tparams[pp(prefix, 'bx'+suffix)]
-        if options['layer_normalisation']:
-             state_below_ = layer_norm(state_below_, tparams[pp(prefix, 'W%s_lnb' % suffix)], tparams[pp(prefix, 'W%s_lns' % suffix)])
-             state_belowx = layer_norm(state_belowx, tparams[pp(prefix, 'Wx%s_lnb' % suffix)], tparams[pp(prefix, 'Wx%s_lns' % suffix)])
-        state_below_list.append(state_below_)
-        state_belowx_list.append(state_belowx)
+
+    # state_below is the input word embeddings
+    # input to the gates, concatenated
+    state_below_ = tensor.dot(state_below*below_dropout[0], wn(pp(prefix, 'W'))) + tparams[pp(prefix, 'b')]
+    # input to compute the hidden state proposal
+    state_belowx = tensor.dot(state_below*below_dropout[1], wn(pp(prefix, 'Wx'))) + tparams[pp(prefix, 'bx')]
+    if options['layer_normalisation']:
+        state_below_ = layer_norm(state_below_, tparams[pp(prefix, 'W_lnb')], tparams[pp(prefix, 'W_lns')])
+        state_belowx = layer_norm(state_belowx, tparams[pp(prefix, 'Wx_lnb')], tparams[pp(prefix, 'Wx_lns')])
+    state_below_list.append(state_below_)
+    state_belowx_list.append(state_belowx)
 
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
     def _step_slice(*args):
-        n_ins = recurrence_transition_depth if recurrence_transition_deep_input else 1
+        n_ins = 1
         m_ = args[0]
         x_list = args[1:1+n_ins]
         xx_list = args[1+n_ins:1+2*n_ins]
@@ -315,7 +312,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         h_prev = h_
         for i in xrange(recurrence_transition_depth):
             suffix = '' if i == 0 else ('_drt_%s' % i)
-            if recurrence_transition_deep_input or (i == 0):
+            if i == 0:
                 x_cur = x_list[i]
                 xx_cur = xx_list[i]
             else:
@@ -373,8 +370,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
                         nin_nonlin=None, dim_nonlin=None,
-                        recurrence_transition_depth=2,
-                        recurrence_transition_deep_context=False):
+                        recurrence_transition_depth=2):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -423,7 +419,7 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
             params[pp(prefix,'Ux_nl%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
 
         # context to LSTM
-        if recurrence_transition_deep_context or (i == 0):
+        if i == 0:
             Wc = norm_weight(dimctx, dim*2)
             params[pp(prefix, 'Wc'+suffix)] = Wc
             Wcx = norm_weight(dimctx, dim)
@@ -490,7 +486,6 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    dropout_probability_rec=0,
                    pctx_=None,
                    recurrence_transition_depth=2,
-                   recurrence_transition_deep_context=False,
                    truncate_gradient=-1,
                    profile=False,
                    **kwargs):
@@ -598,7 +593,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             preact2 = tensor.dot(h2_prev*rec_dropout[3+2*i], wn(pp(prefix, 'U_nl'+suffix)))+tparams[pp(prefix, 'b_nl'+suffix)]
             if options['layer_normalisation']:
                 preact2 = layer_norm(preact2, tparams[pp(prefix, 'U_nl%s_lnb' % suffix)], tparams[pp(prefix, 'U_nl%s_lns' % suffix)])
-            if recurrence_transition_deep_context or (i == 0):
+            if i == 0:
                 ctx1_ = tensor.dot(ctx_*ctx_dropout[2], wn(pp(prefix, 'Wc'+suffix))) # dropout mask is shared over mini-steps
                 if options['layer_normalisation']:
                     ctx1_ = layer_norm(ctx1_, tparams[pp(prefix, 'Wc%s_lnb' % suffix)], tparams[pp(prefix, 'Wc%s_lns' % suffix)])
@@ -612,7 +607,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             if options['layer_normalisation']:
                preactx2 = layer_norm(preactx2, tparams[pp(prefix, 'Ux_nl%s_lnb' % suffix)], tparams[pp(prefix, 'Ux_nl%s_lns' % suffix)])
             preactx2 *= r2
-            if recurrence_transition_deep_context or (i == 0):
+            if i == 0:
                ctx2_ = tensor.dot(ctx_*ctx_dropout[3], wn(pp(prefix, 'Wcx'+suffix))) # dropout mask is shared over mini-steps
                if options['layer_normalisation']:
                    ctx2_ = layer_norm(ctx2_, tparams[pp(prefix, 'Wcx%s_lnb' % suffix)], tparams[pp(prefix, 'Wcx%s_lns' % suffix)])
@@ -656,7 +651,6 @@ def param_init_gru_cond_reuse_att(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
                         nin_nonlin=None, dim_nonlin=None,
                         recurrence_transition_depth=None, # ignored
-                        recurrence_transition_deep_context=False, # ignored
                         ):
     if nin is None:
         nin = options['dim']
