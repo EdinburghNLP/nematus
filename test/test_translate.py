@@ -51,14 +51,14 @@ class TestTranslate(unittest.TestCase):
     # English-German WMT16 system, no dropout
     def test_ende(self):
         os.chdir('models/en-de/')
-        translate(['model.npz'], open('../../en-de/in'), open('../../en-de/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
+        translate(['model.npz'], open('../../en-de/in'), open('../../en-de/out','w'), k=12, normalization_alpha=1, n_process=1, suppress_unk=True, print_word_probabilities=True)
         os.chdir('../..')
         self.outputEqual('en-de/ref','en-de/out')
 
     # English-Romanian WMT16 system, dropout
     def test_enro(self):
         os.chdir('models/en-ro/')
-        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalize=True, n_process=1, suppress_unk=True, print_word_probabilities=True)
+        translate(['model.npz'], open('../../en-ro/in'), open('../../en-ro/out','w'), k=12, normalization_alpha=1, n_process=1, suppress_unk=True, print_word_probabilities=True)
         os.chdir('../..')
         self.outputEqual('en-ro/ref','en-ro/out')
 
