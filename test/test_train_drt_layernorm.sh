@@ -24,6 +24,5 @@ mkdir -p models
   --dispFreq 500 \
   --finish_after 500 \
   --dec_base_recurrence_transition_depth 4 \
-  --dec_base_recurrence_transition_deep_context \
   --layer_normalisation
 
