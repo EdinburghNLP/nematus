@@ -1434,7 +1434,7 @@ def train(dim_word=512,  # word vector dimensionality
                     print
 
             # validate model on validation set and early stop if necessary
-            if valid and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
+            if valid is not None and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
                 use_noise.set_value(0.)
                 valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
@@ -1497,7 +1497,7 @@ def train(dim_word=512,  # word vector dimensionality
         zip_to_theano(best_p, tparams)
         zip_to_theano(best_opt_p, optimizer_tparams)
 
-    if valid:
+    if valid is not None:
         use_noise.set_value(0.)
         valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
