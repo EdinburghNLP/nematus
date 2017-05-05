@@ -8,23 +8,26 @@ It was used to produce top-scoring systems at the WMT 16 shared translation task
 
 The changes to Nematus include:
 
- - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
- - ensemble decoding (and new translation API to support it)
- - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
- - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
- - minimum risk training (Shen et al, 2016) http://aclweb.org/anthology/P16-1159
- - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
- - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
- - weight normalisation (Salimans and Kingma, 2016) https://arxiv.org/abs/1602.07868
- - command line interface for training
- - automatic training set reshuffling between epochs
- - n-best output for decoder
- - more output options (attention weights; word-level probabilities) and visualization scripts
- - performance improvements to decoder
- - rescoring support
- - execute arbitrary validation scripts (for BLEU early stopping)
- - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
+ - new architecture variants for better performance:
+     - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
+     - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
+     - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
+     - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
+     - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
+     - weight normalisation (Salimans and Kingma, 2016) https://arxiv.org/abs/1602.07868
 
+ - improvements to scoring and decoding:
+     - ensemble decoding (and new translation API to support it)
+     - n-best output for decoder
+     - scripts for scoring (given parallel corpus) and rescoring (of n-best output)
+
+ - usability improvements:
+     - command line interface for training
+     - more output options (attention weights; word-level probabilities) and visualization scripts
+     - execute arbitrary validation scripts (for BLEU early stopping)
+     - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
+
+see changelog for more info
 
 SUPPORT
 -------
