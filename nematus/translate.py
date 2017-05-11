@@ -15,6 +15,7 @@ from console import ConsoleInterfaceDefault
 from multiprocessing import Process, Queue, Value
 from Queue import Empty
 from ctypes import c_bool
+from cStringIO import StringIO
 
 class QueueItem(object):
     """
@@ -411,7 +412,34 @@ class Translator(object):
 
         sys.stderr.write('Done\n')
 
+    def translate_string(self, segment, saveto, save_alignment=None, k=5,
+                         normalize=False, chr_level=False, verbose=False,
+                         nbest=False, suppress_unk=False, a_json=False,
+                         print_word_probabilities=False, return_hyp_graph=False,
+                         finish=True):
+        """
+        Translates a single segment
+        """
+        if not segment.endswith('\n'):
+            segment += '\n'
+        source_file = StringIO(segment)
+        self.translate(source_file, saveto, save_alignment, k, normalize,
+                       chr_level, verbose, nbest, suppress_unk, a_json,
+                       print_word_probabilities, return_hyp_graph, finish)
 
+    def translate_list(self, segments, saveto, save_alignment=None, k=5,
+                       normalize=False, chr_level=False, verbose=False,
+                       nbest=False, suppress_unk=False, a_json=False,
+                       print_word_probabilities=False, return_hyp_graph=False,
+                       finish=True):
+        """
+        Translates a list of segments
+        """
+        segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
+        source_file = StringIO(''.join(segments))
+        self.translate(source_file, saveto, save_alignment, k, normalize,
+                       chr_level, verbose, nbest, suppress_unk, a_json,
+                       print_word_probabilities, return_hyp_graph, finish)
 
 def main(args):
 
