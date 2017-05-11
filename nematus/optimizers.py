@@ -168,7 +168,7 @@ def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
 
     return None, f_update, {}
 
-def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
+def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.9, optimizer_params={}, profile=False):
     assert momentum >= 0 and momentum < 1
     PREFIX = 'sgdmomentum_'
 
