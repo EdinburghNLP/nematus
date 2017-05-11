@@ -13,7 +13,7 @@ from util import *
 from theano_util import *
 
 # Calling convention:
-# f_grad_shared, f_update = name(hyperp, tparams, grads, inputs (list), cost)
+# f_update = name(hyperp, tparams, grads, inputs (list), cost)
 # with profile as an optional argument
 
 def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimizer_params={}, profile=False):
@@ -65,7 +65,7 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams
 
 def adadelta(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     PREFIX = 'adadelta_'
@@ -107,7 +107,7 @@ def adadelta(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams
 
 def rmsprop(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     PREFIX = 'rmsprop_'
@@ -160,13 +160,13 @@ def rmsprop(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams
 
 def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
     updates = [(p, p - lr * g) for p, g in zip(tparams.values(), grads)]
     f_update = theano.function([lr]+inp, cost, updates=updates, profile=profile)
 
-    return None, f_update, {}
+    return f_update, {}
 
 def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.9, optimizer_params={}, profile=False):
     assert momentum >= 0 and momentum < 1
@@ -190,4 +190,4 @@ def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.9, optimizer_params={}
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams
