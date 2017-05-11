@@ -20,6 +20,8 @@ class TranslationRequestNematus(TranslationRequest):
             self.normalize = request['normalize']
         if 'character_level' in request:
             self.character_level = request['character_level']
+        if 'suppress_unk' in request:
+            self.suppress_unk = request['suppress_unk']
         if 'return_word_alignment' in request:
             self.return_word_alignment = request['return_word_alignment']
         if 'return_word_probabilities' in request:

@@ -26,6 +26,7 @@ class TranslationRequest(object):
         self.normalize = True
         self.character_level = False
         self.n_best = 1
+        self.suppress_unk = False
         self.return_word_alignment = False
         self.return_word_probabilities = False
         self._parse()
@@ -39,6 +40,7 @@ class TranslationRequest(object):
         * self.normalize
         * self.character_level
         * self.n_best
+        * self.suppress_unk
         * self.return_word_alignment
         * self.return_word_probabilities
         """

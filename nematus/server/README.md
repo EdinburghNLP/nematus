@@ -21,6 +21,7 @@ Content-Type: application/json
 | ``beam_width``      | ``int``               | The beam width to be used for decoding. Default: ``5``. |
 | ``character_level`` | ``boolean``           | Enables character- rather than subword-level translation. Default: ``false``. |
 | ``n_best``          | ``int``               | Return n best translations per segment. Default: ``1``. |
+| ``suppress_unk``    | ``boolean``           | Suppress hypotheses containing UNK. Default: ``false``. |
 | ``return_word_alignment`` | ``boolean``     | Return word alignment (source to target language) for each segment. Default: ``false``. |
 | ``return_word_probabilities`` | ``boolean`` | Return the probability of each word (target language) for each segment. Default: ``false``. |
 
