@@ -10,6 +10,7 @@ import json
 from util import load_dict, load_config
 from compat import fill_options
 from hypgraph import HypGraphRenderer
+from console import ConsoleInterfaceDefault
 
 from multiprocessing import Process, Queue, Value
 from Queue import Empty
@@ -436,41 +437,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-k', type=int, default=5,
-                        help="Beam size (default: %(default)s))")
-    parser.add_argument('-p', type=int, default=1,
-                        help="Number of processes (default: %(default)s))")
-    parser.add_argument('-n', action="store_true",
-                        help="Normalize scores by sentence length")
-    parser.add_argument('-c', action="store_true", help="Character-level")
-    parser.add_argument('-v', action="store_true", help="verbose mode.")
-    parser.add_argument('--models', '-m', type=str, nargs='+', required=True,
-                        help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
-    parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                        default=sys.stdin, metavar='PATH',
-                        help="Input file (default: standard input)")
-    parser.add_argument('--output', '-o', type=argparse.FileType('w'),
-                        default=sys.stdout, metavar='PATH',
-                        help="Output file (default: standard output)")
-    parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
-                        default=None, metavar='PATH',
-                        help="Output file for alignment weights (default: standard output)")
-    parser.add_argument('--json_alignment', action="store_true",
-                        help="Output alignment in json format")
-    parser.add_argument('--n-best', action="store_true",
-                        help="Write n-best list (of size k)")
-    parser.add_argument('--suppress-unk', action="store_true",
-                        help="Suppress hypotheses containing UNK.")
-    parser.add_argument('--print-word-probabilities', '-wp',
-                        action="store_true", help="Print probabilities of each word")
-    parser.add_argument('--search_graph', '-sg',
-                        help="Output file for search graph rendered as PNG image")
-    parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False,
-                        help="User specified device list for multi-thread decoding (default: [])")
-
+    parser = ConsoleInterfaceDefault()
     args = parser.parse_args()
-
     main(args)
-
-
