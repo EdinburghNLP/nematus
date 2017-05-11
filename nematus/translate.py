@@ -249,12 +249,12 @@ def main(models, source_file, saveto, save_alignment=None, k=5,
                 # print alignment matrix for each hypothesis
                 # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
                 if save_alignment is not None:
-                  if a_json:
-                    print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), i, i+j,save_alignment)
-                  else:
-                    save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                        i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
-                    print_matrix(alignment[j], save_alignment)
+                    if a_json:
+                        print_matrix_json(alignment[j], source_sentences[i], _seqs2words(samples[j]).split(), i, i+j,save_alignment)
+                    else:
+                        save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
+                                             i, _seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(samples[j])))
+                        print_matrix(alignment[j], save_alignment)
         else:
             samples, scores, word_probs, alignment, hyp_graph = trans
             if return_hyp_graph:
