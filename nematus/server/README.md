@@ -6,13 +6,13 @@ Nematus Server supports several API styles.
 
 ## Nematus Translation API
 
-### HTTP Request
+### Translation Request
 
 `POST http://host:port/translate`
 
 Content-Type: application/json
 
-### Query Parameters
+#### Query Parameters
 
 | Parameter           | Type                  | Description  |
 | --------------------|-----------------------| -------------|
@@ -25,7 +25,7 @@ Content-Type: application/json
 | ``return_word_alignment`` | ``boolean``     | Return word alignment (source to target language) for each segment. Default: ``false``. |
 | ``return_word_probabilities`` | ``boolean`` | Return the probability of each word (target language) for each segment. Default: ``false``. |
 
-### Response Body
+#### Response Body
 
 If successful, the response body contains a JSON object with the following structure:
 
@@ -44,3 +44,25 @@ If successful, the response body contains a JSON object with the following struc
 ```
 
 Additional fields for each segment in ``data`` are ``word_alignment`` and ``word_probabilities`` (details tba).
+
+### Status Request
+
+`GET http://host:port/status`
+
+#### Response Body
+
+If successful, the response body contains a JSON object with the following structure:
+
+```json
+{
+  "status": "ok",
+  "models": [
+    "wmt16-en-de-model1.npz",
+    "wmt16-en-de-model2.npz",
+    "wmt16-en-de-model3.npz",
+    "wmt16-en-de-model4.npz",
+  ],
+  "version": "0.1.dev0",
+  "service": "nematus"
+}
+```

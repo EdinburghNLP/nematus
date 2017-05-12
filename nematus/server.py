@@ -5,42 +5,62 @@
 Runs Nematus as a Web Server.
 """
 
+import json
+import pkg_resources
+
 from bottle import Bottle, request, response
+
 from server.response import TranslationResponse
 from server.api.provider import request_provider, response_provider
+from console import ConsoleInterfaceServer
+from translate import Translator
 
 class NematusServer(object):
     """
     Keeps a Nematus model in memory to answer http translation requests.
     """
-    def __init__(self, model, style="Nematus", host="localhost", port=8080, debug=False):
+
+    STATUS_LOADING = 'loading'
+    STATUS_OK = 'ok'
+
+    def __init__(self, startup_args):
         """
         Loads a translation model and initialises the webserver.
 
-        @type model: str
-        @param model: path to the Nematus translation model to be loaded
-        @type style: str
-        @param style: API style (see `README.md`)
-        @type host: str
-        @param host: the host address
-        @type port: int
-        @param port: the host port
-        @type debug: bool
-        @param debug: Debug mode (should be disabled in production)
+        @param startup args: as defined in `console.py`
         """
-        self.style = style
-        self.host = host
-        self.port = port
-        self.debug = debug
+        self._models = startup_args.models
+        self._style = startup_args.style
+        self._host = startup_args.host
+        self._port = startup_args.port
+        self._debug = startup_args.v
+        self._num_processes = startup_args.p
+        self._device_list = startup_args.device_list
+        self._status = self.STATUS_LOADING
+        # start webserver
         self._server = Bottle()
-        # load translation model
-        #todo
+        # start translation workers
+        #self._translator = Translator(self._models, self._num_processes, self._device_list)
+        self._status = self.STATUS_OK
+
+    def status(self):
+        """
+        Reports on the status of this translation server.
+        """
+        response_data = {
+            'status': self._status,
+            'models': self._models,
+            'version': pkg_resources.require("nematus")[0].version,
+            'service': 'nematus',
+        }
+        response.content_type = "application/json"
+        return json.dumps(response_data)
 
     def translate(self):
         """
         Processes a translation request.
         """
-        translation_request = request_provider(self.style, request)
+        translation_request = request_provider(self._style, request)
         source_segments = [segment for segment in translation_request.segments]
         #todo: actual translation
         target_segments = [segment.upper() for segment in source_segments] # pseudo translation (to all caps)
@@ -50,7 +70,7 @@ class NematusServer(object):
             'word_alignments': None,
             'word_probabilities': None,
         }
-        translation_response = response_provider(self.style, **response_data)
+        translation_response = response_provider(self._style, **response_data)
         response.content_type = translation_response.get_content_type()
         return repr(translation_response)
 
@@ -59,16 +79,18 @@ class NematusServer(object):
         Starts the webserver.
         """
         self._route()
-        self._server.run(host=self.host, port=self.port, debug=self.debug)
+        self._server.run(host=self._host, port=self._port, debug=self._debug)
 
     def _route(self):
         """
         Routes webserver paths to functions.
         """
+        self._server.route('/status', method="GET", callback=self.status)
         self._server.route('/translate', method="POST", callback=self.translate)
 
 
 if __name__ == "__main__":
-    #todo: parse actual init params
-    server = NematusServer('/foo/bar', debug=True)
+    parser = ConsoleInterfaceServer()
+    startup_args = parser.parse_args()
+    server = NematusServer(startup_args)
     server.start()
