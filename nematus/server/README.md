@@ -1,18 +1,18 @@
 # Nematus Server
 Runs Nematus as a Web Server. Further details tba.
 
-# API
+## API
 Nematus Server supports several API styles.
 
-## Nematus Translation API
+### Nematus Translation API
 
-### Translation Request
+#### Translation Request
 
 `POST http://host:port/translate`
 
 Content-Type: application/json
 
-#### Query Parameters
+##### Query Parameters
 
 | Parameter           | Type                  | Description  |
 | --------------------|-----------------------| -------------|
@@ -25,7 +25,7 @@ Content-Type: application/json
 | ``return_word_alignment`` | ``boolean``     | Return word alignment (source to target language) for each segment. Default: ``false``. |
 | ``return_word_probabilities`` | ``boolean`` | Return the probability of each word (target language) for each segment. Default: ``false``. |
 
-#### Response Body
+##### Response Body
 
 If successful, the response body contains a JSON object with the following structure:
 
@@ -45,11 +45,11 @@ If successful, the response body contains a JSON object with the following struc
 
 Additional fields for each segment in ``data`` are ``word_alignment`` and ``word_probabilities`` (details tba).
 
-### Status Request
+#### Status Request
 
 `GET http://host:port/status`
 
-#### Response Body
+##### Response Body
 
 If successful, the response body contains a JSON object with the following structure:
 
@@ -66,3 +66,7 @@ If successful, the response body contains a JSON object with the following struc
   "service": "nematus"
 }
 ```
+
+## Sample Client
+
+A sample client, written in Python, is available in `sample_client.py`.
