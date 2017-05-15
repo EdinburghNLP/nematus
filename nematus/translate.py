@@ -17,6 +17,45 @@ from Queue import Empty
 from ctypes import c_bool
 from cStringIO import StringIO
 
+class Translation(object):
+    #TODO move to separate file?
+    """
+    Models a translated segment.
+    """
+    def __init(self, source_words, target_words, score=None, alignment=None, target_probs=None, hyp_graph=None):
+        self.source_words = source_words
+        self.target_words = target_words
+        self.score = score
+        self.alignment = alignment #TODO: assertion of length?
+        self.target_probs = target_probs #TODO: assertion of length?
+        self.hyp_graph = hyp_graph
+
+    def get_alignment(self):
+        return self.alignment
+
+    def get_alignment_text(self):
+        """
+        Returns this translation's alignment rendered as a string.
+        """
+        pass #TODO
+
+    def get_alignment_json(self):
+        """
+        Returns this translation's alignment in JSON format.
+        """
+        pass #TODO
+
+    def save_hyp_graph(self, filename, word_idict_trg, detailed=True, highlight_best=True):
+        """
+        Writes this translation's search graph to disk.
+        """
+        if self.hyp_graph:
+            renderer = HypGraphRenderer(self.hyp_graph)
+            renderer.wordify(word_idict_trg)
+            renderer.save_png(filename, detailed, highlight_best)
+        else:
+            pass #TODO: Warning if no search graph has been constructed during decoding?
+
 class QueueItem(object):
     """
     Models items in a queue.
@@ -29,13 +68,14 @@ class Translator(object):
     Loads trained models and translates.
     """
 
-    def __init__(self, models, num_processes=1, device_list=[]):
+    def __init__(self, decoder_settings):
         """
         Loads translation models.
         """
-        self._models = models
-        self._num_processes = num_processes
-        self._device_list = device_list
+        self._models = decoder_settings.models
+        self._num_processes = decoder_settings.num_processes
+        self._device_list = decoder_settings.device_list
+        self._verbose = decoder_settings.verbose
         self._shutdown = Value(c_bool, False)
 
         # load model options
@@ -148,7 +188,7 @@ class Translator(object):
         for process_id in xrange(self._num_processes):
             device_id = ''
             if self._device_list is not None and len(self._device_list) != 0:
-                device_id = self._device_list[midx % len(self._device_list)].strip()
+                device_id = self._device_list[process_id % len(self._device_list)].strip()
 
 
             self._processes[process_id] = Process(target=self._translate,
@@ -236,13 +276,12 @@ class Translator(object):
                           suppress_unk=suppress_unk,
                           return_hyp_graph=return_hyp_graph)
 
-    def _send_jobs(self, input_, chr_level, verbose, return_hyp_graph, return_alignment,
-                   k, suppress_unk, normalize, nbest):
+    def _send_jobs(self, input_, translation_settings):
         """
         """
         source_sentences = []
         for idx, line in enumerate(input_):
-            if chr_level:
+            if translation_settings.char_level:
                 words = list(line.decode('utf-8').strip())
             else:
                 words = line.strip().split()
@@ -259,22 +298,21 @@ class Translator(object):
 
             x += [[0]*self._options[0]['factors']]
 
-            queue_item = QueueItem(verbose=verbose,
-                                   return_hyp_graph=return_hyp_graph,
-                                   return_alignment=return_alignment,
-                                   k=k,
-                                   suppress_unk=suppress_unk,
-                                   normalize=normalize,
-                                   nbest=nbest,
+            queue_item = QueueItem(verbose=self._verbose,
+                                   return_hyp_graph=translation_settings.get_search_graph,
+                                   return_alignment=translation_settings.get_alignment,
+                                   k=translation_settings.beam_width,
+                                   suppress_unk=translation_settings.suppress_unk,
+                                   normalize=translation_settings.normalize,
+                                   nbest=translation_settings.n_best,
                                    seq=x,
-                                   idx=idx
-                             )
+                                   idx=idx)
 
             self._input_queue.put(queue_item)
             source_sentences.append(words)
         return idx+1, source_sentences
 
-    def _retrieve_jobs(self, num_samples, timeout=5, verbose=False):
+    def _retrieve_jobs(self, num_samples, timeout=5):
         """
         """
         trans = [None] * num_samples
@@ -298,7 +336,7 @@ class Translator(object):
                     # if processes are okay, break
                     if resp is not None: break
             trans[resp[0]] = resp[1]
-            if verbose and numpy.mod(idx, 10) == 0:
+            if self._verbose and numpy.mod(idx, 10) == 0:
                 sys.stderr.write('Sample {0} / {1} Done\n'.format((idx+1), num_samples))
             while out_idx < num_samples and trans[out_idx] != None:
                 yield trans[out_idx]
@@ -345,126 +383,91 @@ class Translator(object):
             Translator._print_matrix(hyp, file)
             print >>file, "\n"
 
-    def _finish_processes(self):
+    def shutdown(self):
         self._shutdown.value = True
 
-    def translate(self, source_file, saveto, save_alignment=None, k=5,
-         normalize=False, chr_level=False, verbose=False, nbest=False, suppress_unk=False, a_json=False, print_word_probabilities=False, return_hyp_graph=False,
-         finish=True):
+    def translate(self, source_segments, translation_settings):
         """
+        Returns the translation of @param source_segments.
         """
-        sys.stderr.write('Translating {0} ...\n'.format(source_file.name))
-        n_samples, source_sentences = self._send_jobs(source_file,
-                                                      chr_level,
-                                                      verbose=verbose,
-                                                      return_hyp_graph=return_hyp_graph,
-                                                      return_alignment=save_alignment,
-                                                      k=k,
-                                                      suppress_unk=suppress_unk,
-                                                      normalize=normalize,
-                                                      nbest=nbest
-                                                      )
-        # finish worker processes
-        if finish:
-            self._finish_processes()
-
-        for i, trans in enumerate(self._retrieve_jobs(n_samples, verbose=verbose)):
-            if nbest:
-                samples, scores, word_probs, alignment, hyp_graph = trans
-                if return_hyp_graph:
-                    renderer = HypGraphRenderer(hyp_graph)
-                    renderer.wordify(self._word_idict_trg)
-                    renderer.save_png(return_hyp_graph, detailed=True, highlight_best=True)
+        sys.stderr.write('Translating {0} segments...\n'.format(len(source_segments)))
+        n_samples, source_sentences = self._send_jobs(source_segments, translation_settings)
+        translations = []
+        for i, trans in enumerate([trans for trans in self._retrieve_jobs(n_samples)]):
+            samples, scores, word_probs, alignment, hyp_graph = trans
+            # n-best list
+            if translation_settings.n_best > 1:
                 order = numpy.argsort(scores)
+                n_best_list = []
                 for j in order:
-                    if print_word_probabilities:
-                        probs = " ||| " + " ".join("{0}".format(prob) for prob in word_probs[j])
-                    else:
-                        probs = ""
-                    saveto.write('{0} ||| {1} ||| {2}{3}\n'.format(i, self._seqs2words(samples[j]), scores[j], probs))
-                    # print alignment matrix for each hypothesis
-                    # header: sentence id ||| translation ||| score ||| source ||| source_token_count+eos translation_token_count+eos
-                    if save_alignment is not None:
-                        if a_json:
-                            self._print_matrix_json(alignment[j], source_sentences[i], self._seqs2words(samples[j]).split(), i, i+j, save_alignment)
-                        else:
-                            save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                            i, self._seqs2words(samples[j]), scores[j], ' '.join(source_sentences[i]), len(source_sentences[i])+1, len(samples[j])))
-                            self._print_matrix(alignment[j], save_alignment)
+                    current_alignment = None if not translation_settings.get_alignment else alignment[j]
+                    translation = Translation(source_words=source_segments[i],
+                                              target_words=self._seqs2words(samples[j]),
+                                              score=scores[j],
+                                              alignment=current_alignment,
+                                              target_probs=word_probs[j],
+                                              hyp_graph=hyp_graph)
+                    n_best_list.append(translation)
+                translations.append(n_best_list)
+            # single-best translation
             else:
-                samples, scores, word_probs, alignment, hyp_graph = trans
-                if return_hyp_graph:
-                    renderer = HypGraphRenderer(hyp_graph)
-                    renderer.wordify(self._word_idict_trg)
-                    renderer.save_png(return_hyp_graph, detailed=True, highlight_best=True)
-                saveto.write(self._seqs2words(samples) + "\n")
-                if print_word_probabilities:
-                    for prob in word_probs:
-                        saveto.write("{} ".format(prob))
-                    saveto.write('\n')
-                if save_alignment is not None:
-                    if a_json:
-                        self._print_matrix_json(alignment, source_sentences[i], self._seqs2words(trans[0]).split(), i, i, save_alignment)
-                    else:
-                        save_alignment.write('{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n'.format(
-                                          i, self._seqs2words(trans[0]), 0, ' '.join(source_sentences[i]) , len(source_sentences[i])+1, len(trans[0])))
-                        self._print_matrix(alignment, save_alignment)
+                current_alignment = None if not translation_settings.get_alignment else alignment
+                translation = Translation(source_words=source_segments[i],
+                                          target_words=self._seqs2words(samples),
+                                          score=scores,
+                                          alignment=current_alignment,
+                                          target_probs=word_probs,
+                                          hyp_graph=hyp_graph)
+                translations.append(translation)
+        return translations
 
-        sys.stderr.write('Done\n')
+    def translate_file(self, input_file, translation_settings):
+        """
+        """
+        with open(input_file) as f:
+            source_segments = f.readlines()
+        return self.translate(source_segments, translation_settings)
 
-    def translate_string(self, segment, saveto, save_alignment=None, k=5,
-                         normalize=False, chr_level=False, verbose=False,
-                         nbest=False, suppress_unk=False, a_json=False,
-                         print_word_probabilities=False, return_hyp_graph=False,
-                         finish=True):
+
+    def translate_string(self, segment, translation_settings):
         """
         Translates a single segment
         """
         if not segment.endswith('\n'):
             segment += '\n'
-        source_file = StringIO(segment)
-        self.translate(source_file, saveto, save_alignment, k, normalize,
-                       chr_level, verbose, nbest, suppress_unk, a_json,
-                       print_word_probabilities, return_hyp_graph, finish)
+        source_segments = [segment]
+        self.translate(source_segments, translation_settings)
 
-    def translate_list(self, segments, saveto, save_alignment=None, k=5,
-                       normalize=False, chr_level=False, verbose=False,
-                       nbest=False, suppress_unk=False, a_json=False,
-                       print_word_probabilities=False, return_hyp_graph=False,
-                       finish=True):
+    def translate_list(self, segments, translation_settings):
         """
         Translates a list of segments
         """
-        segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
-        source_file = StringIO(''.join(segments))
-        self.translate(source_file, saveto, save_alignment, k, normalize,
-                       chr_level, verbose, nbest, suppress_unk, a_json,
-                       print_word_probabilities, return_hyp_graph, finish)
+        source_segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
+        self.translate(source_segments, translation_settings)
 
-def main(args):
 
-    translator = Translator(
-                            models=args.models,
-                            num_processes=args.p,
-                            device_list=args.device_list)
-
-    translator.translate(
-                         source_file=args.input,
-                         saveto=args.output,
-                         save_alignment=args.output_alignment,
-                         k=args.k,
-                         normalize=args.n,
-                         chr_level=args.c,
-                         verbose=True,
-                         nbest=args.n_best,
-                         suppress_unk=args.suppress_unk,
-                         a_json=args.json_alignment,
-                         print_word_probabilities=args.print_word_probabilities,
-                         return_hyp_graph=args.search_graph,
-                         finish=True)
+def main(input_file, output_file, decoder_settings, translation_settings):
+    """
+    Translates a source language file (or STDIN) into a target language file
+    (or STDOUT).
+    """
+    translator = Translator(decoder_settings)
+    translations = translator.translate_file(input_file, translation_settings)
+    #TODO: reproduce writing of probs, alignment etc. from original version
+    filecontent = '\n'.join([' '.join(t.target_words) for t in translations])
+    if output_file is sys.stdout:
+        output_file.write(filecontent)
+    else:
+        with open(output_file, 'w') as f:
+            f.write(filecontent)
+    translator.shutdown()
 
 
 if __name__ == "__main__":
     parser = ConsoleInterfaceDefault()
     args = parser.parse_args()
-    main(args)
+    input_file = args.input
+    output_file = args.output
+    decoder_settings = parser.get_decoder_settings()
+    translation_settings = parser.get_translation_settings()
+    main(input_file, output_file, decoder_settings, translation_settings)

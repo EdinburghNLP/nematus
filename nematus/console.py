@@ -7,6 +7,8 @@ import sys
 import argparse
 from abc import ABCMeta, abstractmethod
 
+from settings import DecoderSettings, TranslationSettings, ServerSettings
+
 class ConsoleInterface(object):
     """
     All modes (abstract base class)
@@ -43,6 +45,13 @@ class ConsoleInterface(object):
         """
         return self._parser.parse_args()
 
+    def get_decoder_settings(self):
+        """
+        Returns a `DecoderSettings` object based on the parsed console
+        arguments.
+        """
+        args = self.parse_args()
+        return DecoderSettings(args)
 
 class ConsoleInterfaceDefault(ConsoleInterface):
     """
@@ -75,6 +84,14 @@ class ConsoleInterfaceDefault(ConsoleInterface):
         self._parser.add_argument('--search_graph', '-sg',
                                   help="Output file for search graph rendered as PNG image")
 
+    def get_translation_settings(self):
+        """
+        Returns a `TranslationSettings` object based on the parsed console
+        arguments.
+        """
+        args = self.parse_args()
+        return TranslationSettings(args)
+
 
 class ConsoleInterfaceServer(ConsoleInterface):
     """
@@ -91,3 +108,11 @@ class ConsoleInterfaceServer(ConsoleInterface):
                                   help='Host address (default: localhost)')
         self._parser.add_argument('--port', type=int, default=8080,
                                   help='Host port (default: 8080)')
+
+    def get_server_settings(self):
+        """
+        Returns a `ServerSettings` object based on the parsed console
+        arguments.
+        """
+        args = self.parse_args()
+        return ServerSettings(args)
