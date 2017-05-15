@@ -74,9 +74,6 @@ def fflayer(tparams, state_below, options, prefix='rconv',
 
 # embedding layer
 def param_init_embedding_layer(options, params, n_words, dims, factors=None, prefix='', suffix=''):
-    print 'hello'
-    print n_words
-    print dims
     if factors == None:
         factors = 1
         dims = [dims]
