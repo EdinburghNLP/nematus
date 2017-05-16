@@ -1208,7 +1208,7 @@ def train(dim_word=512,  # word vector dimensionality
     lr = tensor.scalar(name='lr')
 
     print 'Building optimizers...',
-    f_grad_shared, f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
+    f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
                                                                  grads, inps, cost,
                                                                  profile=profile,
                                                                  optimizer_params=optimizer_params)
@@ -1271,14 +1271,8 @@ def train(dim_word=512,  # word vector dimensionality
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
-                if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
-                    # compute cost, grads and update parameters
-                    cost = f_update(lrate, x, x_mask, y, y_mask)
-                else:
-                    # compute cost, grads and copy grads to shared variables
-                    cost = f_grad_shared(x, x_mask, y, y_mask)
-                    # do the update on parameters
-                    f_update(lrate)
+                # compute cost, grads and update parameters
+                cost = f_update(lrate, x, x_mask, y, y_mask)
 
                 cost_sum += cost
 
@@ -1355,14 +1349,8 @@ def train(dim_word=512,  # word vector dimensionality
                     scorer.set_reference(y_s)
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
-                    if optimizer in ['adam', 'sgdmomentum']: #TODO: this could also be done for other optimizers
-                        # compute cost, grads and update parameters
-                        cost = f_update(lrate, x, x_mask, y, y_mask, loss)
-                    else:
-                        # compute cost, grads and copy grads to shared variables
-                        cost = f_grad_shared(x, x_mask, y, y_mask, loss)
-                        # do the update on parameters
-                        f_update(lrate)
+                    # compute cost, grads and update parameters
+                    cost = f_update(lrate, x, x_mask, y, y_mask, loss)
 
                     cost_sum += cost
 
@@ -1471,7 +1459,7 @@ def train(dim_word=512,  # word vector dimensionality
                     print
 
             # validate model on validation set and early stop if necessary
-            if valid and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
+            if valid is not None and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
                 use_noise.set_value(0.)
                 valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
@@ -1534,7 +1522,7 @@ def train(dim_word=512,  # word vector dimensionality
         zip_to_theano(best_p, tparams)
         zip_to_theano(best_opt_p, optimizer_tparams)
 
-    if valid:
+    if valid is not None:
         use_noise.set_value(0.)
         valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)

@@ -22,7 +22,7 @@ from alignment_util import *
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
-          'embedding': {'param_init_embedding_layer', 'embedding_layer'}
+          'embedding': ('param_init_embedding_layer', 'embedding_layer')
           }
 
 
