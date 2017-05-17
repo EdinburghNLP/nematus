@@ -7,6 +7,10 @@ v0.2 (dev)
  - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
  - weight normalisation (Salimans and Kingma, 2016) https://arxiv.org/abs/1602.07868
  - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
+ - better memory efficiency
+ - save historical gradient information for seamless resuming of interrupted training runs
+ - sgdmomentum optimizer
+ - various bugfixes
 
 v0.1 (2/3/2017)
 ---------------
