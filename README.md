@@ -254,6 +254,7 @@ if you use Nematus, please cite the following paper:
 
 Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian Hitschler, Marcin Junczys-Dowmunt, Samuel Läubli, Antonio Valerio Miceli Barone, Jozef Mokry and Maria Nadejde (2017): Nematus: a Toolkit for Neural Machine Translation. In Proceedings of the Software Demonstrations of the 15th Conference of the European Chapter of the Association for Computational Linguistics, Valencia, Spain, pp. 65-68.
 
+```
 @InProceedings{sennrich-EtAl:2017:EACLDemo,
   author    = {Sennrich, Rico  and  Firat, Orhan  and  Cho, Kyunghyun  and  Birch, Alexandra  and  Haddow, Barry  and  Hitschler, Julian  and  Junczys-Dowmunt, Marcin  and  L\"{a}ubli, Samuel  and  Miceli Barone, Antonio Valerio  and  Mokry, Jozef  and  Nadejde, Maria},
   title     = {Nematus: a Toolkit for Neural Machine Translation},
@@ -265,6 +266,7 @@ Rico Sennrich, Orhan Firat, Kyunghyun Cho, Alexandra Birch, Barry Haddow, Julian
   pages     = {65--68},
   url       = {http://aclweb.org/anthology/E17-3017}
 }
+```
 
 the code is based on the following model:
 
