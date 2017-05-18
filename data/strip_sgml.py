@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import re
 
@@ -11,7 +13,6 @@ def main():
         if len(text) == 0:
             continue
         print >>fout, text
-                
 
 if __name__ == "__main__":
     main()
