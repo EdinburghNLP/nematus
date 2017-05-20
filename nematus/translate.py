@@ -421,11 +421,10 @@ class Translator(object):
                 translations.append(translation)
         return translations
 
-    def translate_file(self, input_file, translation_settings):
+    def translate_file(self, input_object, translation_settings):
         """
         """
-        with open(input_file) as f:
-            source_segments = f.readlines()
+        source_segments = input_object.readlines()
         return self.translate(source_segments, translation_settings)
 
 
@@ -436,14 +435,14 @@ class Translator(object):
         if not segment.endswith('\n'):
             segment += '\n'
         source_segments = [segment]
-        self.translate(source_segments, translation_settings)
+        return self.translate(source_segments, translation_settings)
 
     def translate_list(self, segments, translation_settings):
         """
         Translates a list of segments
         """
         source_segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
-        self.translate(source_segments, translation_settings)
+        return self.translate(source_segments, translation_settings)
 
 
 def main(input_file, output_file, decoder_settings, translation_settings):
