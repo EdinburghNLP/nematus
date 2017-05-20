@@ -1031,7 +1031,7 @@ def train(dim_word=512,  # word vector dimensionality
         n_words_src = len(worddicts[0])
         model_options['n_words_src'] = n_words_src
     if n_words is None:
-        n_words = len(worddicts[1])
+        n_words = len(worddicts[-1])
         model_options['n_words'] = n_words
 
     if tie_encoder_decoder_embeddings:
