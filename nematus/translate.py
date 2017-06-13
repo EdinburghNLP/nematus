@@ -38,7 +38,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalization_alpha,
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
     from theano import shared
     trng = RandomStreams(1234)
-    use_noise = shared(numpy.float32(0.))
+    use_noise = shared(numpy_floatX(0.))
 
     fs_init = []
     fs_next = []
