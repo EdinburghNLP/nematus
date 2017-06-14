@@ -272,10 +272,10 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
 
     # initial/previous state
     if init_state is None:
-        init_state = tensor.alloc(0., n_samples, dim)
+        init_state = tensor.zeros((n_samples, dim))
 
     if mask is None:
-        mask = tensor.alloc(1., state_below.shape[0], 1)
+        mask = tensor.ones((state_below.shape[0], 1))
 
     below_dropout = dropout((n_samples, dim_below), dropout_probability_below, num=2)
     rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=2*(recurrence_transition_depth))
@@ -504,7 +504,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     # mask
     if mask is None:
-        mask = tensor.alloc(1., state_below.shape[0], 1)
+        mask = tensor.ones((state_below.shape[0], 1))
 
     dim = tparams[pp(prefix, 'Wcx')].shape[1]
 
@@ -523,7 +523,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     # initial/previous state
     if init_state is None:
-        init_state = tensor.alloc(0., n_samples, dim)
+        init_state = tensor.zeros((n_samples, dim))
 
     # projected context
     assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
@@ -632,10 +632,10 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         rval, updates = theano.scan(_step,
                                     sequences=seqs,
                                     outputs_info=[init_state,
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[2]),
-                                                  tensor.alloc(0., n_samples,
-                                                               context.shape[0])],
+                                                  tensor.zeros((n_samples,
+                                                               context.shape[2])),
+                                                  tensor.zeros((n_samples,
+                                                               context.shape[0]))],
                                     non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
                                     name=pp(prefix, '_layers'),
                                     n_steps=nsteps,
