@@ -108,6 +108,14 @@ GPU, CuDNN 5.1, theano 0.9.0dev5.dev-d5520e, new GPU backend:
 
 >> 209.21 sentences/s
 
+GPU, float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backend:
+
+>> 222.28 sentences/s
+
+GPU (TITAN X (Pascal)), float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backend:
+
+>> 232.30 sentences/s
+
 USAGE INSTRUCTIONS
 ------------------
 
@@ -246,6 +254,12 @@ new scores will be appended to the end. `rescore.py` has the same arguments as `
 
 
 sample models, and instructions on using them for translation, are provided in the `test` directory, and at http://statmt.org/rsennrich/wmt16_systems/
+
+NOTES
+-----
+
+Support for float16 may not be fully functional or efficient using depending on the Theano version and GPU model.
+If you use float16 for training, consider using a lower learning rate for increased numerical stability.
 
 PUBLICATIONS
 ------------

@@ -24,7 +24,7 @@ if floatX == 'float16':
    except:
        pass
    if bad:
-       print >> sys.stderr, "Warning: float16 may not work with the current version of Theano"
+       print >> sys.stderr, "Warning: float16 may not be fully supported by the current version of Theano"
 
 # push parameters to Theano shared variables
 def zip_to_theano(params, tparams):

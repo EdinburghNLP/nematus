@@ -15,8 +15,6 @@ from util import load_dict, load_config
 from compat import fill_options
 from hypgraph import HypGraphRenderer
 
-from theano_util import floatX, numpy_floatX
-
 def translate_model(queue, rqueue, pid, models, options, k, normalization_alpha, verbose, nbest, return_alignment, suppress_unk, return_hyp_graph, deviceid):
 
     # if the --device-list argument is set
@@ -33,7 +31,7 @@ def translate_model(queue, rqueue, pid, models, options, k, normalization_alpha,
             theano_flags.append('%s=%s' % ('device', deviceid))
         os.environ['THEANO_FLAGS'] = ','.join(theano_flags)
 
-    from theano_util import (load_params, init_theano_params)
+    from theano_util import (floatX, numpy_floatX, load_params, init_theano_params)
     from nmt import (build_sampler, gen_sample, init_params)
 
     from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
