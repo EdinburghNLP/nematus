@@ -44,14 +44,14 @@ class TestTranslate(unittest.TestCase):
     # English-German WMT16 system, no dropout
     def test_ende(self):
         os.chdir('models/en-de/')
-        score(['model.npz'], open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), normalization_alpha)
+        score(['model.npz'], open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), normalization_alpha=1)
         os.chdir('../..')
         self.scoreEqual('en-de/ref_score', 'en-de/out_score')
 
     # English-Romanian WMT16 system, dropout
     def test_enro(self):
         os.chdir('models/en-ro/')
-        score(['model.npz'], open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), normalization_alpha)
+        score(['model.npz'], open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), normalization_alpha=1)
         os.chdir('../..')
         self.scoreEqual('en-ro/ref_score', 'en-ro/out_score')
 
