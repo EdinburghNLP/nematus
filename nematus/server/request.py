@@ -6,6 +6,7 @@ Defines the abstract request format for Nematus server.
 """
 
 from abc import ABCMeta, abstractmethod
+import uuid
 
 class TranslationRequest(object):
     """
@@ -21,15 +22,29 @@ class TranslationRequest(object):
         @param raw_body: the POST request submitted to Nematus server.
         """
         self._request = request
+        self.request_id = str(uuid.uuid4())
         self.segments = []
         self.beam_width = 5
         self.normalize = True
-        self.character_level = False
+        self.char_level = False
         self.n_best = 1
         self.suppress_unk = False
-        self.return_word_alignment = False
+        self.get_alignment = False
         self.return_word_probabilities = False
         self._parse()
+
+    @abstractmethod
+    def _format(self):
+        """
+        Formats this translation response.
+        """
+        pass # to be implemented in subclasses
+
+    def __repr__(self):
+        """
+        Returns the raw body of this translation request.
+        """
+        return self._format()
 
     @abstractmethod
     def _parse(self):
