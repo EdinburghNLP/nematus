@@ -6,6 +6,7 @@ import sys
 import numpy
 import json
 import os
+import uuid
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
@@ -21,13 +22,16 @@ class Translation(object):
     """
     Models a translated segment.
     """
-    def __init__(self, source_words, target_words, score=None, alignment=None, target_probs=None, hyp_graph=None):
+    def __init__(self, source_words, target_words, sentence_id=None, score=0, alignment=None,
+                 target_probs=None, hyp_graph=None, hypothesis_id=None):
         self.source_words = source_words
         self.target_words = target_words
+        self.sentence_id = sentence_id
         self.score = score
         self.alignment = alignment #TODO: assertion of length?
         self.target_probs = target_probs #TODO: assertion of length?
         self.hyp_graph = hyp_graph
+        self.hypothesis_id = hypothesis_id
 
     def get_alignment(self):
         return self.alignment
@@ -35,14 +39,48 @@ class Translation(object):
     def get_alignment_text(self):
         """
         Returns this translation's alignment rendered as a string.
+        Columns in header: sentence id ||| target words ||| score |||
+                           source words ||| number of source words |||
+                           number of target words
         """
-        pass # TODO
+        columns = [
+            self.sentence_id,
+            " ".join(self.target_words),
+            self.score,
+            " ".join(self.source_words),
+            len(self.source_words) + 1,
+            len(self.target_words)
+        ]
+        header = "{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n".format(*columns)
+
+        matrix = []
+        for target_word_alignment in self.alignment:
+            matrix.append(" ".join(target_word_alignment))
+
+        return header + "\n".join(matrix)
 
     def get_alignment_json(self):
         """
         Returns this translation's alignment in JSON format.
         """
-        pass #TODO
+        source_tokens = self.source_words + "</s>"
+        target_tokens = self.target_words + "</s>"
+
+        if self.hypothesis is not None:
+            tid = self.sentence_id + self.hypothesis_id
+        else:
+            tid = self.sentence_id
+        links = []
+        for target_index, target_word_alignment in enumerate(self.alignment):
+            for source_index, weight in enumerate(target_word_alignment):
+                links.append(
+                             (target_tokens[target_index],
+                              source_tokens[source_index],
+                              str(weight),
+                              self.sentence_id,
+                              tid)
+                             )
+        json.dumps(links, ensure_ascii=False, indent=2)
 
     def get_target_probs(self):
         """
@@ -327,7 +365,7 @@ class Translator(object):
             if w == 0:
                 break
             ww.append(self._word_idict_trg[w])
-        return ' '.join(ww)
+        return ww
 
     @staticmethod
     def _print_matrix(hyp, file):
@@ -446,12 +484,14 @@ class Translator(object):
                 n_best_list = []
                 for j in order:
                     current_alignment = None if not translation_settings.get_alignment else alignment[j]
-                    translation = Translation(source_words=source_segments[i],
+                    translation = Translation(sentence_id=i,
+                                              source_words=source_segments[i],
                                               target_words=self._seqs2words(samples[j]),
                                               score=scores[j],
                                               alignment=current_alignment,
                                               target_probs=word_probs[j],
-                                              hyp_graph=hyp_graph)
+                                              hyp_graph=hyp_graph,
+                                              hypothesis_id=j)
                     n_best_list.append(translation)
                 translations.append(n_best_list)
             # single-best translation
@@ -489,18 +529,28 @@ class Translator(object):
         source_segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
         return self.translate(source_segments, translation_settings)
 
+def write_alignment(translation, translation_settings):
+    """
+    Writes alignments to a file.
+    """
+    output_file = translation_settings.alignment_filename
+    # TODO: 1 = TEXT, 2 = JSON
+    if translation_settings.alignment_type == 1:
+        output_file.write(translation.get_alignment_text() + "\n")
+    else:
+        output_file.write(translation.get_alignment_json() + "\n")
 
-def write_translation(output_file, translation, translation_settings, sentence_id):
+def write_translation(output_file, translation, translation_settings):
     """
     Writes a single translation to a file or STDOUT.
     """
     output_items = []
     # sentence ID only for nbest
     if translation_settings.n_best > 1:
-        output_items.append(str(sentence_id))
+        output_items.append(str(translation.sentence_id))
 
     # translations themselves
-    output_items.append(translation.target_words)
+    output_items.append(" ".join(translation.target_words))
 
     # write scores for nbest?
     if translation_settings.n_best > 1:
@@ -512,6 +562,11 @@ def write_translation(output_file, translation, translation_settings, sentence_i
 
     output_file.write(" ||| ".join(output_items) + "\n")
 
+    # write alignments to file?
+    if translation_settings.get_alignment:
+        write_alignment(translation, translation_settings)
+
+
 def write_translations(output_file, translations, translation_settings):
     """
     Writes translations to a file or STDOUT.
@@ -519,23 +574,21 @@ def write_translations(output_file, translations, translation_settings):
     if translation_settings.n_best > 1:
         for sentence_id, nbest_list in enumerate(translations):
             for translation in nbest_list:
-                write_translation(output_file, translation, translation_settings, sentence_id)
+                write_translation(output_file, translation, translation_settings)
     else:
         for sentence_id, translation in enumerate(translations):
-            write_translation(output_file, translation, translation_settings, sentence_id)
+            write_translation(output_file, translation, translation_settings)
 
 def main(input_file, output_file, decoder_settings, translation_settings):
     """
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    translation_settings.request_id = 123
+    translation_settings.request_id = uuid.uuid4()
 
     translator = Translator(decoder_settings)
     translations = translator.translate_file(input_file, translation_settings)
 
-    # TODO: reproduce writing of probs, alignment etc. from original version
-    # TODO:
     write_translations(output_file, translations, translation_settings)
 
     sys.stderr.write('Done\n')
