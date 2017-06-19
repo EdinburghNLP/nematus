@@ -35,6 +35,18 @@ GPU TITAN X (Pascal), Intel(R) Xeon(R) CPU E5-2620 v4 @ 2.10GHz, float32,gpuarra
 
 >> NaN detected
 
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float32,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> 198.74
+
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float16,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> NaN detected
+
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float64,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> 25.35
+
 Tesla P100-PCIE-16GB
 --------------------
 
@@ -74,3 +86,14 @@ GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU bac
 
 >> out of memory
 
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float32,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> 166.06 sentences/s
+
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float16,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> NaN detected
+
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend,float64,gpuarray.preallocate=0.8 --batch_size 80 --dim_word 512 --dim 1024
+
+>> 120.15 sentences/s
