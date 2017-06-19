@@ -21,7 +21,7 @@ class Translation(object):
     """
     Models a translated segment.
     """
-    def __init(self, source_words, target_words, score=None, alignment=None, target_probs=None, hyp_graph=None):
+    def __init__(self, source_words, target_words, score=None, alignment=None, target_probs=None, hyp_graph=None):
         self.source_words = source_words
         self.target_words = target_words
         self.score = score
