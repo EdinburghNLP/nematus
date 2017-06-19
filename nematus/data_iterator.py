@@ -134,7 +134,10 @@ class TextIterator:
                     break
                 tmp = []
                 for w in ss:
-                    w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                    try:
+                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                    except:
+                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split())]
                     tmp.append(w)
                 ss = tmp
 

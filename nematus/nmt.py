@@ -65,7 +65,11 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
             return None, None, None, None
 
     n_samples = len(seqs_x)
-    n_factors = len(seqs_x[0][0])
+    n_factors = 1
+    try:
+        n_factors = len(seqs_x[0][0])
+    except:
+        pass
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
