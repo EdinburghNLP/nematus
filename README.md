@@ -130,6 +130,17 @@ float64:
 
 >> 162.78 sents/s
 
+float32,gpuarray.preallocate=0.8 --batch_size 256
+
+>> 453.74 sentences/s
+
+float16,gpuarray.preallocate=0.8 --batch_size 256
+
+>> 441.75 sentencs/s
+
+float64,gpuarray.preallocate=0.8 --batch_size 256
+
+>> 325.12 sentences/s
 
 
 USAGE INSTRUCTIONS
