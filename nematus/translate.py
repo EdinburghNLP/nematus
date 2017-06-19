@@ -325,7 +325,7 @@ class Translator(object):
         if normalize:
             lengths = numpy.array([len(s) for s in sample])
             score = score / lengths
-        if nbest > 1:
+        if nbest is True:
             output_item = sample, score, word_probs, alignment, hyp_graph
         else:
             # return translation with lowest score only
@@ -439,7 +439,7 @@ class Translator(object):
 
             samples, scores, word_probs, alignment, hyp_graph = trans
             # n-best list
-            if translation_settings.n_best > 1:
+            if translation_settings.n_best is True:
                 order = numpy.argsort(scores)
                 n_best_list = []
                 for j in order:
@@ -520,15 +520,15 @@ class Translator(object):
         """
         output_items = []
         # sentence ID only for nbest
-        if translation_settings.n_best > 1:
+        if translation_settings.n_best is True:
             output_items.append(str(translation.sentence_id))
 
         # translations themselves
         output_items.append(" ".join(translation.target_words))
 
         # write scores for nbest?
-        if translation_settings.n_best > 1:
-            output_items.append(translation.score)
+        if translation_settings.n_best is True:
+            output_items.append(str(translation.score))
 
         # write probabilities?
         if translation_settings.get_word_probs:
@@ -554,12 +554,12 @@ class Translator(object):
         """
         Writes translations to a file or STDOUT.
         """
-        if translation_settings.n_best > 1:
-            for sentence_id, nbest_list in enumerate(translations):
+        if translation_settings.n_best is True:
+            for nbest_list in translations:
                 for translation in nbest_list:
                     self.write_translation(output_file, translation, translation_settings)
         else:
-            for sentence_id, translation in enumerate(translations):
+            for translation in translations:
                 self.write_translation(output_file, translation, translation_settings)
 
 def main(input_file, output_file, decoder_settings, translation_settings):
