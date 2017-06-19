@@ -4,6 +4,11 @@
 import json
 import requests # use `pip install requests` if not available on your system
 
+SOURCE_SEGMENTS = {
+    "de":"Die Wahrheit ist selten rein und nie einfach .",
+    "en":"The truth is rarely pure and never simple ."
+}
+
 class Client(object):
     """
     A sample client for Nematus Server instances.
@@ -50,7 +55,7 @@ if __name__ == "__main__":
     port = 8080
     client = Client(host, port)
     client.print_server_status()
-    source_segment = "The truth is rarely pure and never simple."
+    source_segment = SOURCE_SEGMENTS['de']
     print 'Translating "{0}"'.format(source_segment)
     target_segment = client.translate(source_segment)
     print target_segment
