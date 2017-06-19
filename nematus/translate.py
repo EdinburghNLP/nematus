@@ -61,7 +61,7 @@ class Translation(object):
 
     def get_alignment_json(self):
         """
-        Returns this translation's alignment in JSON format.
+        Returns this translation's alignment as a JSON formatted string.
         """
         source_tokens = self.source_words + "</s>"
         target_tokens = self.target_words + "</s>"
@@ -354,49 +354,6 @@ class Translator(object):
                           return_hyp_graph=return_hyp_graph)
 
 
-    ### UTILITY FUNCTIONS ###
-
-    def _seqs2words(self, cc):
-        """
-        #todo
-        """
-        ww = []
-        for w in cc:
-            if w == 0:
-                break
-            ww.append(self._word_idict_trg[w])
-        return ww
-
-    @staticmethod
-    def _print_matrix(hyp, file):
-        """
-        Prints alignment weights for a hypothesis.
-        dimension (target_words+1 * source_words+1)
-        """
-        # each target word has corresponding alignment weights
-        for target_word_alignment in hyp:
-            # each source hidden state has a corresponding weight
-            for w in target_word_alignment:
-                print >>file, w,
-            print >> file, ""
-        print >> file, ""
-
-    @staticmethod
-    def _print_matrix_json(hyp, source, target, sid, tid, file):
-        source.append("</s>")
-        target.append("</s>")
-        links = []
-        for ti, target_word_alignment in enumerate(hyp):
-            for si, w in enumerate(target_word_alignment):
-                links.append((target[ti], source[si], str(w), sid, tid))
-        json.dump(links, file, ensure_ascii=False, indent=2)
-
-    @staticmethod
-    def _print_matrices(mm, file):
-        for hyp in mm:
-            Translator._print_matrix(hyp, file)
-            print >>file, "\n"
-
     ### WRITING TO AND READING FROM QUEUES ###
 
     def _send_jobs(self, input_, translation_settings):
@@ -529,55 +486,77 @@ class Translator(object):
         source_segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
         return self.translate(source_segments, translation_settings)
 
-def write_alignment(translation, translation_settings):
-    """
-    Writes alignments to a file.
-    """
-    output_file = translation_settings.alignment_filename
-    # TODO: 1 = TEXT, 2 = JSON
-    if translation_settings.alignment_type == 1:
-        output_file.write(translation.get_alignment_text() + "\n")
-    else:
-        output_file.write(translation.get_alignment_json() + "\n")
+    ### FUNCTIONS FOR WRITING THE RESULTS ###
 
-def write_translation(output_file, translation, translation_settings):
-    """
-    Writes a single translation to a file or STDOUT.
-    """
-    output_items = []
-    # sentence ID only for nbest
-    if translation_settings.n_best > 1:
-        output_items.append(str(translation.sentence_id))
+    def _seqs2words(self, cc):
+        """
+        #todo
+        """
+        ww = []
+        for w in cc:
+            if w == 0:
+                break
+            ww.append(self._word_idict_trg[w])
+        return ww
 
-    # translations themselves
-    output_items.append(" ".join(translation.target_words))
+    def write_alignment(self, translation, translation_settings):
+        """
+        Writes alignments to a file.
+        """
+        output_file = translation_settings.alignment_filename
+        # TODO: 1 = TEXT, 2 = JSON
+        if translation_settings.alignment_type == 1:
+            output_file.write(translation.get_alignment_text() + "\n")
+        else:
+            output_file.write(translation.get_alignment_json() + "\n")
 
-    # write scores for nbest?
-    if translation_settings.n_best > 1:
-        output_items.append(translation.score)
+    def write_translation(self, output_file, translation, translation_settings):
+        """
+        Writes a single translation to a file or STDOUT.
+        """
+        output_items = []
+        # sentence ID only for nbest
+        if translation_settings.n_best > 1:
+            output_items.append(str(translation.sentence_id))
 
-    # write probabilities?
-    if translation_settings.get_word_probs:
-        output_items.append(translation.get_target_probs())
+        # translations themselves
+        output_items.append(" ".join(translation.target_words))
 
-    output_file.write(" ||| ".join(output_items) + "\n")
+        # write scores for nbest?
+        if translation_settings.n_best > 1:
+            output_items.append(translation.score)
 
-    # write alignments to file?
-    if translation_settings.get_alignment:
-        write_alignment(translation, translation_settings)
+        # write probabilities?
+        if translation_settings.get_word_probs:
+            output_items.append(translation.get_target_probs())
+
+        output_file.write(" ||| ".join(output_items) + "\n")
+
+        # write alignments to file?
+        if translation_settings.get_alignment:
+            self.write_alignment(translation, translation_settings)
+
+        # construct hypgraph?
+        if translation_settings.get_search_graph:
+            translation.save_hyp_graph(
+                                       translation_settings.search_graph_filename,
+                                       self._word_idict_trg,
+                                       detailed=True,
+                                       highlight_best=True
+            )
 
 
-def write_translations(output_file, translations, translation_settings):
-    """
-    Writes translations to a file or STDOUT.
-    """
-    if translation_settings.n_best > 1:
-        for sentence_id, nbest_list in enumerate(translations):
-            for translation in nbest_list:
-                write_translation(output_file, translation, translation_settings)
-    else:
-        for sentence_id, translation in enumerate(translations):
-            write_translation(output_file, translation, translation_settings)
+    def write_translations(self, output_file, translations, translation_settings):
+        """
+        Writes translations to a file or STDOUT.
+        """
+        if translation_settings.n_best > 1:
+            for sentence_id, nbest_list in enumerate(translations):
+                for translation in nbest_list:
+                    self.write_translation(output_file, translation, translation_settings)
+        else:
+            for sentence_id, translation in enumerate(translations):
+                self.write_translation(output_file, translation, translation_settings)
 
 def main(input_file, output_file, decoder_settings, translation_settings):
     """
@@ -589,7 +568,7 @@ def main(input_file, output_file, decoder_settings, translation_settings):
     translator = Translator(decoder_settings)
     translations = translator.translate_file(input_file, translation_settings)
 
-    write_translations(output_file, translations, translation_settings)
+    translator.write_translations(output_file, translations, translation_settings)
 
     sys.stderr.write('Done\n')
     translator.shutdown()
