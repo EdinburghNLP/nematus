@@ -36,13 +36,19 @@ class Translation(object):
         """
         Returns this translation's alignment rendered as a string.
         """
-        pass #TODO
+        pass # TODO
 
     def get_alignment_json(self):
         """
         Returns this translation's alignment in JSON format.
         """
         pass #TODO
+
+    def get_target_probs(self):
+        """
+        Returns this translation's word probabilities as a string.
+        """
+        return " ".join("{0}".format(prob) for prob in self.target_probs)
 
     def save_hyp_graph(self, filename, word_idict_trg, detailed=True, highlight_best=True):
         """
@@ -484,6 +490,40 @@ class Translator(object):
         return self.translate(source_segments, translation_settings)
 
 
+def write_translation(output_file, translation, translation_settings, sentence_id):
+    """
+    Writes a single translation to a file or STDOUT.
+    """
+    output_items = []
+    # sentence ID only for nbest
+    if translation_settings.n_best > 1:
+        output_items.append(str(sentence_id))
+
+    # translations themselves
+    output_items.append(translation.target_words)
+
+    # write scores for nbest?
+    if translation_settings.n_best > 1:
+        output_items.append(translation.score)
+
+    # write probabilities?
+    if translation_settings.get_word_probs:
+        output_items.append(translation.get_target_probs())
+
+    output_file.write(" ||| ".join(output_items) + "\n")
+
+def write_translations(output_file, translations, translation_settings):
+    """
+    Writes translations to a file or STDOUT.
+    """
+    if translation_settings.n_best > 1:
+        for sentence_id, nbest_list in enumerate(translations):
+            for translation in nbest_list:
+                write_translation(output_file, translation, translation_settings, sentence_id)
+    else:
+        for sentence_id, translation in enumerate(translations):
+            write_translation(output_file, translation, translation_settings, sentence_id)
+
 def main(input_file, output_file, decoder_settings, translation_settings):
     """
     Translates a source language file (or STDIN) into a target language file
@@ -493,13 +533,11 @@ def main(input_file, output_file, decoder_settings, translation_settings):
 
     translator = Translator(decoder_settings)
     translations = translator.translate_file(input_file, translation_settings)
+
     # TODO: reproduce writing of probs, alignment etc. from original version
-    filecontent = '\n'.join([t.target_words for t in translations])
-    if output_file is sys.stdout:
-        output_file.write(filecontent + '\n')
-    else:
-        with open(output_file, 'w') as f:
-            f.write(filecontent)
+    # TODO:
+    write_translations(output_file, translations, translation_settings)
+
     sys.stderr.write('Done\n')
     translator.shutdown()
 
