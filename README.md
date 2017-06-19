@@ -112,36 +112,7 @@ GPU, float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backend:
 
 >> 222.28 sentences/s
 
-GPU (TITAN X (Pascal)), float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backend:
-
->> 232.30 sentences/s
-
-------
-
-GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend, float32:
-
->> 178.61 sentences/s
-
-float16:
-
->> 166.19 sentencess/s
-
-float64:
-
->> 162.78 sents/s
-
-float32,gpuarray.preallocate=0.8 --batch_size 256
-
->> 453.74 sentences/s
-
-float16,gpuarray.preallocate=0.8 --batch_size 256
-
->> 441.75 sentencs/s
-
-float64,gpuarray.preallocate=0.8 --batch_size 256
-
->> 325.12 sentences/s
-
+See SPEED.md for more benchmark results on different hardware and hyperparameter configurations.
 
 USAGE INSTRUCTIONS
 ------------------
