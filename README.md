@@ -116,6 +116,22 @@ GPU (TITAN X (Pascal)), float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backen
 
 >> 232.30 sentences/s
 
+------
+
+GPU Tesla P100-PCIE-16GB, Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz, new GPU backend, float32:
+
+>> 178.61 sentences/s
+
+float16:
+
+>> 166.19 sentencess/s
+
+float64:
+
+>> 162.78 sents/s
+
+
+
 USAGE INSTRUCTIONS
 ------------------
 
