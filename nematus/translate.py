@@ -55,7 +55,10 @@ class Translation(object):
 
         matrix = []
         for target_word_alignment in self.alignment:
-            matrix.append(" ".join(target_word_alignment))
+            current_weights = []
+            for weight in target_word_alignment:
+                current_weights.append(str(weight))
+            matrix.append(" ".join(current_weights))
 
         return header + "\n".join(matrix)
 
@@ -442,7 +445,7 @@ class Translator(object):
                 for j in order:
                     current_alignment = None if not translation_settings.get_alignment else alignment[j]
                     translation = Translation(sentence_id=i,
-                                              source_words=source_segments[i],
+                                              source_words=source_sentences[i],
                                               target_words=self._seqs2words(samples[j]),
                                               score=scores[j],
                                               alignment=current_alignment,
@@ -454,7 +457,8 @@ class Translator(object):
             # single-best translation
             else:
                 current_alignment = None if not translation_settings.get_alignment else alignment
-                translation = Translation(source_words=source_segments[i],
+                translation = Translation(sentence_id=i,
+                                          source_words=source_sentences[i],
                                           target_words=self._seqs2words(samples),
                                           score=scores,
                                           alignment=current_alignment,

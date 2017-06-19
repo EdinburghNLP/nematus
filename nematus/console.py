@@ -24,11 +24,11 @@ class ConsoleInterface(object):
         """
         Console arguments used in all modes
         """
-        self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True,
+        self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True, metavar="MODEL",
                                   help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
         self._parser.add_argument('-p', type=int, default=1,
                                   help="Number of processes (default: %(default)s))")
-        self._parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False,
+        self._parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False, metavar="DEVICE",
                                   help="User specified device list for multi-thread decoding (default: [])")
         self._parser.add_argument('-v', action="store_true", help="verbose mode.")
 
