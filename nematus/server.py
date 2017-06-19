@@ -7,6 +7,7 @@ Runs Nematus as a Web Server.
 
 import json
 import pkg_resources
+import sys
 
 from bottle import Bottle, request, response
 
@@ -23,24 +24,24 @@ class NematusServer(object):
     STATUS_LOADING = 'loading'
     STATUS_OK = 'ok'
 
-    def __init__(self, startup_args):
+    def __init__(self, server_settings, decoder_settings):
         """
         Loads a translation model and initialises the webserver.
 
         @param startup args: as defined in `console.py`
         """
-        self._models = startup_args.models
-        self._style = startup_args.style
-        self._host = startup_args.host
-        self._port = startup_args.port
-        self._debug = startup_args.v
-        self._num_processes = startup_args.p
-        self._device_list = startup_args.device_list
+        self._style = server_settings.style
+        self._host = server_settings.host
+        self._port = server_settings.port
+        self._debug = decoder_settings.verbose
+        self._models = decoder_settings.models
+        self._num_processes = decoder_settings.num_processes
+        self._device_list = decoder_settings.device_list
         self._status = self.STATUS_LOADING
         # start webserver
         self._server = Bottle()
         # start translation workers
-        #self._translator = Translator(self._models, self._num_processes, self._device_list)
+        self._translator = Translator(decoder_settings)
         self._status = self.STATUS_OK
 
     def status(self):
@@ -61,16 +62,23 @@ class NematusServer(object):
         Processes a translation request.
         """
         translation_request = request_provider(self._style, request)
+        sys.stderr.write("REQUEST - " + repr(translation_request) + "\n")
+
+        # construct translation_settings
+        translation_settings = translation_request # TODO: does this work?
+
         source_segments = [segment for segment in translation_request.segments]
-        #todo: actual translation
-        target_segments = [segment.upper() for segment in source_segments] # pseudo translation (to all caps)
+
+        translations = self._translator.translate(source_segments, translation_settings)
         response_data = {
             'status': TranslationResponse.STATUS_OK,
-            'segments': target_segments,
+            'segments': [translation.target_words for translation in translations],
             'word_alignments': None,
             'word_probabilities': None,
         }
         translation_response = response_provider(self._style, **response_data)
+        sys.stderr.write("RESPONSE - " + repr(translation_response) + "\n")
+
         response.content_type = translation_response.get_content_type()
         return repr(translation_response)
 
@@ -91,6 +99,8 @@ class NematusServer(object):
 
 if __name__ == "__main__":
     parser = ConsoleInterfaceServer()
-    startup_args = parser.parse_args()
-    server = NematusServer(startup_args)
+    server_settings = parser.get_server_settings()
+    decoder_settings = parser.get_decoder_settings()
+
+    server = NematusServer(server_settings, decoder_settings)
     server.start()
