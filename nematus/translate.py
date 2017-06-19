@@ -66,10 +66,10 @@ class Translation(object):
         """
         Returns this translation's alignment as a JSON formatted string.
         """
-        source_tokens = self.source_words + "</s>"
-        target_tokens = self.target_words + "</s>"
+        source_tokens = self.source_words + ["</s>"]
+        target_tokens = self.target_words + ["</s>"]
 
-        if self.hypothesis is not None:
+        if self.hypothesis_id is not None:
             tid = self.sentence_id + self.hypothesis_id
         else:
             tid = self.sentence_id
@@ -83,7 +83,7 @@ class Translation(object):
                               self.sentence_id,
                               tid)
                              )
-        json.dumps(links, ensure_ascii=False, indent=2)
+        return json.dumps(links, ensure_ascii=False, indent=2)
 
     def get_target_probs(self):
         """
