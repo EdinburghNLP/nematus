@@ -40,7 +40,7 @@ from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
-                 n_words=30000):
+                 n_words=30000, n_factors=1):
     # x: a list of sentences
     lengths_x = [len(s) for s in seqs_x]
     lengths_y = [len(s) for s in seqs_y]
@@ -65,11 +65,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
             return None, None, None, None
 
     n_samples = len(seqs_x)
-    n_factors = 1
-    try:
-        n_factors = len(seqs_x[0][0])
-    except:
-        pass
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
@@ -1084,6 +1079,7 @@ def train(dim_word=512,  # word vector dimensionality
                          indomain_source=domain_interpolation_indomain_datasets[0],
                          indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=training_progress.domain_interpolation_cur,
+                         use_factor=(factors > 1),
                          maxibatch_size=maxibatch_size)
     else:
         train = TextIterator(datasets[0], datasets[1],
@@ -1094,6 +1090,7 @@ def train(dim_word=512,  # word vector dimensionality
                          skip_empty=True,
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
+                         use_factor=(factors > 1),
                          maxibatch_size=maxibatch_size)
 
     if valid_datasets and validFreq:
@@ -1263,6 +1260,7 @@ def train(dim_word=512,  # word vector dimensionality
             if model_options['objective'] == 'CE':
 
                 x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
+                                                    n_factors=factors,
                                                     n_words_src=n_words_src,
                                                     n_words=n_words)
 
@@ -1291,7 +1289,9 @@ def train(dim_word=512,  # word vector dimensionality
                 for x_s, y_s in xy_pairs:
 
                     # add EOS and prepare factored data
-                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None, n_words_src=n_words_src, n_words=n_words)
+                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
+                                              n_factors=factored, 
+                                              n_words_src=n_words_src, n_words=n_words)
 
                     # draw independent samples to compute mean reward
                     if model_options['mrt_samples_meanloss']:
@@ -1333,7 +1333,9 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # create mini-batch with masking
                     x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
-                                                                    maxlen=None, n_words_src=n_words_src,
+                                                                    maxlen=None,
+                                                                    n_factors=factors,
+                                                                    n_words_src=n_words_src,
                                                                     n_words=n_words)
 
                     cost_batches += 1
@@ -1629,6 +1631,8 @@ if __name__ == '__main__':
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
+    training.add_argument('--factors', type=int, default=1, metavar='INT',
+                         help="number of factors used (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd', 'sgdmomentum'],
                          help="optimizer (default: %(default)s)")
