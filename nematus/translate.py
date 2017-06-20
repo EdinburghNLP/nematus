@@ -534,7 +534,10 @@ class Translator(object):
         if translation_settings.get_word_probs:
             output_items.append(translation.get_target_probs())
 
-        output_file.write(" ||| ".join(output_items) + "\n")
+        if translation_settings.n_best is True:
+            output_file.write(" ||| ".join(output_items) + "\n")
+        else:
+            output_file.write("\n".join(output_items) + "\n")
 
         # write alignments to file?
         if translation_settings.get_alignment:
