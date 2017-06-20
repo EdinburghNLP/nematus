@@ -1098,6 +1098,7 @@ def train(dim_word=512,  # word vector dimensionality
                             dictionaries[:-1], dictionaries[-1],
                             n_words_source=n_words_src, n_words_target=n_words,
                             batch_size=valid_batch_size,
+                            use_factor=(factors>1),
                             maxlen=maxlen)
     else:
         valid = None
@@ -1290,7 +1291,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # add EOS and prepare factored data
                     x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
-                                              n_factors=factored, 
+                                              n_factors=factors, 
                                               n_words_src=n_words_src, n_words=n_words)
 
                     # draw independent samples to compute mean reward
@@ -1631,8 +1632,6 @@ if __name__ == '__main__':
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
                          help="maximum sequence length (default: %(default)s)")
-    training.add_argument('--factors', type=int, default=1, metavar='INT',
-                         help="number of factors used (default: %(default)s)")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam', 'adadelta', 'rmsprop', 'sgd', 'sgdmomentum'],
                          help="optimizer (default: %(default)s)")
