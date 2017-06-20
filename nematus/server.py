@@ -85,7 +85,7 @@ class NematusServer(object):
         Starts the webserver.
         """
         self._route()
-        self._server.run(host=self._host, port=self._port, debug=self._debug)
+        self._server.run(host=self._host, port=self._port, debug=self._debug, server='paste')
 
     def _route(self):
         """
