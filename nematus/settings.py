@@ -5,6 +5,8 @@
 Configuration containers.
 """
 
+import uuid
+
 class DecoderSettings(object):
 
     def __init__(self, parsed_console_arguments=None):
@@ -43,12 +45,13 @@ class TranslationSettings(object):
         console arguments as returned by a `ConsoleInterface`'s `parse_args()`
         method are provided.
         """
+        self.request_id = uuid.uuid4()
         self.beam_width = 5
         self.normalize = False
         self.char_level = False
         self.n_best = 1
         self.suppress_unk = False
-        self.get_word_probs = True
+        self.get_word_probs = False
         self.get_alignment = False
         self.alignment_type = None
         self.alignment_filename = None

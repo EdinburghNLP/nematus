@@ -62,10 +62,13 @@ class Translation(object):
 
         return header + "\n".join(matrix)
 
-    def get_alignment_json(self):
+    def get_alignment_json(self, as_string=True):
         """
-        Returns this translation's alignment as a JSON formatted string.
+        Returns this translation's alignment as a JSON serializable object
+        (@param as_string False) or a JSON formatted string (@param as_string
+        True).
         """
+
         source_tokens = self.source_words + ["</s>"]
         target_tokens = self.target_words + ["</s>"]
 
@@ -83,7 +86,7 @@ class Translation(object):
                               self.sentence_id,
                               tid)
                              )
-        return json.dumps(links, ensure_ascii=False, indent=2)
+        return json.dumps(links, ensure_ascii=False, indent=2) if as_string else links
 
     def get_target_probs(self):
         """
@@ -570,8 +573,6 @@ def main(input_file, output_file, decoder_settings, translation_settings):
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    translation_settings.request_id = uuid.uuid4()
-
     translator = Translator(decoder_settings)
     translations = translator.translate_file(input_file, translation_settings)
 

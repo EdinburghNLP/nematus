@@ -18,25 +18,21 @@ class TranslationRequestNematus(TranslationRequest):
         if 'segments' in request:
             self.segments = request['segments']
         if 'beam_width' in request:
-            self.beam_width = request['beam_width']
+            self.settings.beam_width = request['beam_width']
         if 'normalize' in request:
-            self.normalize = request['normalize']
+            self.settings.normalize = request['normalize']
         if 'character_level' in request:
-            self.char_level = request['character_level']
-        else:
-            self.char_level = False
+            self.settings.char_level = request['character_level']
         if 'suppress_unk' in request:
-            self.suppress_unk = request['suppress_unk']
+            self.settings.suppress_unk = request['suppress_unk']
         if 'return_word_alignment' in request:
-            self.get_alignment = request['return_word_alignment']
-        else:
-            self.get_alignment = False
+            self.settings.get_alignment = request['return_word_alignment']
         if 'return_word_probabilities' in request:
-            self.return_word_probabilities = request['return_word_probabilities']
+            self.settings.get_word_probs = request['return_word_probabilities']
 
     def _format(self):
         request = {
-            'id': self.request_id,
+            'id': str(self.settings.request_id),
             'data': [segment for segment in self.segments]
         }
         return json.dumps(request)

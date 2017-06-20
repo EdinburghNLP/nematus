@@ -64,17 +64,15 @@ class NematusServer(object):
         translation_request = request_provider(self._style, request)
         sys.stderr.write("REQUEST - " + repr(translation_request) + "\n")
 
-        # construct translation_settings
-        translation_settings = translation_request # TODO: does this work?
-
-        source_segments = [segment for segment in translation_request.segments]
-
-        translations = self._translator.translate(source_segments, translation_settings)
+        translations = self._translator.translate(
+            translation_request.segments,
+            translation_request.settings
+        )
         response_data = {
             'status': TranslationResponse.STATUS_OK,
             'segments': [translation.target_words for translation in translations],
-            'word_alignments': None,
-            'word_probabilities': None,
+            'word_alignments': [translation.get_alignment_json(as_string=False) for translation in translations] if translation_request.settings.get_alignment else None,
+            'word_probabilities': [translation.target_probs for translation in translations] if translation_request.settings.get_word_probs else None,
         }
         translation_response = response_provider(self._style, **response_data)
         sys.stderr.write("RESPONSE - " + repr(translation_response) + "\n")
