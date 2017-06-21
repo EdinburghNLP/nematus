@@ -22,12 +22,16 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
     updates = []
     optimizer_tparams = {}
 
+    # Avoid underflow of e with float16
+    if (floatX == "float16") and (e > 0.0):
+        e = max(e, 1e-6)
+
     t_prev_name = PREFIX + 't_prev'
     if t_prev_name in optimizer_params:
         t_prev_init = optimizer_params[t_prev_name]
     else:
         t_prev_init = 0.
-    t_prev = theano.shared(numpy.float32(t_prev_init), t_prev_name)
+    t_prev = theano.shared(numpy_floatX(t_prev_init), t_prev_name)
     optimizer_tparams[t_prev_name] = t_prev
     
     t = t_prev + 1.

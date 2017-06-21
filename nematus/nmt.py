@@ -1384,9 +1384,7 @@ def train(dim_word=512,  # word vector dimensionality
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-                numpy.savez(saveto, **params)
-                numpy.savez(saveto + '.gradinfo', **optimizer_params)
-                training_progress.save_to_json(training_progress_file)
+                save(params, optimizer_params, training_progress, saveto)
                 print 'Done'
 
                 # save with uidx
@@ -1395,9 +1393,9 @@ def train(dim_word=512,  # word vector dimensionality
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], training_progress.uidx)
 
-                    numpy.savez(saveto_uidx, **unzip_from_theano(tparams, excluding_prefix='prior_'))
-                    numpy.savez(saveto_uidx + '.gradinfo', **unzip_from_theano(optimizer_tparams, excluding_prefix='prior_'))
-                    training_progress.save_to_json(saveto_uidx+'.progress.json')
+                    params = unzip_from_theano(tparams, excluding_prefix='prior_')
+                    optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
+                    save(params, optimizer_params, training_progress, saveto_uidx)
                     print 'Done'
 
 
@@ -1500,9 +1498,7 @@ def train(dim_word=512,  # word vector dimensionality
                     print 'Saving  model...',
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
-                    numpy.savez(saveto +'.dev', **params)
-                    numpy.savez(saveto +'.dev.gradinfo', **optimizer_params)
-                    training_progress.save_to_json(saveto+'.dev.progress.json')
+                    save(params, optimizer_params, training_progress, saveto+'.dev')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
                     p_validation = Popen([external_validation_script])
@@ -1538,9 +1534,7 @@ def train(dim_word=512,  # word vector dimensionality
         params = unzip_from_theano(tparams, excluding_prefix='prior_')
         optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
-    numpy.savez(saveto, **params)
-    numpy.savez(saveto + '.gradinfo', **optimizer_params)
-    training_progress.save_to_json(training_progress_file)
+    save(params, optimizer_params, training_progress, saveto)
 
     return valid_err
 

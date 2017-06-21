@@ -15,7 +15,7 @@ from util import load_dict, load_config
 from alignment_util import *
 from compat import fill_options
 
-from theano_util import (load_params, init_theano_params)
+from theano_util import (floatX, numpy_floatX, load_params, init_theano_params)
 from nmt import (pred_probs, build_model, prepare_data, init_params)
 
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
