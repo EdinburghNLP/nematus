@@ -1,5 +1,34 @@
 # Nematus Server
-Runs Nematus as a Web Server. Further details tba.
+Runs Nematus as a web service.
+
+## Basic Usage
+
+The command
+
+```bash
+python server.py -m model.npz
+```
+
+will start Nematus Server at `localhost` on port 8080, using translation model `model.npz`. Once the model has been loaded, the server is ready to answer translation requests according to the API outlined below.
+
+### Required Arguments
+
+Nematus Server needs at least one translation model, provided via the `-m` or `--models` parameter. Multiple models (for ensemble decoding) are delimited with spaces:
+
+```bash
+python server.py -m model1.npz model2.npz model3.npz model4.npz
+```
+
+### Optional Arguments
+
+| Argument            | Default Value | Description              |
+| --------------------|---------------| -------------------------|
+| `--host`            | `localhost`   | Host name                |
+| `--port`            | `8080`        | Port                     |
+| `-p`,               | `1`           | Number of translation processes to start. Each process loads all models specified in `-m`/`--models`. |
+| `--device-list`     | any           | The devices to start translation processes on, e.g., `gpu0 gpu1 gpu6`. Defaults to any available device. |
+| `-v`                | off           | Verbose mode             |
+
 
 ## API
 Nematus Server supports several API styles.
@@ -14,16 +43,16 @@ Content-Type: application/json
 
 ##### Query Parameters
 
-| Parameter           | Type                  | Description  |
-| --------------------|-----------------------| -------------|
-| ``segments``        | ``list(list(str))``   | The sentences to be translated (source language). Each sentence is a list of tokens. |
-| ``normalize``       | ``boolean``           | Normalise scores by sentence length. Default: ``true``. |
-| ``beam_width``      | ``int``               | The beam width to be used for decoding. Default: ``5``. |
-| ``character_level`` | ``boolean``           | Enables character- rather than subword-level translation. Default: ``false``. |
-| ``n_best``          | ``int``               | Return n best translations per segment. Default: ``1``. |
-| ``suppress_unk``    | ``boolean``           | Suppress hypotheses containing UNK. Default: ``false``. |
-| ``return_word_alignment`` | ``boolean``     | Return word alignment (source to target language) for each segment. Default: ``false``. |
-| ``return_word_probabilities`` | ``boolean`` | Return the probability of each word (target language) for each segment. Default: ``false``. |
+| Parameter           | Type                  | Default Value | Description |
+| --------------------|-----------------------|-----------|-------------|
+| ``segments``        | ``list(list(str))``   |           | The sentences to be translated (source language). Each sentence is a list of tokens. |
+| ``normalize``       | ``boolean``           | ``true``  | Normalise scores by sentence length. |
+| ``beam_width``      | ``int``               | ``5``     | The beam width to be used for decoding. |
+| ``character_level`` | ``boolean``           | ``false`` | Enables character- rather than subword-level translation. |
+| ``n_best``          | ``int``               | ``1``     | Return n best translations per segment. |
+| ``suppress_unk``    | ``boolean``           | ``false`` | Suppress hypotheses containing UNK. |
+| ``return_word_alignment`` | ``boolean``     | ``false`` | Return word alignment (source to target language) for each segment. |
+| ``return_word_probabilities`` | ``boolean`` | ``false`` | Return the probability of each word (target language) for each segment. |
 
 Sample request:
 
@@ -79,6 +108,7 @@ If successful, the response body contains a JSON object with the following struc
   "service": "nematus"
 }
 ```
+
 
 ## Sample Client
 
