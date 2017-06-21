@@ -40,7 +40,7 @@ from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
-                 n_words=30000):
+                 n_words=30000, n_factors=1):
     # x: a list of sentences
     lengths_x = [len(s) for s in seqs_x]
     lengths_y = [len(s) for s in seqs_y]
@@ -65,7 +65,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
             return None, None, None, None
 
     n_samples = len(seqs_x)
-    n_factors = len(seqs_x[0][0])
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
@@ -896,7 +895,8 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         x, x_mask, y, y_mask = prepare_data(x, y,
                                             n_words_src=options['n_words_src'],
-                                            n_words=options['n_words'])
+                                            n_words=options['n_words'],
+                                            n_factors=options['factors'])
 
         ### in optional save weights mode.
         if alignweights:
@@ -1080,6 +1080,7 @@ def train(dim_word=512,  # word vector dimensionality
                          indomain_source=domain_interpolation_indomain_datasets[0],
                          indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=training_progress.domain_interpolation_cur,
+                         use_factor=(factors > 1),
                          maxibatch_size=maxibatch_size)
     else:
         train = TextIterator(datasets[0], datasets[1],
@@ -1090,6 +1091,7 @@ def train(dim_word=512,  # word vector dimensionality
                          skip_empty=True,
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
+                         use_factor=(factors > 1),
                          maxibatch_size=maxibatch_size)
 
     if valid_datasets and validFreq:
@@ -1097,6 +1099,7 @@ def train(dim_word=512,  # word vector dimensionality
                             dictionaries[:-1], dictionaries[-1],
                             n_words_source=n_words_src, n_words_target=n_words,
                             batch_size=valid_batch_size,
+                            use_factor=(factors>1),
                             maxlen=maxlen)
     else:
         valid = None
@@ -1259,6 +1262,7 @@ def train(dim_word=512,  # word vector dimensionality
             if model_options['objective'] == 'CE':
 
                 x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
+                                                    n_factors=factors,
                                                     n_words_src=n_words_src,
                                                     n_words=n_words)
 
@@ -1287,7 +1291,9 @@ def train(dim_word=512,  # word vector dimensionality
                 for x_s, y_s in xy_pairs:
 
                     # add EOS and prepare factored data
-                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None, n_words_src=n_words_src, n_words=n_words)
+                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
+                                              n_factors=factors, 
+                                              n_words_src=n_words_src, n_words=n_words)
 
                     # draw independent samples to compute mean reward
                     if model_options['mrt_samples_meanloss']:
@@ -1329,7 +1335,9 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # create mini-batch with masking
                     x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
-                                                                    maxlen=None, n_words_src=n_words_src,
+                                                                    maxlen=None,
+                                                                    n_factors=factors,
+                                                                    n_words_src=n_words_src,
                                                                     n_words=n_words)
 
                     cost_batches += 1
