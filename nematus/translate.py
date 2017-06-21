@@ -259,16 +259,20 @@ class Translator(object):
         Modifies environment variable to change the THEANO device.
         """
         if device_id != '':
-            theano_flags = os.environ['THEANO_FLAGS'].split(',')
-            exist = False
-            for i in xrange(len(theano_flags)):
-                if theano_flags[i].strip().startswith('device'):
-                    exist = True
-                    theano_flags[i] = '%s=%s' % ('device', device_id)
-                    break
-            if exist is False:
-                theano_flags.append('%s=%s' % ('device', device_id))
-            os.environ['THEANO_FLAGS'] = ','.join(theano_flags)
+            try:
+                theano_flags = os.environ['THEANO_FLAGS'].split(',')
+                exist = False
+                for i in xrange(len(theano_flags)):
+                    if theano_flags[i].strip().startswith('device'):
+                        exist = True
+                        theano_flags[i] = '%s=%s' % ('device', device_id)
+                        break
+                if exist is False:
+                    theano_flags.append('%s=%s' % ('device', device_id))
+                os.environ['THEANO_FLAGS'] = ','.join(theano_flags)
+            except KeyError:
+                # environment variable does not exist at all
+                os.environ['THEANO_FLAGS'] = 'device=%s' % device_id
 
     def _load_models(self, device_id):
         """

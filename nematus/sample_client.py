@@ -5,8 +5,8 @@ import json
 import requests # use `pip install requests` if not available on your system
 
 SOURCE_SEGMENTS = {
-    "de":"Die Wahrheit ist selten rein und nie einfach .",
-    "en":"The truth is rarely pure and never simple ."
+    "de":"Die Wahrheit ist selten rein und nie einfach .".split(),
+    "en":"The truth is rarely pure and never simple .".split()
 }
 
 class Client(object):
