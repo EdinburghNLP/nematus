@@ -20,7 +20,7 @@ class TranslationRequestNematus(TranslationRequest):
         if 'beam_width' in request:
             self.settings.beam_width = request['beam_width']
         if 'normalize' in request:
-            self.settings.normalize = request['normalize']
+            self.settings.normalization_alpha = request['normalize']
         if 'character_level' in request:
             self.settings.char_level = request['character_level']
         if 'suppress_unk' in request:

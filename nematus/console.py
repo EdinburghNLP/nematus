@@ -61,8 +61,8 @@ class ConsoleInterfaceDefault(ConsoleInterface):
     def _add_arguments(self):
         self._parser.add_argument('-k', type=int, default=5,
                                   help="Beam size (default: %(default)s))")
-        self._parser.add_argument('-n', action="store_true",
-                                  help="Normalize scores by sentence length")
+        self._parser.add_argument('-n', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
+                                  help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
         self._parser.add_argument('-c', action="store_true", help="Character-level")
         self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
                                   default=sys.stdin, metavar='PATH',

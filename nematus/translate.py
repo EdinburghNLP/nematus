@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 from collections import defaultdict
 from Queue import Empty
 
-from util import load_dict, load_config
+from util import load_dict, load_config, seqs2words
 from compat import fill_options
 from hypgraph import HypGraphRenderer
 from console import ConsoleInterfaceDefault
@@ -311,8 +311,7 @@ class Translator(object):
         """
 
         # unpack input item attributes
-        verbose = input_item.verbose
-        normalize = input_item.normalize
+        normalization_alpha = input_item.normalization_alpha
         nbest = input_item.nbest
         idx = input_item.idx
 
@@ -323,9 +322,9 @@ class Translator(object):
         sample, score, word_probs, alignment, hyp_graph = self._sample(input_item, trng, fs_init, fs_next, gen_sample)
 
         # normalize scores according to sequence lengths
-        if normalize:
-            lengths = numpy.array([len(s) for s in sample])
-            score = score / lengths
+        if normalization_alpha:
+            adjusted_lengths = numpy.array([len(s) ** normalization_alpha for s in sample])
+            score = score / adjusted_lengths
         if nbest is True:
             output_item = sample, score, word_probs, alignment, hyp_graph
         else:
@@ -387,7 +386,7 @@ class Translator(object):
                                    return_alignment=translation_settings.get_alignment,
                                    k=translation_settings.beam_width,
                                    suppress_unk=translation_settings.suppress_unk,
-                                   normalize=translation_settings.normalize,
+                                   normalization_alpha=translation_settings.normalization_alpha,
                                    nbest=translation_settings.n_best,
                                    seq=x,
                                    idx=idx,
@@ -447,7 +446,7 @@ class Translator(object):
                     current_alignment = None if not translation_settings.get_alignment else alignment[j]
                     translation = Translation(sentence_id=i,
                                               source_words=source_sentences[i],
-                                              target_words=self._seqs2words(samples[j]),
+                                              target_words=seqs2words(samples[j], self._word_idict_trg),
                                               score=scores[j],
                                               alignment=current_alignment,
                                               target_probs=word_probs[j],
@@ -460,7 +459,7 @@ class Translator(object):
                 current_alignment = None if not translation_settings.get_alignment else alignment
                 translation = Translation(sentence_id=i,
                                           source_words=source_sentences[i],
-                                          target_words=self._seqs2words(samples),
+                                          target_words=seqs2words(samples, self._word_idict_trg),
                                           score=scores,
                                           alignment=current_alignment,
                                           target_probs=word_probs,
@@ -492,17 +491,6 @@ class Translator(object):
         return self.translate(source_segments, translation_settings)
 
     ### FUNCTIONS FOR WRITING THE RESULTS ###
-
-    def _seqs2words(self, cc):
-        """
-        #todo
-        """
-        ww = []
-        for w in cc:
-            if w == 0:
-                break
-            ww.append(self._word_idict_trg[w])
-        return ww
 
     def write_alignment(self, translation, translation_settings):
         """

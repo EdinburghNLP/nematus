@@ -47,7 +47,7 @@ class TranslationSettings(object):
         """
         self.request_id = uuid.uuid4()
         self.beam_width = 5
-        self.normalize = False
+        self.normalization_alpha = 0.0
         self.char_level = False
         self.n_best = 1
         self.suppress_unk = False
@@ -67,7 +67,7 @@ class TranslationSettings(object):
         """
         args = parsed_console_arguments
         self.beam_width = args.k
-        self.normalize = args.n
+        self.normalization_alpha = args.n
         self.char_level = args.c
         self.n_best = args.n_best
         self.suppress_unk = args.suppress_unk
