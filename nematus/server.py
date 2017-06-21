@@ -8,8 +8,10 @@ Runs Nematus as a Web Server.
 import json
 import pkg_resources
 import sys
+import logging
 
 from bottle import Bottle, request, response
+from bottle_log import LoggingPlugin
 
 from server.response import TranslationResponse
 from server.api.provider import request_provider, response_provider
@@ -40,7 +42,12 @@ class NematusServer(object):
         self._status = self.STATUS_LOADING
         # start webserver
         self._server = Bottle()
+        self._server.config['logging.level'] = 'DEBUG' if decoder_settings.verbose else 'WARNING'
+        self._server.config['logging.format'] = '%(levelname)s: %(message)s'
+        self._server.install(LoggingPlugin(self._server.config))
+        logging.info("Starting Nematus Server")
         # start translation workers
+        logging.info("Loading translation models")
         self._translator = Translator(decoder_settings)
         self._status = self.STATUS_OK
 
@@ -62,7 +69,7 @@ class NematusServer(object):
         Processes a translation request.
         """
         translation_request = request_provider(self._style, request)
-        sys.stderr.write("REQUEST - " + repr(translation_request) + "\n")
+        logging.debug("REQUEST - " + repr(translation_request))
 
         translations = self._translator.translate(
             translation_request.segments,
@@ -75,7 +82,7 @@ class NematusServer(object):
             'word_probabilities': [translation.target_probs for translation in translations] if translation_request.settings.get_word_probs else None,
         }
         translation_response = response_provider(self._style, **response_data)
-        sys.stderr.write("RESPONSE - " + repr(translation_response) + "\n")
+        logging.debug("RESPONSE - " + repr(translation_response))
 
         response.content_type = translation_response.get_content_type()
         return repr(translation_response)
@@ -96,9 +103,9 @@ class NematusServer(object):
 
 
 if __name__ == "__main__":
+    # parse console arguments
     parser = ConsoleInterfaceServer()
     server_settings = parser.get_server_settings()
     decoder_settings = parser.get_decoder_settings()
-
     server = NematusServer(server_settings, decoder_settings)
     server.start()

@@ -17,6 +17,7 @@ import os
 import warnings
 import sys
 import time
+import logging
 
 import itertools
 
@@ -369,10 +370,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
                                     prefix='ff_state', activ='tanh')
 
-    print >>sys.stderr, 'Building f_init...',
+    logging.debug('Building f_init...')
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print >>sys.stderr, 'Done'
+    logging.debug('Done')
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -438,7 +439,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next..',
+    logging.debug('Building f_next..')
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, next_state]
 
@@ -446,7 +447,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         outs.append(dec_alphas)
 
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print >>sys.stderr, 'Done'
+    logging.debug('Done')
 
     return f_init, f_next
 
@@ -636,14 +637,14 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                         non_sequences=[ctx, pctx_, target_dropout, emb_dropout_d, rec_dropout_d, ctx_dropout_d]+shared_vars,
                         n_steps=n_steps, truncate_gradient=options['decoder_truncate_gradient'],)
 
-    print >>sys.stderr, 'Building f_sample...',
+    logging.debug('Building f_sample...')
     if greedy:
         inps = [x, x_mask, n_steps]
     else:
         inps = [x, k, n_steps]
     outs = [sample, probs]
     f_sample = theano.function(inps, outs, name='f_sample', updates=updates, profile=profile)
-    print >>sys.stderr, 'Done'
+    logging.debug('Done')
 
     return f_sample
 
@@ -870,7 +871,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     for x, y in iterator:
         #ensure consistency in number of factors
         if len(x[0][0]) != options['factors']:
-            sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(options['factors'], len(x[0][0])))
+            logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(options['factors'], len(x[0][0])))
             sys.exit(1)
 
         n_done += len(x)
@@ -896,7 +897,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
             probs.append(pp)
 
         if verbose:
-            print >>sys.stderr, '%d samples computed' % (n_done)
+            print logging.debug('%d samples computed' % (n_done))
 
     return numpy.array(probs), alignments_json
 
@@ -973,7 +974,7 @@ def train(dim_word=512,  # word vector dimensionality
         if factors == 1:
             model_options['dim_per_factor'] = [model_options['dim_word']]
         else:
-            sys.stderr.write('Error: if using factored input, you must specify \'dim_per_factor\'\n')
+            logging.error('Error: if using factored input, you must specify \'dim_per_factor\'\n')
             sys.exit(1)
 
     assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
@@ -1025,7 +1026,7 @@ def train(dim_word=512,  # word vector dimensionality
         print 'Reloading training progress'
         training_progress.load_from_json(training_progress_file)
         if (training_progress.estop == True) or (training_progress.eidx > max_epochs) or (training_progress.uidx >= finish_after):
-            print >> sys.stderr, 'Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % training_progress_file
+            logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % training_progress_file)
             return numpy.inf
 
 
@@ -1119,7 +1120,7 @@ def train(dim_word=512,  # word vector dimensionality
         cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
-        sys.stderr.write('Error: objective must be one of ["CE", "MRT"]\n')
+        logging.error('Objective must be one of ["CE", "MRT"]\n')
         sys.exit(1)
 
     # apply L2 regularization on weights
@@ -1190,7 +1191,7 @@ def train(dim_word=512,  # word vector dimensionality
             saveFreq = num_batches
         if sampleFreq == -1:
             sampleFreq = num_batches
-    
+
     print 'Optimization'
 
     #save model options
@@ -1213,7 +1214,7 @@ def train(dim_word=512,  # word vector dimensionality
 
             #ensure consistency in number of factors
             if len(x) and len(x[0]) and len(x[0][0]) != factors:
-                sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
+                logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
             xlen = len(x)
@@ -1238,7 +1239,7 @@ def train(dim_word=512,  # word vector dimensionality
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask)
                 else:
-                    # compute cost, grads and copy grads to shared variables 
+                    # compute cost, grads and copy grads to shared variables
                     cost = f_grad_shared(x, x_mask, y, y_mask)
                     # do the update on parameters
                     f_update(lrate)
@@ -1322,7 +1323,7 @@ def train(dim_word=512,  # word vector dimensionality
                         # compute cost, grads and update parameters
                         cost = f_update(lrate, x, x_mask, y, y_mask, loss)
                     else:
-                        # compute cost, grads and copy grads to shared variables 
+                        # compute cost, grads and copy grads to shared variables
                         cost = f_grad_shared(x, x_mask, y, y_mask, loss)
                         # do the update on parameters
                         f_update(lrate)
@@ -1658,4 +1659,3 @@ if __name__ == '__main__':
 
 #    Profile peak GPU memory usage by uncommenting next line and enabling theano CUDA memory profiling (http://deeplearning.net/software/theano/tutorial/profiling.html)
 #    print theano.sandbox.cuda.theano_allocated()
-

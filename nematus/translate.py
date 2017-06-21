@@ -6,7 +6,7 @@ import sys
 import numpy
 import json
 import os
-import uuid
+import logging
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
@@ -275,8 +275,7 @@ class Translator(object):
         Modifies environment variable to change the THEANO device, then loads
         models and returns them.
         """
-        if self._verbose:
-            sys.stderr.write("Process '%s' - Loading models on GPU %s\n" % (os.getpid(), device_id))
+        logging.debug("Process '%s' - Loading models on GPU %s\n" % (os.getpid(), device_id))
 
         # modify environment flag 'device'
         self._set_device(device_id)
@@ -318,8 +317,7 @@ class Translator(object):
         idx = input_item.idx
 
         # logging
-        if verbose:
-            sys.stderr.write('{0} - {1}\n'.format(process_id, idx))
+        logging.debug('{0} - {1}\n'.format(process_id, idx))
 
         # sample given an input sequence and obtain scores
         sample, score, word_probs, alignment, hyp_graph = self._sample(input_item, trng, fs_init, fs_next, gen_sample)
@@ -376,7 +374,7 @@ class Translator(object):
             for w in words:
                 w = [self._word_dicts[i][f] if f in self._word_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
                 if len(w) != self._options[0]['factors']:
-                    sys.stderr.write('Error: expected {0} factors, but input word has {1}\n'.format(self._options[0]['factors'], len(w)))
+                    logging.warning('Expected {0} factors, but input word has {1}\n'.format(self._options[0]['factors'], len(w)))
                     for midx in xrange(self._num_processes):
                         self._processes[midx].terminate()
                     sys.exit(1)
@@ -416,7 +414,7 @@ class Translator(object):
                             self._output_queue.cancel_join_thread()
                             for idx in xrange(self._num_processes):
                                 self._processes[idx].terminate()
-                            sys.stderr.write("Error: translate worker process {0} crashed with exitcode {1}".format(self._processes[midx].pid, self._processes[midx].exitcode))
+                            logging.error("Translate worker process {0} crashed with exitcode {1}".format(self._processes[midx].pid, self._processes[midx].exitcode))
                             sys.exit(1)
             request_id, idx, output_item = resp
             self._retrieved_translations[request_id][idx] = output_item
@@ -434,7 +432,7 @@ class Translator(object):
         """
         Returns the translation of @param source_segments.
         """
-        sys.stderr.write('Translating {0} segments...\n'.format(len(source_segments)))
+        logging.info('Translating {0} segments...\n'.format(len(source_segments)))
         n_samples, source_sentences = self._send_jobs(source_segments, translation_settings)
 
         translations = []
@@ -578,15 +576,19 @@ def main(input_file, output_file, decoder_settings, translation_settings):
 
     translator.write_translations(output_file, translations, translation_settings)
 
-    sys.stderr.write('Done\n')
+    logging.info('Done')
     translator.shutdown()
 
 
 if __name__ == "__main__":
+    # parse console arguments
     parser = ConsoleInterfaceDefault()
     args = parser.parse_args()
     input_file = args.input
     output_file = args.output
     decoder_settings = parser.get_decoder_settings()
     translation_settings = parser.get_translation_settings()
+    # start logging
+    level = logging.DEBUG if decoder_settings.verbose else logging.WARNING
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
     main(input_file, output_file, decoder_settings, translation_settings)
