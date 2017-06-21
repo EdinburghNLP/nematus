@@ -16,7 +16,7 @@ class TranslationRequestNematus(TranslationRequest):
 
         request = self._request.json
         if 'segments' in request:
-            self.segments = request['segments']
+            self.segments = [' '.join(tokens) for tokens in request['segments']]
         if 'beam_width' in request:
             self.settings.beam_width = request['beam_width']
         if 'normalize' in request:
