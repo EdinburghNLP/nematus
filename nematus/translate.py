@@ -49,7 +49,7 @@ class Translation(object):
             self.score,
             " ".join(self.source_words),
             len(self.source_words) + 1,
-            len(self.target_words)
+            len(self.target_words) + 1
         ]
         header = "{0} ||| {1} ||| {2} ||| {3} ||| {4} {5}\n".format(*columns)
 
@@ -503,7 +503,7 @@ class Translator(object):
         output_file = translation_settings.alignment_filename
         # TODO: 1 = TEXT, 2 = JSON
         if translation_settings.alignment_type == 1:
-            output_file.write(translation.get_alignment_text() + "\n")
+            output_file.write(translation.get_alignment_text() + "\n\n")
         else:
             output_file.write(translation.get_alignment_json() + "\n")
 
