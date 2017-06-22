@@ -59,7 +59,7 @@ class TestTranslate(unittest.TestCase):
 
         translation_settings = TranslationSettings()
         translation_settings.beam_width = 12
-        translation_settings.normalize = True
+        translation_settings.normalization_alpha = 1.0
         translation_settings.suppress_unk = True
         translation_settings.get_word_probs = True
 
