@@ -93,6 +93,13 @@ class NematusServer(object):
         """
         self._route()
         self._server.run(host=self._host, port=self._port, debug=self._debug, server='paste')
+        self._cleanup()
+
+    def _cleanup(self):
+        """
+        Graceful exit for components.
+        """
+        self._translator.shutdown()
 
     def _route(self):
         """

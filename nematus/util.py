@@ -32,7 +32,7 @@ def load_config(basename):
             sys.exit(1)
 
 
-def seqs2words(seq, inverse_target_dictionary):
+def seqs2words(seq, inverse_target_dictionary, join=True):
     words = []
     for w in seq:
         if w == 0:
@@ -41,4 +41,4 @@ def seqs2words(seq, inverse_target_dictionary):
             words.append(inverse_target_dictionary[w])
         else:
             words.append('UNK')
-    return ' '.join(words)
+    return ' '.join(words) if join else words

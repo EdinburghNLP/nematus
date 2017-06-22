@@ -450,7 +450,7 @@ class Translator(object):
                     current_alignment = None if not translation_settings.get_alignment else alignment[j]
                     translation = Translation(sentence_id=i,
                                               source_words=source_sentences[i],
-                                              target_words=seqs2words(samples[j], self._word_idict_trg),
+                                              target_words=seqs2words(samples[j], self._word_idict_trg, join=False),
                                               score=scores[j],
                                               alignment=current_alignment,
                                               target_probs=word_probs[j],
@@ -463,7 +463,7 @@ class Translator(object):
                 current_alignment = None if not translation_settings.get_alignment else alignment
                 translation = Translation(sentence_id=i,
                                           source_words=source_sentences[i],
-                                          target_words=seqs2words(samples, self._word_idict_trg),
+                                          target_words=seqs2words(samples, self._word_idict_trg, join=False),
                                           score=scores,
                                           alignment=current_alignment,
                                           target_probs=word_probs,
