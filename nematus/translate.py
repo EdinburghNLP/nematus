@@ -223,17 +223,17 @@ class Translator(object):
     def _load_theano(self):
         """
         Loads models, sets theano shared variables and builds samplers.
-        This entails irrevocable binding to a specific GPU!
+        This entails irrevocable binding to a specific GPU.
         """
 
         from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
         from theano import shared
 
         from nmt import (build_sampler, gen_sample)
-        from theano_util import (load_params, init_theano_params)
+        from theano_util import (numpy_floatX, load_params, init_theano_params)
 
         trng = RandomStreams(1234)
-        use_noise = shared(numpy.float32(0.))
+        use_noise = shared(numpy_floatX(0.))
 
         fs_init = []
         fs_next = []
