@@ -2,6 +2,7 @@
 Theano utility functions
 '''
 
+import sys
 import json
 import cPickle as pkl
 import numpy
@@ -10,6 +11,20 @@ from collections import OrderedDict
 import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+
+floatX = theano.config.floatX
+numpy_floatX = numpy.typeDict[floatX]
+
+# float16 warning
+if floatX == 'float16':
+   bad = True
+   try:
+       [major_v, minor_v, sub_v] = map(int, theano.version.short_version.split('.'))
+       # When a version of Theano that supports float16 without bugs is released, add a check here
+   except:
+       pass
+   if bad:
+       print >> sys.stderr, "Warning: float16 may not be fully supported by the current version of Theano"
 
 # push parameters to Theano shared variables
 def zip_to_theano(params, tparams):
@@ -54,7 +69,7 @@ def load_params(path, params, with_prefix=''):
         if kk not in pp:
             warnings.warn('%s is not in the archive' % kk)
             continue
-        new_params[with_prefix+kk] = pp[kk]
+        new_params[with_prefix+kk] = pp[kk].astype(floatX, copy=False)
 
     params.update(new_params)
     return params
@@ -68,8 +83,22 @@ def load_optimizer_params(path, optimizer_name):
         pp = numpy.load(path + '.npz')
     for kk in pp:
         if kk.startswith(optimizer_name):
-            params[kk] = pp[kk]
+            params[kk] = pp[kk].astype(floatX, copy=False)
     return params
+
+# save model parameters, optimizer parameters and progress
+def save(model_params, optimizer_params, training_progress, base_filename, file_float_type='float32'):
+    if file_float_type != floatX:
+        new_model_params, new_optimizer_params = {}, {}
+        for kk, vv in model_params.iteritems():
+            new_model_params[kk] = vv.astype(file_float_type)
+        for kk, vv in optimizer_params.iteritems():
+            new_optimizer_params[kk] = vv.astype(file_float_type)
+        model_params, optimizer_params = new_model_params, new_optimizer_params
+
+    numpy.savez(base_filename, **model_params)
+    numpy.savez(base_filename + '.gradinfo', **optimizer_params)
+    training_progress.save_to_json(base_filename + '.progress.json')
 
 def tanh(x):
     return tensor.tanh(x)

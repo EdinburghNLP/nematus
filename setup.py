@@ -5,7 +5,7 @@ import setuptools
 
 setuptools.setup(
     name='nematus',
-    version='0.1dev',
+    version='0.2dev',
     description='Neural machine translation tools on top of Theano',
     long_description=open(os.path.join(os.path.dirname(
         os.path.abspath(__file__)), 'README.md')).read(),

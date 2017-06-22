@@ -1,5 +1,9 @@
 #!/bin/bash
+# simple preprocessing script
+# a more sophisticated example, that includes truecasing and re-using the BPE segmentation for a test set,
+# can be found here: https://github.com/rsennrich/wmt16-scripts/tree/master/sample
 
+# stem of the file names of the parallel corpus (assumes that the file names are $P.$S (for the source) and $P.$T (for the target))
 P=$1
 
 # source language (example: fr)

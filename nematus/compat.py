@@ -22,10 +22,33 @@ def fill_options(options):
         options['tie_encoder_decoder_embeddings'] = False
     if not 'tie_decoder_embeddings' in options:
         options['tie_decoder_embeddings'] = False
+    if not 'enc_depth' in options:
+        options['enc_depth'] = 1
+    if not 'dec_depth' in options:
+        options['dec_depth'] = 1
+
+    if not 'enc_recurrence_transition_depth' in options:
+        options['enc_recurrence_transition_depth'] = 1
+    if not 'dec_base_recurrence_transition_depth' in options:
+        options['dec_base_recurrence_transition_depth'] = 2
+
+    if not 'dec_deep_context' in options:
+        if 'deep_include_ctx' in options:
+           options['dec_deep_context'] = options['deep_include_ctx']
+        else:
+            options['deep_include_ctx'] = False
     if not 'encoder_truncate_gradient' in options:
         options['encoder_truncate_gradient'] = -1
     if not 'decoder_truncate_gradient' in options:
         options['decoder_truncate_gradient'] = -1
+    if not 'enc_depth_bidirectional' in options:
+        options['enc_depth_bidirectional'] = options['enc_depth']
+    if not 'decoder_deep' in options:
+        options['decoder_deep'] = 'gru'
+    if not 'layer_normalisation' in options:
+        options['layer_normalisation'] = False
+    if not 'weight_normalisation' in options:
+        options['weight_normalisation'] = False
     if not 'reload_training_progress' in options:
         options['reload_training_progress'] = True
     if not 'use_domain_interpolation' in options:
@@ -39,6 +62,8 @@ def fill_options(options):
     if not 'domain_interpolation_indomain_datasets' in options:
         options['domain_interpolation_indomain_datasets'] = ['indomain.en', 'indomain.fr']
 
-
-
-
+    if not 'dec_high_recurrence_transition_depth' in options:
+        if options['decoder_deep'] == 'gru_cond':
+            options['dec_high_recurrence_transition_depth'] = 2
+        else:
+            options['dec_high_recurrence_transition_depth'] = 1

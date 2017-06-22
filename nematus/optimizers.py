@@ -13,7 +13,7 @@ from util import *
 from theano_util import *
 
 # Calling convention:
-# f_grad_shared, f_update = name(hyperp, tparams, grads, inputs (list), cost)
+# f_update = name(hyperp, tparams, grads, inputs (list), cost)
 # with profile as an optional argument
 
 def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimizer_params={}, profile=False):
@@ -22,12 +22,16 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
     updates = []
     optimizer_tparams = {}
 
+    # Avoid underflow of e with float16
+    if (floatX == "float16") and (e > 0.0):
+        e = max(e, 1e-6)
+
     t_prev_name = PREFIX + 't_prev'
     if t_prev_name in optimizer_params:
         t_prev_init = optimizer_params[t_prev_name]
     else:
         t_prev_init = 0.
-    t_prev = theano.shared(numpy.float32(t_prev_init), t_prev_name)
+    t_prev = theano.shared(numpy_floatX(t_prev_init), t_prev_name)
     optimizer_tparams[t_prev_name] = t_prev
     
     t = t_prev + 1.
@@ -65,95 +69,116 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams
 
 def adadelta(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
-    zipped_grads = [theano.shared(p.get_value() * numpy.float32(0.),
-                                  name='%s_grad' % k)
-                    for k, p in tparams.iteritems()]
-    running_up2 = [theano.shared(p.get_value() * numpy.float32(0.),
-                                 name='%s_rup2' % k)
-                   for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * numpy.float32(0.),
-                                    name='%s_rgrad2' % k)
-                      for k, p in tparams.iteritems()]
+    PREFIX = 'adadelta_'
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
-             for rg2, g in zip(running_grads2, grads)]
+    updates = []
+    optimizer_tparams = {}
 
-    f_grad_shared = theano.function(inp, cost, updates=zgup+rg2up,
-                                    profile=profile)
+    for p, g in zip(tparams.values(), grads):
+        zg_name = PREFIX + p.name + '_zg'
+        if zg_name in optimizer_params:
+            zg_init = optimizer_params[zg_name]
+        else:
+            zg_init = p.get_value() * 0.
+        zg = theano.shared(zg_init, zg_name)
+        optimizer_tparams[zg_name] = zg
 
-    updir = [-tensor.sqrt(ru2 + 1e-6) / tensor.sqrt(rg2 + 1e-6) * zg
-             for zg, ru2, rg2 in zip(zipped_grads, running_up2,
-                                     running_grads2)]
-    ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
-             for ru2, ud in zip(running_up2, updir)]
-    param_up = [(p, p + ud) for p, ud in zip(itemlist(tparams), updir)]
+        ru2_name = PREFIX + p.name + '_ru2'
+        if ru2_name in optimizer_params:
+            ru2_init = optimizer_params[ru2_name]
+        else:
+            ru2_init = p.get_value() * 0.
+        ru2 = theano.shared(ru2_init, ru2_name)
+        optimizer_tparams[ru2_name] = ru2 
 
-    f_update = theano.function([lr], [], updates=ru2up+param_up,
+        rg2_name = PREFIX + p.name + '_rg2'
+        if rg2_name in optimizer_params:
+            rg2_init = optimizer_params[rg2_name]
+        else:
+            rg2_init = p.get_value() * 0.
+        rg2 = theano.shared(rg2_init, rg2_name)
+        optimizer_tparams[rg2_name] = rg2 
+
+        ud = -tensor.sqrt(ru2 + 1e-6) / tensor.sqrt(rg2 + 1e-6) * zg
+        updates.append((zg, g))
+        updates.append((rg2, 0.95 * rg2 + 0.05 * (g ** 2)))
+        updates.append((ru2, 0.95 * ru2 + 0.05 * (ud ** 2)))
+        updates.append((p, p + ud))
+
+    f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    # TODO: third return value should be a dict of name->shared var used by optimizer
-    return f_grad_shared, f_update, {}
-
+    return f_update, optimizer_tparams
 
 def rmsprop(lr, tparams, grads, inp, cost, optimizer_params={}, profile=False):
-    zipped_grads = [theano.shared(p.get_value() * numpy.float32(0.),
-                                  name='%s_grad' % k)
-                    for k, p in tparams.iteritems()]
-    running_grads = [theano.shared(p.get_value() * numpy.float32(0.),
-                                   name='%s_rgrad' % k)
-                     for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * numpy.float32(0.),
-                                    name='%s_rgrad2' % k)
-                      for k, p in tparams.iteritems()]
+    PREFIX = 'rmsprop_'
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rgup = [(rg, 0.95 * rg + 0.05 * g) for rg, g in zip(running_grads, grads)]
-    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
-             for rg2, g in zip(running_grads2, grads)]
+    updates = []
+    optimizer_tparams = {}
 
-    f_grad_shared = theano.function(inp, cost, updates=zgup+rgup+rg2up,
-                                    profile=profile)
+    for p, g in zip(tparams.values(), grads):
+        zg_name = PREFIX + p.name + '_zg'
+        if zg_name in optimizer_params:
+            zg_init = optimizer_params[zg_name]
+        else:
+            zg_init = p.get_value() * 0.
+        zg = theano.shared(zg_init, zg_name)
+        optimizer_tparams[zg_name] = zg
 
-    updir = [theano.shared(p.get_value() * numpy.float32(0.),
-                           name='%s_updir' % k)
-             for k, p in tparams.iteritems()]
-    updir_new = [(ud, 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4))
-                 for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads,
-                                            running_grads2)]
-    param_up = [(p, p + udn[1])
-                for p, udn in zip(itemlist(tparams), updir_new)]
-    f_update = theano.function([lr], [], updates=updir_new+param_up,
+        rg_name = PREFIX + p.name + '_rg'
+        if rg_name in optimizer_params:
+            rg_init = optimizer_params[rg_name]
+        else:
+            rg_init = p.get_value() * 0.
+        rg = theano.shared(rg_init, rg_name)
+        optimizer_tparams[rg_name] = rg
+
+        rg2_name = PREFIX + p.name + '_rg2'
+        if rg2_name in optimizer_params:
+            rg2_init = optimizer_params[rg2_name]
+        else:
+            rg2_init = p.get_value() * 0.
+        rg2 = theano.shared(rg2_init, rg2_name)
+        optimizer_tparams[rg2_name] = rg2
+
+        ud_name = PREFIX + p.name + '_ud'
+        if ud_name in optimizer_params:
+            ud_init = optimizer_params[ud_name]
+        else:
+            ud_init = p.get_value() * 0.
+        ud = theano.shared(ud_init, ud_name)
+        optimizer_tparams[ud_name] = ud 
+
+        updates.append((zg, g))
+        updates.append((rg, 0.95 * rg + 0.05 * g))
+        updates.append((rg2, 0.95 * rg2 + 0.05 * (g ** 2)))
+
+        udn = 0.9 * ud - 1e-4 * zg / tensor.sqrt(rg2 - rg ** 2 + 1e-4)
+        updates.append((ud, udn))
+        updates.append((p, p + udn))
+
+
+    f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    # TODO: third return value should be a dict of name->shared var used by optimizer
-    return f_grad_shared, f_update, {}
-
+    return f_update, optimizer_tparams
 
 def sgd(lr, tparams, grads, inp, cost, optimizer_params=None, profile=False):
-    gshared = [theano.shared(p.get_value() * 0.,
-                             name='%s_grad' % k)
-               for k, p in tparams.iteritems()]
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    updates = [(p, p - lr * g) for p, g in zip(tparams.values(), grads)]
+    f_update = theano.function([lr]+inp, cost, updates=updates, profile=profile)
 
-    f_grad_shared = theano.function(inp, cost, updates=gsup,
-                                    profile=profile)
+    return f_update, {}
 
-    pup = [(p, p - lr * g) for p, g in zip(itemlist(tparams), gshared)]
-    f_update = theano.function([lr], [], updates=pup, profile=profile)
-
-    return f_grad_shared, f_update, {}
-
-def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}, profile=False):
+def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.9, optimizer_params={}, profile=False):
     assert momentum >= 0 and momentum < 1
     PREFIX = 'sgdmomentum_'
 
+    updates = []
     optimizer_tparams = {}
 
-    updates = []
     for p, g in zip(tparams.values(), grads):
         prev_name = PREFIX + p.name + '_prev'
         if prev_name in optimizer_params:
@@ -169,4 +194,4 @@ def sgdmomentum(lr, tparams, grads, inp, cost, momentum=0.5, optimizer_params={}
     f_update = theano.function([lr]+inp, cost, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
-    return None, f_update, optimizer_tparams
+    return f_update, optimizer_tparams

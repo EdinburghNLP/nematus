@@ -13,13 +13,13 @@ from util import load_dict, load_config
 from alignment_util import *
 from compat import fill_options
 
-from theano_util import (load_params, init_theano_params)
+from theano_util import (floatX, numpy_floatX, load_params, init_theano_params)
 from nmt import (pred_probs, build_model, prepare_data, init_params)
 
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
 
-def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights):
+def rescore_model(source_file, nbest_file, saveto, models, options, b, normalization_alpha, verbose, alignweights):
 
     trng = RandomStreams(1234)
 
@@ -55,7 +55,7 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         scores = []
         alignments = []
         for i, f_log_probs in enumerate(fs_log_probs):
-            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalize=normalize, alignweights = alignweights)
+            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalization_alpha=normalization_alpha, alignweights = alignweights)
             scores.append(score)
             alignments.append(alignment)
 
@@ -100,7 +100,7 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normalize
         align_OUT.close()
 
 def main(models, source_file, nbest_file, saveto, b=80,
-         normalize=False, verbose=False, alignweights=False):
+         normalization_alpha=0.0, verbose=False, alignweights=False):
 
     # load model model_options
     options = []
@@ -109,14 +109,14 @@ def main(models, source_file, nbest_file, saveto, b=80,
 
         fill_options(options[-1])
 
-    rescore_model(source_file, nbest_file, saveto, models, options, b, normalize, verbose, alignweights)
+    rescore_model(source_file, nbest_file, saveto, models, options, b, normalization_alpha, verbose, alignweights)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', type=int, default=80,
                         help="Minibatch size (default: %(default)s))")
-    parser.add_argument('-n', action="store_true",
-                        help="Normalize scores by sentence length")
+    parser.add_argument('-n', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
+                        help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
     parser.add_argument('-v', action="store_true", help="verbose mode.")
     parser.add_argument('--models', '-m', type=str, nargs = '+', required=True,
                         help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
@@ -135,4 +135,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.models, args.source, args.input,
-         args.output, b=args.b, normalize=args.n, verbose=args.v, alignweights=args.walign)
+         args.output, b=args.b, normalization_alpha=args.n, verbose=args.v, alignweights=args.walign)
