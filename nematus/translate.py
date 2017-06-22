@@ -274,12 +274,12 @@ class Translator(object):
                 # environment variable does not exist at all
                 os.environ['THEANO_FLAGS'] = 'device=%s' % device_id
 
-    def _load_models(self, device_id):
+    def _load_models(self, process_id, device_id):
         """
         Modifies environment variable to change the THEANO device, then loads
         models and returns them.
         """
-        logging.debug("Process '%s' - Loading models on GPU %s\n" % (os.getpid(), device_id))
+        logging.debug("Process '%s' - Loading models on GPU %s\n" % (process_id, device_id))
 
         # modify environment flag 'device'
         self._set_device(device_id)
@@ -293,7 +293,7 @@ class Translator(object):
         the parent process.
         """
         # load theano functionality
-        trng, fs_init, fs_next, gen_sample = self._load_models(device_id)
+        trng, fs_init, fs_next, gen_sample = self._load_models(process_id, device_id)
 
         # listen to queue in while loop, translate items
         while True:
@@ -426,7 +426,7 @@ class Translator(object):
         for idx in xrange(num_samples):
             yield self._retrieved_translations[request_id][idx]
 
-        # then remove all entries with this request ID from the dictionary, right?
+        # then remove all entries with this request ID from the dictionary
         del self._retrieved_translations[request_id]
 
     ### EXPOSED TRANSLATION FUNCTIONS ###
