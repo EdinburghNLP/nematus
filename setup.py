@@ -15,7 +15,7 @@ setuptools.setup(
                       'Theano',
                       'ipdb',
                       'bottle',
-                      'bottle-log'
+                      'bottle-log',
                       'paste'],
     dependency_links=['git+http://github.com/Theano/Theano.git#egg=Theano',],
     classifiers=['Development Status :: 3 - Alpha',
