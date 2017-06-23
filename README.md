@@ -44,7 +44,7 @@ Nematus requires the following packages:
  - Theano >= 0.7 (and its dependencies).
 
 we recommend executing the following command in a Python virtual environment:
-   `pip install numpy numexpr cython tables theano bottle`
+   `pip install numpy numexpr cython tables theano bottle bottle-log paste`
 
 the following packages are optional, but *highly* recommended
 

@@ -13,7 +13,6 @@ setuptools.setup(
     url='http://github.com/rsennrich/nematus',
     install_requires=['numpy',
                       'Theano',
-                      'ipdb',
                       'bottle',
                       'bottle-log',
                       'paste'],

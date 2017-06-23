@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip
 RUN pip install -U setuptools
-RUN pip install numexpr cython ipdb
+RUN pip install numexpr cython tables bottle bottle-log paste
 
 # Set CUDA_ROOT
 ENV CUDA_ROOT /usr/local/cuda/bin

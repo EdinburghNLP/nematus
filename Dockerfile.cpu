@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip
 
-RUN pip install numpy numexpr cython theano ipdb
+RUN pip install numpy numexpr cython theano tables bottle bottle-log paste
 
 RUN mkdir -p /path/to
 WORKDIR /path/to/
