@@ -69,6 +69,8 @@ def load_params(path, params, with_prefix=''):
         if kk not in pp:
             warnings.warn('%s is not in the archive' % kk)
             continue
+        if kk == "zipped_params":
+            continue
         new_params[with_prefix+kk] = pp[kk].astype(floatX, copy=False)
 
     params.update(new_params)
