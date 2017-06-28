@@ -7,7 +7,6 @@ import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-import cPickle as pkl
 import json
 import numpy
 import copy
@@ -476,10 +475,10 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if options['dec_depth'] > 1:
         init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
 
-    logging.debug('Building f_init...')
+    logging.info('Building f_init...')
     outs = [init_state, ctx]
     f_init = theano.function([x], outs, name='f_init', profile=profile)
-    logging.debug('Done')
+    logging.info('Done')
 
     # x: 1 x 1
     y = tensor.vector('y_sampler', dtype='int64')
@@ -499,7 +498,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
-    logging.debug('Building f_next..')
+    logging.info('Building f_next..')
     inps = [y, ctx, init_state]
     outs = [next_probs, next_sample, ret_state]
 
@@ -507,7 +506,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
         outs.append(opt_ret['dec_alphas'])
 
     f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    logging.debug('Done')
+    logging.info('Done')
 
     return f_init, f_next
 
@@ -643,14 +642,14 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                         non_sequences=[ctx, pctx_]+shared_vars,
                         n_steps=n_steps, truncate_gradient=options['decoder_truncate_gradient'])
 
-    logging.debug('Building f_sample...')
+    logging.info('Building f_sample...')
     if greedy:
         inps = [x, x_mask, n_steps]
     else:
         inps = [x, k, n_steps]
     outs = [sample, probs]
     f_sample = theano.function(inps, outs, name='f_sample', updates=updates, profile=profile)
-    logging.debug('Done')
+    logging.info('Done')
 
     return f_sample
 
@@ -915,8 +914,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         for pp in pprobs:
             probs.append(pp)
 
-        if verbose:
-            print logging.debug('%d samples computed' % (n_done))
+        logging.debug('%d samples computed' % (n_done))
 
     return numpy.array(probs), alignments_json
 
@@ -1009,7 +1007,7 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
     assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
-    
+
     assert(enc_recurrence_transition_depth >= 1) # enc recurrence transition depth must be at least 1.
     assert(dec_base_recurrence_transition_depth >= 2) # dec base recurrence transition depth must be at least 2.
     assert(dec_high_recurrence_transition_depth >= 1) # dec higher recurrence transition depth must be at least 1.
@@ -1038,13 +1036,13 @@ def train(dim_word=512,  # word vector dimensionality
     if tie_encoder_decoder_embeddings:
         assert (n_words_src == n_words), "When tying encoder and decoder embeddings, source and target vocabulary size must the same"
         if worddicts[0] != worddicts[1]:
-            warn("Encoder-decoder embedding tying is enabled with different source and target dictionaries. This is usually a configuration error")
+            logging.warning("Encoder-decoder embedding tying is enabled with different source and target dictionaries. This is usually a configuration error")
 
     if model_options['objective'] == 'MRT':
         # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
         # per pair of train sentences (== per batch of samples), so we set batch_size to 1 to make
         # model saving, validation, etc trigger after the same number of updates as before
-        print 'Running in MRT mode, minibatch size set to 1 sentence'
+        logging.info('Running in MRT mode, minibatch size set to 1 sentence')
         batch_size = 1
 
     # initialize training progress
@@ -1060,16 +1058,16 @@ def train(dim_word=512,  # word vector dimensionality
     # reload training progress
     training_progress_file = saveto + '.progress.json'
     if reload_ and reload_training_progress and os.path.exists(training_progress_file):
-        print 'Reloading training progress'
+        logging.info('Reloading training progress')
         training_progress.load_from_json(training_progress_file)
         if (training_progress.estop == True) or (training_progress.eidx > max_epochs) or (training_progress.uidx >= finish_after):
             logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % training_progress_file)
             return numpy.inf
 
 
-    print 'Loading data'
+    logging.info('Loading data')
     if use_domain_interpolation:
-        print 'Using domain interpolation with initial ratio %s, final ratio %s, increase rate %s' % (training_progress.domain_interpolation_cur, domain_interpolation_max, domain_interpolation_inc)
+        logging.info('Using domain interpolation with initial ratio %s, final ratio %s, increase rate %s' % (training_progress.domain_interpolation_cur, domain_interpolation_max, domain_interpolation_inc))
         train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
                          dictionaries[:-1], dictionaries[1],
                          n_words_source=n_words_src, n_words_target=n_words,
@@ -1107,28 +1105,28 @@ def train(dim_word=512,  # word vector dimensionality
 
     comp_start = time.time()
 
-    print 'Building model'
+    logging.info('Building model')
     params = init_params(model_options)
 
     optimizer_params = {}
     # prepare parameters
     if reload_ and os.path.exists(saveto):
-        print 'Reloading model parameters'
+        logging.info('Reloading model parameters')
         params = load_params(saveto, params)
-        print 'Reloading optimizer parameters'
+        logging.info('Reloading optimizer parameters')
         try:
-            print 'trying to load optimizer params from {0} or {1}'.format(saveto + '.gradinfo', saveto + '.gradinfo.npz')
+            logging.info('trying to load optimizer params from {0} or {1}'.format(saveto + '.gradinfo', saveto + '.gradinfo.npz'))
             optimizer_params = load_optimizer_params(saveto + '.gradinfo', optimizer)
         except IOError:
-            print '{0}(.npz) not found. Trying to load optimizer params from {1}(.npz)'.format(saveto + '.gradinfo', saveto)
+            logging.warning('{0}(.npz) not found. Trying to load optimizer params from {1}(.npz)'.format(saveto + '.gradinfo', saveto))
             optimizer_params = load_optimizer_params(saveto, optimizer)
     elif prior_model:
-        print 'Initializing model parameters from prior'
+        logging.info('Initializing model parameters from prior')
         params = load_params(prior_model, params)
 
     # load prior model if specified
     if prior_model:
-        print 'Loading prior model parameters'
+        logging.info('Loading prior model parameters')
         params = load_params(prior_model, params, with_prefix='prior_')
 
     tparams = init_theano_params(params)
@@ -1142,16 +1140,16 @@ def train(dim_word=512,  # word vector dimensionality
     inps = [x, x_mask, y, y_mask]
 
     if validFreq or sampleFreq:
-        print 'Building sampler'
+        logging.info('Building sampler')
         f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
     if model_options['objective'] == 'MRT':
-        print 'Building MRT sampler'
+        logging.info('Building MRT sampler')
         f_sampler = build_full_sampler(tparams, model_options, use_noise, trng)
 
     # before any regularizer
-    print 'Building f_log_probs...',
+    logging.info('Building f_log_probs...')
     f_log_probs = theano.function(inps, cost, profile=profile)
-    print 'Done'
+    logging.info('Done')
 
     if model_options['objective'] == 'CE':
         cost = cost.mean()
@@ -1160,7 +1158,7 @@ def train(dim_word=512,  # word vector dimensionality
         cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
-        logging.error('Objective must be one of ["CE", "MRT"]\n')
+        logging.error('Objective must be one of ["CE", "MRT"]')
         sys.exit(1)
 
     # apply L2 regularization on weights
@@ -1192,9 +1190,9 @@ def train(dim_word=512,  # word vector dimensionality
     if prior_model:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
 
-    print 'Computing gradient...',
+    logging.info('Computing gradient...')
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
-    print 'Done'
+    logging.info('Done')
 
     # apply gradient clipping here
     if clip_c > 0.:
@@ -1211,19 +1209,19 @@ def train(dim_word=512,  # word vector dimensionality
     # compile the optimizer, the actual computational graph is compiled here
     lr = tensor.scalar(name='lr')
 
-    print 'Building optimizers...',
+    logging.info('Building optimizers...')
     f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
                                                                  grads, inps, cost,
                                                                  profile=profile,
                                                                  optimizer_params=optimizer_params)
-    print 'Done'
+    logging.info('Done')
 
-    print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
+    logging.info('Total compilation time: {0:.1f}s'.format(time.time() - comp_start))
 
     if validFreq == -1 or saveFreq == -1 or sampleFreq == -1:
-        print 'Computing number of training batches'
+        logging.info('Computing number of training batches')
         num_batches = len(train)
-        print 'There are {} batches in the train set'.format(num_batches)
+        logging.info('There are {} batches in the train set'.format(num_batches))
 
         if validFreq == -1:
             validFreq = num_batches
@@ -1232,7 +1230,7 @@ def train(dim_word=512,  # word vector dimensionality
         if sampleFreq == -1:
             sampleFreq = num_batches
 
-    print 'Optimization'
+    logging.info('Optimization')
 
     #save model options
     json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
@@ -1268,7 +1266,7 @@ def train(dim_word=512,  # word vector dimensionality
                                                     n_words=n_words)
 
                 if x is None:
-                    print 'Minibatch with zero sample under length ', maxlen
+                    logging.warning('Minibatch with zero sample under length %d' % maxlen)
                     training_progress.uidx -= 1
                     continue
 
@@ -1293,7 +1291,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # add EOS and prepare factored data
                     x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
-                                              n_factors=factors, 
+                                              n_factors=factors,
                                               n_words_src=n_words_src, n_words=n_words)
 
                     # draw independent samples to compute mean reward
@@ -1366,7 +1364,7 @@ def train(dim_word=512,  # word vector dimensionality
             # check for bad numbers, usually we remove non-finite elements
             # and continue training - but not done here
             if numpy.isnan(cost) or numpy.isinf(cost):
-                print 'NaN detected'
+                logging.warning('NaN detected')
                 return 1., 1., 1.
 
             # verbose
@@ -1375,7 +1373,16 @@ def train(dim_word=512,  # word vector dimensionality
                 sps = last_disp_samples / float(ud)
                 wps = last_words / float(ud)
                 cost_avg = cost_sum / float(cost_batches)
-                print 'Epoch ', training_progress.eidx, 'Update ', training_progress.uidx, 'Cost ', cost_avg, 'UD ', ud, "{0:.2f} sents/s".format(sps), "{0:.2f} words/s".format(wps)
+                logging.info(
+                    'Epoch {epoch} Update {update} Cost {cost} UD {ud} {sps} {wps}'.format(
+                        epoch=training_progress.eidx,
+                        update=training_progress.uidx,
+                        cost=cost_avg,
+                        ud=ud,
+                        sps="{0:.2f} sents/s".format(sps),
+                        wps="{0:.2f} words/s".format(wps)
+                    )
+                )
                 ud_start = time.time()
                 cost_batches = 0
                 last_disp_samples = 0
@@ -1385,7 +1392,7 @@ def train(dim_word=512,  # word vector dimensionality
             # save the best model so far, in addition, save the latest model
             # into a separate file with the iteration number for external eval
             if numpy.mod(training_progress.uidx, saveFreq) == 0:
-                print 'Saving the best model...',
+                logging.info('Saving the best model...')
                 if best_p is not None:
                     params = best_p
                     optimizer_params = best_opt_p
@@ -1394,18 +1401,18 @@ def train(dim_word=512,  # word vector dimensionality
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
 
                 save(params, optimizer_params, training_progress, saveto)
-                print 'Done'
+                logging.info('Done')
 
                 # save with uidx
                 if not overwrite:
-                    print 'Saving the model at iteration {}...'.format(training_progress.uidx),
+                    logging.info('Saving the model at iteration {}...'.format(training_progress.uidx))
                     saveto_uidx = '{}.iter{}.npz'.format(
                         os.path.splitext(saveto)[0], training_progress.uidx)
 
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
                     save(params, optimizer_params, training_progress, saveto_uidx)
-                    print 'Done'
+                    logging.info('Done')
 
 
             # generate some samples with the model and display them
@@ -1482,43 +1489,43 @@ def train(dim_word=512,  # word vector dimensionality
                     if training_progress.bad_counter > patience:
                         if use_domain_interpolation and (training_progress.domain_interpolation_cur < domain_interpolation_max):
                             training_progress.domain_interpolation_cur = min(training_progress.domain_interpolation_cur + domain_interpolation_inc, domain_interpolation_max)
-                            print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur
+                            logging.info('No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur)
                             train.adjust_domain_interpolation_rate(training_progress.domain_interpolation_cur)
                             if best_p is not None:
                                 zip_to_theano(best_p, tparams)
                                 zip_to_theano(best_opt_p, optimizer_tparams)
                             training_progress.bad_counter = 0
                         else:
-                            print 'Valid ', valid_err
-                            print 'Early Stop!'
+                            logging.info('Valid {}'.format(valid_err))
+                            logging.info('Early Stop!')
                             training_progress.estop = True
                             break
 
-                print 'Valid ', valid_err
+                logging.info('Valid {}'.format(valid_err))
 
                 if external_validation_script:
-                    print "Calling external validation script"
+                    logging.info("Calling external validation script")
                     if p_validation is not None and p_validation.poll() is None:
-                        print "Waiting for previous validation run to finish"
-                        print "If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes"
+                        logging.info("Waiting for previous validation run to finish")
+                        logging.info("If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes")
                         valid_wait_start = time.time()
                         p_validation.wait()
-                        print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
-                    print 'Saving  model...',
+                        logging.info("Waited for {0:.1f} seconds".format(time.time()-valid_wait_start))
+                    logging.info('Saving  model...')
                     params = unzip_from_theano(tparams, excluding_prefix='prior_')
                     optimizer_params = unzip_from_theano(optimizer_tparams, excluding_prefix='prior_')
                     save(params, optimizer_params, training_progress, saveto+'.dev')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
-                    print 'Done'
+                    logging.info('Done')
                     p_validation = Popen([external_validation_script])
 
             # finish after this many updates
             if training_progress.uidx >= finish_after:
-                print 'Finishing after %d iterations!' % training_progress.uidx
+                logging.info('Finishing after %d iterations!' % training_progress.uidx)
                 training_progress.estop = True
                 break
 
-        print 'Seen %d samples' % n_samples
+        logging.info('Seen %d samples' % n_samples)
 
         if training_progress.estop:
             break
@@ -1533,7 +1540,7 @@ def train(dim_word=512,  # word vector dimensionality
                                         model_options, valid)
         valid_err = valid_errs.mean()
 
-        print 'Valid ', valid_err
+        logging.info('Valid {}'.format(valid_err))
 
     if best_p is not None:
         params = copy.copy(best_p)
@@ -1703,6 +1710,10 @@ if __name__ == '__main__':
                          help="indomain parallel training corpus (source and target)")
 
     args = parser.parse_args()
+
+    # set up logging
+    level = logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
     #print vars(args)
     train(**vars(args))

@@ -6,17 +6,17 @@ produce the score, and optionally alignment for each pair.
 import sys
 import argparse
 import tempfile
+import logging
 
 import numpy
-import json
 
 from data_iterator import TextIterator
-from util import load_dict, load_config
-from alignment_util import *
+from util import load_config
+from alignment_util import combine_source_target_text_1to1
 from compat import fill_options
 
 from theano_util import (floatX, numpy_floatX, load_params, init_theano_params)
-from nmt import (pred_probs, build_model, prepare_data, init_params)
+from nmt import (pred_probs, build_model, prepare_data)
 
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
@@ -44,7 +44,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
         use_noise.set_value(0.)
 
         if alignweights:
-            sys.stderr.write("\t*** Save weight mode ON, alignment matrix will be saved.\n")
+            logging.debug("Save weight mode ON, alignment matrix will be saved.")
             outputs = [cost, opt_ret['dec_alphas']]
             f_log_probs = theano.function(inps, outputs)
         else:
@@ -127,6 +127,10 @@ if __name__ == "__main__":
                         help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment")
 
     args = parser.parse_args()
+
+    # set up logging
+    level = logging.DEBUG if args.v else logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
     main(args.models, args.source, args.target,
          args.output, b=args.b, normalization_alpha=args.n, verbose=args.v, alignweights=args.walign)

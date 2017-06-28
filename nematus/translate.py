@@ -279,7 +279,7 @@ class Translator(object):
         Modifies environment variable to change the THEANO device, then loads
         models and returns them.
         """
-        logging.debug("Process '%s' - Loading models on GPU %s\n" % (process_id, device_id))
+        logging.debug("Process '%s' - Loading models on device %s\n" % (process_id, device_id))
 
         # modify environment flag 'device'
         self._set_device(device_id)
