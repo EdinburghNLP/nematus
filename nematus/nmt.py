@@ -975,6 +975,8 @@ def train(dim_word=512,  # word vector dimensionality
           domain_interpolation_max=1.0, # maximum fraction of in-domain training data
           domain_interpolation_inc=0.1, # interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached
           domain_interpolation_indomain_datasets=[None, None], # in-domain parallel training corpus (source and target)
+          anneal_restarts=0, # when patience run out, restart with annealed learning rate X times before early stopping
+          anneal_decay=0.5, # decay learning rate by this amount on each restart
           maxibatch_size=20, #How many minibatches to load at one time
           objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
           mrt_alpha=0.005,
@@ -1050,6 +1052,7 @@ def train(dim_word=512,  # word vector dimensionality
     best_p = None
     best_opt_p = None
     training_progress.bad_counter = 0
+    training_progress.anneal_restarts_done = 0
     training_progress.uidx = 0
     training_progress.eidx = 0
     training_progress.estop = False
@@ -1064,6 +1067,9 @@ def train(dim_word=512,  # word vector dimensionality
             logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % training_progress_file)
             return numpy.inf
 
+    # adjust learning rate if we resume process that has already entered annealing phase
+    if training_progress.anneal_restarts_done > 0:
+        lrate *= anneal_decay**training_progress.anneal_restarts_done
 
     logging.info('Loading data')
     if use_domain_interpolation:
@@ -1487,6 +1493,8 @@ def train(dim_word=512,  # word vector dimensionality
                 if valid_err >= numpy.array(training_progress.history_errs).min():
                     training_progress.bad_counter += 1
                     if training_progress.bad_counter > patience:
+
+                        # change mix of in-domain and out-of-domain data
                         if use_domain_interpolation and (training_progress.domain_interpolation_cur < domain_interpolation_max):
                             training_progress.domain_interpolation_cur = min(training_progress.domain_interpolation_cur + domain_interpolation_inc, domain_interpolation_max)
                             logging.info('No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % training_progress.domain_interpolation_cur)
@@ -1495,6 +1503,23 @@ def train(dim_word=512,  # word vector dimensionality
                                 zip_to_theano(best_p, tparams)
                                 zip_to_theano(best_opt_p, optimizer_tparams)
                             training_progress.bad_counter = 0
+
+                        # anneal learning rate and reset optimizer parameters
+                        elif training_progress.anneal_restarts_done < anneal_restarts:
+                            logging.info('No progress on the validation set, annealing learning rate and resuming from best params.')
+                            lrate *= anneal_decay
+                            training_progress.anneal_restarts_done += 1
+                            training_progress.bad_counter = 0
+
+                            # reload best parameters
+                            if best_p is not None:
+                                zip_to_theano(best_p, tparams)
+
+                            # reset optimizer parameters
+                            for item in optimizer_tparams.values():
+                                item.set_value(numpy.array(item.get_value()) * 0.)
+
+                        # stop
                         else:
                             logging.info('Valid {}'.format(valid_err))
                             logging.info('Early Stop!')
@@ -1674,6 +1699,10 @@ if __name__ == '__main__':
                          help="validation frequency (default: %(default)s)")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
+    validation.add_argument('--anneal_restarts', type=int, default=0, metavar='INT',
+                         help="when patience runs out, restart training INT times with annealed learning rate (default: %(default)s)")
+    validation.add_argument('--anneal_decay', type=float, default=0.5, metavar='FLOAT',
+                         help="learning rate decay on each restart (default: %(default)s)")
     validation.add_argument('--external_validation_script', type=str, default=None, metavar='PATH',
                          help="location of validation script (to run your favorite metric for validation) (default: %(default)s)")
 

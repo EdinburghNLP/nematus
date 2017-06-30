@@ -181,6 +181,8 @@ execute nematus/nmt.py to train a model.
 | --valid_batch_size INT | validation minibatch size (default: 80) |
 | --validFreq INT       | validation frequency (default: 10000) |
 | --patience INT        | early stopping patience (default: 10) |
+| --anneal_restarts INT | when patience runs out, restart training INT times with annealed learning rate (default: 0) |
+| --anneal_decay FLOAT  | learning rate decay on each restart (default: 0.5) |
 | --external_validation_script PATH | location of validation script (to run your favorite metric for validation) (default: None) |
 
 #### display parameters

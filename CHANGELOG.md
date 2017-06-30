@@ -10,6 +10,7 @@ v0.2 (dev)
  - better memory efficiency
  - save historical gradient information for seamless resuming of interrupted training runs
  - sgdmomentum optimizer
+ - learning rate annealing
  - various bugfixes
 
 v0.1 (2/3/2017)
