@@ -3,6 +3,11 @@
 # This file is part of moses.  Its use is licensed under the GNU Lesser General
 # Public License version 2.1 or, at your option, any later version.
 
+# This file uses the internal tokenization of mteval-v13a.pl,
+# giving the exact same (case-sensitive) results on untokenized text.
+# 
+# like multi-bleu.perl , it supports plain text input and multiple references.
+
 # $Id$
 use warnings;
 use strict;
@@ -15,7 +20,7 @@ if ($ARGV[0] eq "-lc") {
 
 my $stem = $ARGV[0];
 if (!defined $stem) {
-  print STDERR "usage: multi-bleu.pl [-lc] reference < hypothesis\n";
+  print STDERR "usage: multi-bleu-detok.pl [-lc] reference < hypothesis\n";
   print STDERR "Reads the references from reference or reference0, reference1, ...\n";
   exit(1);
 }
