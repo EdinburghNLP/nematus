@@ -226,6 +226,11 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                  truncate_gradient=options['encoder_truncate_gradient'],
                                                  profile=profile)
 
+    # discard LSTM cell state
+    if options['encoder'].startswith('lstm'):
+        proj[0] = proj[0][:,:, :options['dim']]
+        projr[0] = projr[0][:,:, :options['dim']]
+
     ## bidirectional levels before merge
     for level in range(2, options['enc_depth_bidirectional'] + 1):
         prefix_f = pp('encoder', level)
@@ -251,6 +256,11 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                      recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                      truncate_gradient=options['encoder_truncate_gradient'],
                                                      profile=profile)
+
+        # discard LSTM cell state
+        if options['encoder'].startswith('lstm'):
+            proj[0] = proj[0][:,:, :options['dim']]
+            projr[0] = projr[0][:,:, :options['dim']]
 
         # residual connections
         if level > 1:
@@ -1647,14 +1657,14 @@ if __name__ == '__main__':
                          help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
-    #network.add_argument('--encoder', type=str, default='gru',
-                         #choices=['gru'],
-                         #help='encoder recurrent layer')
+    network.add_argument('--encoder', type=str, default='gru',
+                         choices=['gru', 'lstm'],
+                         help='encoder recurrent layer')
     #network.add_argument('--decoder', type=str, default='gru_cond',
                          #choices=['gru_cond'],
                          #help='first decoder recurrent layer')
     network.add_argument('--decoder_deep', type=str, default='gru',
-                         choices=['gru', 'gru_cond'],
+                         choices=['gru', 'gru_cond', 'lstm'],
                          help='decoder recurrent layer after first one')
 
     training = parser.add_argument_group('training parameters')

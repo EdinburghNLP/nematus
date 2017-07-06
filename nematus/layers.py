@@ -21,6 +21,7 @@ from alignment_util import *
 # layers: 'name': ('parameter initializer', 'feedforward')
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
+          'lstm': ('param_init_lstm', 'lstm_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
           'embedding': ('param_init_embedding_layer', 'embedding_layer')
           }
@@ -642,4 +643,198 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                                     truncate_gradient=truncate_gradient,
                                     profile=profile,
                                     strict=False)
+    return rval
+
+
+
+# LSTM layer
+def param_init_lstm(options, params, prefix='lstm', nin=None, dim=None,
+                   recurrence_transition_depth=1,
+                   **kwargs):
+    if nin is None:
+        nin = options['dim_proj']
+    if dim is None:
+        dim = options['dim_proj']
+
+    scale_add = 0.0
+    scale_mul = 1.0
+
+    for i in xrange(recurrence_transition_depth):
+        suffix = '' if i == 0 else ('_drt_%s' % i)
+
+        # recurrent transformation weights for gates
+
+        U = numpy.concatenate([ortho_weight(dim),
+                               ortho_weight(dim),
+                               ortho_weight(dim)],
+                               axis=1)
+
+        params[pp(prefix, 'U'+suffix)] = U
+        params[pp(prefix, 'b'+suffix)] = numpy.zeros((3 * dim,)).astype(floatX)
+
+        # recurrent transformation weights for hidden state proposal
+        Ux = ortho_weight(dim)
+        params[pp(prefix, 'Ux'+suffix)] = Ux
+        params[pp(prefix, 'bx'+suffix)] = numpy.zeros((dim,)).astype(floatX)
+
+        if options['layer_normalisation']:
+            params[pp(prefix,'U%s_lnb' % suffix)] = scale_add * numpy.ones((3*dim)).astype(floatX)
+            params[pp(prefix,'U%s_lns' % suffix)] = scale_mul * numpy.ones((3*dim)).astype(floatX)
+            params[pp(prefix,'Ux%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+            params[pp(prefix,'Ux%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        if options['weight_normalisation']:
+            params[pp(prefix,'U%s_wns' % suffix)] = scale_mul * numpy.ones((3*dim)).astype(floatX)
+            params[pp(prefix,'Ux%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+
+        if i == 0:
+            # embedding to gates transformation weights
+            W = numpy.concatenate([norm_weight(nin, dim),
+                                   norm_weight(nin, dim),
+                                   norm_weight(nin, dim)],
+                                   axis=1)
+            params[pp(prefix, 'W'+suffix)] = W
+            # embedding to hidden state proposal weights
+            Wx = norm_weight(nin, dim)
+            params[pp(prefix, 'Wx'+suffix)] = Wx
+            if options['layer_normalisation']:
+                params[pp(prefix,'W%s_lnb' % suffix)] = scale_add * numpy.ones((3*dim)).astype(floatX)
+                params[pp(prefix,'W%s_lns' % suffix)] = scale_mul * numpy.ones((3*dim)).astype(floatX)
+                params[pp(prefix,'Wx%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wx%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            if options['weight_normalisation']:
+                params[pp(prefix,'W%s_wns' % suffix)] = scale_mul * numpy.ones((3*dim)).astype(floatX)
+                params[pp(prefix,'Wx%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+
+    return params
+
+
+def lstm_layer(tparams, state_below, options, dropout, prefix='lstm',
+              mask=None, one_step=False,
+              init_state=None,
+              dropout_probability_below=0,
+              dropout_probability_rec=0,
+              recurrence_transition_depth=1,
+              truncate_gradient=-1,
+              profile=False,
+              **kwargs):
+
+    if one_step:
+        assert init_state, 'previous state must be provided'
+
+    nsteps = state_below.shape[0]
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
+    else:
+        n_samples = 1
+        dim_below = state_below.shape[1]
+
+    dim = tparams[pp(prefix, 'Ux')].shape[1]
+
+    # utility function to look up parameters and apply weight normalization if enabled
+    def wn(param_name):
+        param = tparams[param_name]
+        if options['weight_normalisation']: 
+            return weight_norm(param, tparams[param_name+'_wns'])
+        else:
+            return param
+
+    # initial/previous state
+    if init_state is None:
+        init_state = tensor.zeros((n_samples, dim*2))
+
+    if mask is None:
+        mask = tensor.ones((state_below.shape[0], 1))
+
+    below_dropout = dropout((n_samples, dim_below), dropout_probability_below, num=2)
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=2*(recurrence_transition_depth))
+
+    # utility function to slice a tensor
+    def _slice(_x, n, dim):
+        if _x.ndim == 3:
+            return _x[:, :, n*dim:(n+1)*dim]
+        return _x[:, n*dim:(n+1)*dim]
+
+    state_below_list, state_belowx_list = [], []
+
+    # state_below is the input word embeddings
+    # input to the gates, concatenated
+    state_below_ = tensor.dot(state_below*below_dropout[0], wn(pp(prefix, 'W'))) + tparams[pp(prefix, 'b')]
+    # input to compute the hidden state proposal
+    state_belowx = tensor.dot(state_below*below_dropout[1], wn(pp(prefix, 'Wx'))) + tparams[pp(prefix, 'bx')]
+    if options['layer_normalisation']:
+        state_below_ = layer_norm(state_below_, tparams[pp(prefix, 'W_lnb')], tparams[pp(prefix, 'W_lns')])
+        state_belowx = layer_norm(state_belowx, tparams[pp(prefix, 'Wx_lnb')], tparams[pp(prefix, 'Wx_lns')])
+    state_below_list.append(state_below_)
+    state_belowx_list.append(state_belowx)
+
+    # step function to be used by scan
+    # arguments    | sequences |outputs-info| non-seqs
+    def _step_slice(*args):
+        n_ins = 1
+        m_ = args[0]
+        x_list = args[1:1+n_ins]
+        xx_list = args[1+n_ins:1+2*n_ins]
+        h_, rec_dropout = args[-2], args[-1]
+
+        h_prev = _slice(h_, 0, dim)
+        c_prev = _slice(h_, 1, dim)
+
+        for i in xrange(recurrence_transition_depth):
+            suffix = '' if i == 0 else ('_drt_%s' % i)
+            if i == 0:
+                x_cur = x_list[i]
+                xx_cur = xx_list[i]
+            else:
+                x_cur = tparams[pp(prefix, 'b'+suffix)]
+                xx_cur = tparams[pp(prefix, 'bx'+suffix)]
+
+            preact = tensor.dot(h_prev*rec_dropout[0+2*i], wn(pp(prefix, 'U'+suffix)))
+            if options['layer_normalisation']:
+                preact = layer_norm(preact, tparams[pp(prefix, 'U%s_lnb' % suffix)], tparams[pp(prefix, 'U%s_lns' % suffix)])
+            preact += x_cur
+
+            # gates
+            gate_i = tensor.nnet.sigmoid(_slice(preact, 0, dim))
+            gate_f = tensor.nnet.sigmoid(_slice(preact, 1, dim))
+            gate_o = tensor.nnet.sigmoid(_slice(preact, 2, dim))
+
+            # compute the hidden state proposal
+            preactx = tensor.dot(h_prev*rec_dropout[1+2*i], wn(pp(prefix, 'Ux'+suffix)))
+            if options['layer_normalisation']:
+                preactx = layer_norm(preactx, tparams[pp(prefix, 'Ux%s_lnb' % suffix)], tparams[pp(prefix, 'Ux%s_lns' % suffix)])
+            preactx += xx_cur
+
+            c = tensor.tanh(preactx)
+            c = gate_f * c_prev + gate_i * c
+            h = gate_o * tensor.tanh(c)
+
+            # if state is masked, simply copy previous
+            h = m_[:, None] * h + (1. - m_)[:, None] * h_prev
+            c = m_[:, None] * c + (1. - m_)[:, None] * c_prev
+            h_prev = h
+            c_prev = c
+
+        h = concatenate([h, c], axis=1)
+
+        return h
+
+    # prepare scan arguments
+    seqs = [mask] + state_below_list + state_belowx_list
+    _step = _step_slice
+    shared_vars = [rec_dropout]
+
+    if one_step:
+        rval = _step(*(seqs + [init_state] + shared_vars))
+    else:
+        rval, updates = theano.scan(_step,
+                                sequences=seqs,
+                                outputs_info=init_state,
+                                non_sequences=shared_vars,
+                                name=pp(prefix, '_layers'),
+                                n_steps=nsteps,
+                                truncate_gradient=truncate_gradient,
+                                profile=profile,
+                                strict=False)
+    rval = [rval]
     return rval
