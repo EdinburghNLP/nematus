@@ -1045,7 +1045,7 @@ def train(dim_word=512,  # word vector dimensionality
     # first layer is always bidirectional; make sure people don't forget to increase enc_depth as well
     assert(model_options['enc_depth_bidirectional'] >= 1 and model_options['enc_depth_bidirectional'] <= model_options['enc_depth'])
 
-    if model_options['decoder'].startswith('lstm') != model_options['decoder_deep'].startswith('lstm'):
+    if model_options['dec_depth'] > 1 and model_options['decoder'].startswith('lstm') != model_options['decoder_deep'].startswith('lstm'):
         logging.error('cannot mix LSTM and GRU in decoder')
         logging.error('decoder: {0}'.format(model_options['decoder']))
         logging.error('decoder_deep: {0}'.format(model_options['decoder_deep']))
