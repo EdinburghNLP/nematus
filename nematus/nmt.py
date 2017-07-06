@@ -126,9 +126,13 @@ def init_params(options):
 
     ctxdim = 2 * options['dim']
 
+    dec_state = options['dim']
+    if options['decoder_deep'].startswith('lstm'):
+        dec_state *= 2
+
     # init_state, init_cell
     params = get_layer_param('ff')(options, params, prefix='ff_state',
-                                nin=ctxdim, nout=options['dim'])
+                                nin=ctxdim, nout=dec_state)
     # decoder
     params = get_layer_param(options['decoder'])(options, params,
                                               prefix='decoder',
@@ -355,6 +359,10 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
 
+            # don't pass LSTM cell state to next layer
+            if level == 2 and options['decoder'].startswith('lstm') or level > 2 and options['decoder_deep'].startswith('lstm'):
+                next_state = next_state[:,:, :options['dim']]
+
             if options['dec_deep_context']:
                 if sampling:
                     axis=1
@@ -381,8 +389,16 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
             if sampling:
                 ret_state.append(out_state.reshape((1, next_state.shape[0], next_state.shape[1])))
 
+            # don't pass LSTM cell state to next layer
+            if options['decoder_deep'].startswith('lstm'):
+                out_state = out_state[:,:, :options['dim']]
+
             # residual connection
             next_state += out_state
+
+    # don't pass LSTM cell state to next layer
+    elif options['decoder'].startswith('lstm'):
+        next_state = next_state[:,:, :options['dim']]
 
     if sampling:
         if options['dec_depth'] > 1:
@@ -432,6 +448,9 @@ def build_model(tparams, options):
 
     # mean of the context (across time) will be used to initialize decoder rnn
     ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
+
+    if options['decoder_deep'].startswith('lstm'):
+        ctx_mean = tensor.tile(ctx_mean, (1, 1, 2))
 
     # or you can use the last state of forward + backward encoder rnns
     # ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
@@ -1028,6 +1047,12 @@ def train(dim_word=512,  # word vector dimensionality
         model_options['enc_depth_bidirectional'] = model_options['enc_depth']
     # first layer is always bidirectional; make sure people don't forget to increase enc_depth as well
     assert(model_options['enc_depth_bidirectional'] >= 1 and model_options['enc_depth_bidirectional'] <= model_options['enc_depth'])
+
+    if model_options['decoder'].startswith('lstm') != model_options['decoder_deep'].startswith('lstm'):
+        logging.error('cannot mix LSTM and GRU in decoder')
+        logging.error('decoder: {0}'.format(model_options['decoder']))
+        logging.error('decoder_deep: {0}'.format(model_options['decoder_deep']))
+        sys.exit(1)
 
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
