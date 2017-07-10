@@ -21,42 +21,41 @@ from nmt import (pred_probs, build_model, prepare_data)
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import theano
 
+def load_scorer(model, option, alignweights=None):
+
+    # load model parameters and set theano shared variables
+    param_list = numpy.load(model).files
+    param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
+    params = load_params(model, param_list)
+    tparams = init_theano_params(params)
+
+    trng, use_noise, \
+        x, x_mask, y, y_mask, \
+        opt_ret, \
+        cost = \
+        build_model(tparams, option)
+    inps = [x, x_mask, y, y_mask]
+    use_noise.set_value(0.)
+
+    if alignweights:
+        logging.debug("Save weight mode ON, alignment matrix will be saved.")
+        outputs = [cost, opt_ret['dec_alphas']]
+        f_log_probs = theano.function(inps, outputs)
+    else:
+        f_log_probs = theano.function(inps, cost)
+
+    return f_log_probs
+
 def rescore_model(source_file, target_file, saveto, models, options, b, normalization_alpha, verbose, alignweights):
 
     trng = RandomStreams(1234)
-
-    fs_log_probs = []
-
-    for model, option in zip(models, options):
-
-        # load model parameters and set theano shared variables
-        param_list = numpy.load(model).files
-        param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
-        params = load_params(model, param_list)
-        tparams = init_theano_params(params)
-
-        trng, use_noise, \
-            x, x_mask, y, y_mask, \
-            opt_ret, \
-            cost = \
-            build_model(tparams, option)
-        inps = [x, x_mask, y, y_mask]
-        use_noise.set_value(0.)
-
-        if alignweights:
-            logging.debug("Save weight mode ON, alignment matrix will be saved.")
-            outputs = [cost, opt_ret['dec_alphas']]
-            f_log_probs = theano.function(inps, outputs)
-        else:
-            f_log_probs = theano.function(inps, cost)
-
-        fs_log_probs.append(f_log_probs)
 
     def _score(pairs, alignweights=False):
         # sample given an input sequence and obtain scores
         scores = []
         alignments = []
-        for i, f_log_probs in enumerate(fs_log_probs):
+        for i, model in enumerate(models):
+            f_log_probs = load_scorer(model, options[i], alignweights=alignweights)
             score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalization_alpha=normalization_alpha, alignweights = alignweights)
             scores.append(score)
             alignments.append(alignment)
