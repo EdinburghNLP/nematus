@@ -11,6 +11,7 @@ import json
 import numpy
 import copy
 import argparse
+from scipy import misc
 
 import os
 import sys
@@ -77,7 +78,7 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
-
+    
     return x, x_mask, y, y_mask
 
 # initialize all parameters
@@ -919,6 +920,54 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
+def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, reward="hamming_distance", n_samples=1, keep_ref=False):
+    #augment data with copies, of which the targets will be perturbed
+    x = [copy.copy(x_s) for x_s in x for _ in xrange(n_samples + int(keep_ref))]
+    y = [copy.copy(y_s) for y_s in y for _ in xrange(n_samples + int(keep_ref))]
+    vocab = range(1, vocab_size+1) # vocabulary for perturbation
+    vocab.remove(tgt_worddict['eos'])
+    vocab.remove(tgt_worddict['UNK'])
+    for y_n, y_s in enumerate(y):
+        #print "\nNumber ", y_n
+        #print seqs2words(y_s, worddicts_r)
+        if keep_ref and numpy.mod(y_n, n_samples + int(keep_ref)) == 0:  
+            #don't disturb references if keep_ref==True
+            continue
+        elif reward == "hamming_distance":
+            #perturb targets
+            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+            #sample distance from exponentiated payoff distribution
+            edits = numpy.random.choice(range(len(y_s)), p=q)
+            #print "Edits: ", edits
+            #make edits at random positions
+            positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
+            print "Positions: ", positions
+            for position in positions:
+                y_s[position] = numpy.random.choice(vocab)
+        elif reward == "edit_distance":
+            pass #TODO
+        elif reward == "bleu":
+            pass #TODO
+        #print seqs2words(y_s, worddicts_r)
+            
+    return x, y
+
+
+def hamming_distance_distribution(sentence_length, vocab_size, tau=1.0):
+    #based on https://gist.github.com/norouzi/8c4d244922fa052fa8ec18d8af52d366
+    max_edits = sentence_length
+    c = numpy.zeros(max_edits)
+    for edit_dist in xrange(max_edits):
+        n_edits = misc.comb(sentence_length, edit_dist)
+        #reweight
+        c[edit_dist] = numpy.log(n_edits) + edit_dist * numpy.log(vocab_size)
+        c[edit_dist] = c[edit_dist] - edit_dist / tau - edit_dist / tau * numpy.log(vocab_size)
+
+    c = numpy.exp(c)
+    c /= numpy.sum(c)
+    return c
+
+
 def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
@@ -978,13 +1027,18 @@ def train(dim_word=512,  # word vector dimensionality
           anneal_restarts=0, # when patience run out, restart with annealed learning rate X times before early stopping
           anneal_decay=0.5, # decay learning rate by this amount on each restart
           maxibatch_size=20, #How many minibatches to load at one time
-          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
+          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) \
+                          #RAML: reward-augmented maximum likelihood (see https://papers.nips.cc/paper/6547-reward-augmented-maximum-likelihood-for-neural-structured-prediction.pdf)
           mrt_alpha=0.005,
           mrt_samples=100,
           mrt_samples_meanloss=10,
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
+          raml_tau=1.0, # 0: becomes equivalent to ML
+          raml_samples=1,
+          raml_reference=False,
+          raml_reward="hamming_distance",
           model_version=0.1, #store version used for training for compatibility
           prior_model=None, # Prior model file, used for MAP
           tie_encoder_decoder_embeddings=False, # Tie the input embeddings of the encoder and the decoder (first factor only)
@@ -1157,14 +1211,14 @@ def train(dim_word=512,  # word vector dimensionality
     f_log_probs = theano.function(inps, cost, profile=profile)
     logging.info('Done')
 
-    if model_options['objective'] == 'CE':
+    if model_options['objective'] in ['CE', 'RAML']:
         cost = cost.mean()
     elif model_options['objective'] == 'MRT':
         #MRT objective function
         cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
-        logging.error('Objective must be one of ["CE", "MRT"]')
+        logging.error('Objective must be one of ["CE", "MRT", "RAML"]')
         sys.exit(1)
 
     # apply L2 regularization on weights
@@ -1264,8 +1318,13 @@ def train(dim_word=512,  # word vector dimensionality
             xlen = len(x)
             n_samples += xlen
 
-            if model_options['objective'] == 'CE':
+            if model_options['objective'] in ['CE', 'RAML']:
 
+                if model_options['objective'] == 'RAML':
+                    x, y = augment_raml_data(x, y, worddicts_r[-1], worddicts[-1], vocab_size=model_options['n_words'],
+                                             tau=model_options['raml_tau'], n_samples=model_options['raml_samples'],
+                                             reward=model_options['raml_reward'], keep_ref=model_options['raml_reference'])
+                
                 x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
                                                     n_factors=factors,
                                                     n_words_src=n_words_src,
@@ -1275,7 +1334,7 @@ def train(dim_word=512,  # word vector dimensionality
                     logging.warning('Minibatch with zero sample under length %d' % maxlen)
                     training_progress.uidx -= 1
                     continue
-
+                
                 cost_batches += 1
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
@@ -1683,8 +1742,9 @@ if __name__ == '__main__':
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--objective', choices=['CE', 'MRT'], default='CE',
-                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
+    training.add_argument('--objective', choices=['CE', 'MRT', 'RAML'], default='CE',
+                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) \
+                               RAML: Reward Augmented Maximum Likelihood (https://papers.nips.cc/paper/6547-reward-augmented-maximum-likelihood-for-neural-structured-prediction.pdf)')
     training.add_argument('--encoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
@@ -1724,7 +1784,17 @@ if __name__ == '__main__':
     mrt.add_argument('--mrt_reference', action="store_true",
                          help='add reference to MRT samples.')
     mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
-                     help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+                         help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+
+    raml = parser.add_argument_group('reward augmented maximum likelihood parameters')
+    raml.add_argument('--raml_tau', type=float, default=1.0, metavar='FLOAT',
+                          help="temperature for sharpness of exponentiated payoff distribution (default: %(default)s)")
+    raml.add_argument('--raml_samples', type=int, default=1, metavar='INT',
+                          help="augment outputs with n samples (default: %(default)s)")
+    raml.add_argument('--raml_reference', action="store_true",
+                          help="keep reference in addition to augmented outputs")
+    raml.add_argument('--raml_reward', type=str, default='hamming_distance', metavar='STR',
+                          help="reward for sampling from exponentiated payoff distribution (default: %(default)s)")
 
     domain_interpolation = parser.add_argument_group('domain interpolation parameters')
     domain_interpolation.add_argument('--use_domain_interpolation', action='store_true',  dest='use_domain_interpolation',
