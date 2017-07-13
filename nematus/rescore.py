@@ -29,7 +29,7 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normaliza
         scores = []
         alignments = []
         for i, model in enumerate(models):
-            f_log_probs = load_scorer.load(model, options[i], alignweights=alignweights)
+            f_log_probs = load_scorer(model, options[i], alignweights=alignweights)
             score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalization_alpha=normalization_alpha, alignweights = alignweights)
             scores.append(score)
             alignments.append(alignment)
