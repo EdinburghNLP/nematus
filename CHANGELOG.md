@@ -11,6 +11,7 @@ v0.2 (dev)
  - save historical gradient information for seamless resuming of interrupted training runs
  - sgdmomentum optimizer
  - learning rate annealing
+ - LSTM cells
  - various bugfixes
 
 v0.1 (2/3/2017)

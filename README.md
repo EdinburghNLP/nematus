@@ -148,11 +148,13 @@ execute nematus/nmt.py to train a model.
 | --weight_normalisation   | use weight normalisation (default: False) | 
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
-| --enc_depth INT | number of encoder layers (default: 1) |
+| --encoder                 | encoder cell type (default: gru)
+| --enc_depth INT           | number of encoder layers (default: 1) |
 | --enc_depth_bidirectional | number of bidirectional encoder layers; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional. |
-| --dec_depth INT | number of decoder layers (default: 1) |
-| --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
-| --decoder_deep | type of recurrent layer for decoder layers after the first (default: gru) |
+| --decoder                 | type of recurrent layer for first decoder layer (default: gru_cond |
+| --decoder_deep            | type of recurrent layer for decoder layers after the first (default: gru) |
+| --dec_depth INT           | number of decoder layers (default: 1) |
+| --dec_deep_context        | pass context vector (from first layer) to deep decoder layers |
 | --enc_recurrence_transition_depth | number of GRU transition operations applied in an encoder layer (default: 1) |
 | --dec_base_recurrence_transition_depth | number of GRU transition operations applied in first decoder layer (default: 2) |
 | --dec_high_recurrence_transition_depth | number of GRU transition operations applied in decoder layers after the first (default: 1) |

@@ -1681,13 +1681,13 @@ if __name__ == '__main__':
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
     network.add_argument('--encoder', type=str, default='gru',
                          choices=['gru', 'lstm'],
-                         help='encoder recurrent layer')
+                         help='encoder recurrent layer (default: %(default)s)')
     network.add_argument('--decoder', type=str, default='gru_cond',
                          choices=['gru_cond', 'lstm_cond'],
-                         help='first decoder recurrent layer')
+                         help='first decoder recurrent layer (default: %(default)s)')
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond', 'lstm'],
-                         help='decoder recurrent layer after first one')
+                         help='decoder recurrent layer after first one (default: %(default)s)')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
