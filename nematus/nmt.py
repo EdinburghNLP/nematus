@@ -933,6 +933,9 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
         if keep_ref and numpy.mod(y_n, n_samples + int(keep_ref)) == 0:  
             #don't disturb references if keep_ref==True
             continue
+        if len(y_s) <= 1:
+            #don't disturb single word sequences
+            continue
         elif reward == "hamming_distance":
             #perturb targets
             q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
@@ -941,11 +944,13 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
             #print "Edits: ", edits
             #make edits at random positions
             positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
-            print "Positions: ", positions
+            #print "Positions: ", positions
             for position in positions:
                 y_s[position] = numpy.random.choice(vocab)
         elif reward == "edit_distance":
             pass #TODO
+            #q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+            #edits = numpy.random.choice(range(len(y_s)), p=q)
         elif reward == "bleu":
             pass #TODO
         #print seqs2words(y_s, worddicts_r)
@@ -966,6 +971,12 @@ def hamming_distance_distribution(sentence_length, vocab_size, tau=1.0):
     c = numpy.exp(c)
     c /= numpy.sum(c)
     return c
+
+
+def edit_distance_distribution(sentence_length, vocab_size, tau=1.0):
+    pass
+    #max_edits = sentence_length
+    #c = numpy.zeros(max_edits)
 
 
 def train(dim_word=512,  # word vector dimensionality
