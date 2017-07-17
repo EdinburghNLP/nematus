@@ -924,12 +924,10 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
     #augment data with copies, of which the targets will be perturbed
     x = [copy.copy(x_s) for x_s in x for _ in xrange(n_samples + int(keep_ref))]
     y = [copy.copy(y_s) for y_s in y for _ in xrange(n_samples + int(keep_ref))]
-    vocab = range(1, vocab_size+1) # vocabulary for perturbation
+    vocab = range(1, len(tgt_worddict)) # vocabulary for perturbation
     vocab.remove(tgt_worddict['eos'])
     vocab.remove(tgt_worddict['UNK'])
     for y_n, y_s in enumerate(y):
-        #print "\nNumber ", y_n
-        #print seqs2words(y_s, worddicts_r)
         if keep_ref and numpy.mod(y_n, n_samples + int(keep_ref)) == 0:  
             #don't disturb references if keep_ref==True
             continue
@@ -938,7 +936,7 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
             continue
         elif reward == "hamming_distance":
             #perturb targets
-            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=len(tgt_worddict), tau=tau)
             #sample distance from exponentiated payoff distribution
             edits = numpy.random.choice(range(len(y_s)), p=q)
             #print "Edits: ", edits
