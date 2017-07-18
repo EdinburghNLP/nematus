@@ -40,7 +40,7 @@ from metrics.scorer_provider import ScorerProvider
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
 # batch preparation
-def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
+def prepare_data(seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
                  n_words=30000, n_factors=1):
     # x: a list of sentences
     lengths_x = [len(s) for s in seqs_x]
@@ -51,19 +51,27 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
         new_seqs_y = []
         new_lengths_x = []
         new_lengths_y = []
-        for l_x, s_x, l_y, s_y in zip(lengths_x, seqs_x, lengths_y, seqs_y):
+        new_weights = []
+        if weights is None:
+            weights = [0] * len(seqs_y) # to make the zip easier
+        for l_x, s_x, l_y, s_y, w in zip(lengths_x, seqs_x, lengths_y, seqs_y, weights):
             if l_x < maxlen and l_y < maxlen:
                 new_seqs_x.append(s_x)
                 new_lengths_x.append(l_x)
                 new_seqs_y.append(s_y)
                 new_lengths_y.append(l_y)
+                new_weights.append(w)
         lengths_x = new_lengths_x
         seqs_x = new_seqs_x
         lengths_y = new_lengths_y
         seqs_y = new_seqs_y
+        weights = new_weights
 
         if len(lengths_x) < 1 or len(lengths_y) < 1:
-            return None, None, None, None
+            if weights is not None:
+                return None, None, None, None, None
+            else:
+                return None, None, None, None
 
     n_samples = len(seqs_x)
     maxlen_x = numpy.max(lengths_x) + 1
@@ -78,8 +86,10 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
-    
-    return x, x_mask, y, y_mask
+    if weights is not None:
+        return x, x_mask, y, y_mask, weights
+    else:
+        return x, x_mask, y, y_mask
 
 # initialize all parameters
 def init_params(options):
@@ -920,30 +930,29 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
-def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, reward="hamming_distance", n_samples=1, keep_ref=False):
+def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
     #augment data with copies, of which the targets will be perturbed
-    x = [copy.copy(x_s) for x_s in x for _ in xrange(n_samples + int(keep_ref))]
-    y = [copy.copy(y_s) for y_s in y for _ in xrange(n_samples + int(keep_ref))]
-    vocab = range(1, vocab_size) # vocabulary for perturbation
+    x = [copy.copy(x_s) for x_s in x for _ in xrange(options['raml_samples'])]
+    y = [copy.copy(y_s) for y_s in y for _ in xrange(options['raml_samples'])]
+    sample_weights = numpy.empty(len(y), dtype=floatX)
+    vocab = range(1, options['n_words']) # vocabulary for perturbation
     vocab.remove(tgt_worddict['eos'])
     vocab.remove(tgt_worddict['UNK'])
     for y_n, y_s in enumerate(y):
-        if keep_ref and numpy.mod(y_n, n_samples + int(keep_ref)) == 0:  
-            #don't disturb references if keep_ref==True
-            continue
-        if len(y_s) <= 1:
-            #don't disturb single word sequences
-            continue
-        elif reward == "hamming_distance":
-            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+        if options['raml_reward'] == "hamming_distance":
+            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=options['n_words'], tau=options['raml_tau'])
             #sample distance from exponentiated payoff distribution
             edits = numpy.random.choice(range(len(y_s)), p=q)
-            positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
-            #print "Positions: ", positions
+            sample_weights[y_n] = q[edits]
+            if len(y_s) > 1:
+                positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
+            else:
+                positions = [0]
             for position in positions:
                 y_s[position] = numpy.random.choice(vocab)
-        elif reward == "edit_distance":
-            q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+
+        elif options['raml_reward'] == "edit_distance":
+            q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=options['n_words'], tau=options['tau'])
             edits = numpy.random.choice(range(len(y_s)), p=q)
             print "Edits: ", edits
             #TODO
@@ -951,8 +960,8 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
             #importance sampling?
             pass #TODO
         #print seqs2words(y_s, worddicts_r)
-            
-    return x, y
+
+    return x, y, sample_weights
 
 
 def train(dim_word=512,  # word vector dimensionality
@@ -1024,7 +1033,6 @@ def train(dim_word=512,  # word vector dimensionality
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
           raml_tau=1.0, # 0: becomes equivalent to ML
           raml_samples=1,
-          raml_reference=False,
           raml_reward="hamming_distance",
           model_version=0.1, #store version used for training for compatibility
           prior_model=None, # Prior model file, used for MAP
@@ -1087,6 +1095,12 @@ def train(dim_word=512,  # word vector dimensionality
         # model saving, validation, etc trigger after the same number of updates as before
         logging.info('Running in MRT mode, minibatch size set to 1 sentence')
         batch_size = 1
+    elif model_options['objective'] == 'RAML':
+        # in RAML mode, training examples are augmented with samples, causing the size of the
+        # batch to increase. Thus, divide batch_size by the number of samples to have approx.
+        # the same batch size for each update and thus prevent running out of memory.
+        batch_size = batch_size // model_options['raml_samples']
+        logging.info('Running in RAML mode, minibatch size divided by number of samples, set to %d' % batch_size)
 
     # initialize training progress
     training_progress = TrainingProgress()
@@ -1198,8 +1212,14 @@ def train(dim_word=512,  # word vector dimensionality
     f_log_probs = theano.function(inps, cost, profile=profile)
     logging.info('Done')
 
-    if model_options['objective'] in ['CE', 'RAML']:
+    if model_options['objective'] == 'CE':
         cost = cost.mean()
+    elif model_options['objective'] == 'RAML':
+        sample_weights = tensor.vector('sample_weights', dtype='floatX')
+        cost *= sample_weights
+        cost = cost.mean()
+        inps += [sample_weights]
+        #cost = cost.mean()
     elif model_options['objective'] == 'MRT':
         #MRT objective function
         cost, loss = mrt_cost(cost, y_mask, model_options)
@@ -1302,20 +1322,23 @@ def train(dim_word=512,  # word vector dimensionality
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
-            xlen = len(x)
-            n_samples += xlen
-
             if model_options['objective'] in ['CE', 'RAML']:
 
                 if model_options['objective'] == 'RAML':
-                    x, y = augment_raml_data(x, y, worddicts_r[-1], tgt_worddict=worddicts[-1], vocab_size = model_options['n_words'],
-                                             tau=model_options['raml_tau'], n_samples=model_options['raml_samples'],
-                                             reward=model_options['raml_reward'], keep_ref=model_options['raml_reference'])
+                    x, y, sample_weights = augment_raml_data(x, y, worddicts_r[-1],
+                                                                  tgt_worddict=worddicts[-1],
+                                                                  options=model_options)
+                else:
+                    sample_weights = [1] * len(y)
                 
-                x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
-                                                    n_factors=factors,
-                                                    n_words_src=n_words_src,
-                                                    n_words=n_words)
+                xlen = len(x)
+                n_samples += xlen
+
+                x, x_mask, y, y_mask, sample_weights = prepare_data(x, y, weights=sample_weights,
+                                                                    maxlen=maxlen,
+                                                                    n_factors=factors,
+                                                                    n_words_src=n_words_src,
+                                                                    n_words=n_words)
 
                 if x is None:
                     logging.warning('Minibatch with zero sample under length %d' % maxlen)
@@ -1327,11 +1350,17 @@ def train(dim_word=512,  # word vector dimensionality
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
                 # compute cost, grads and update parameters
-                cost = f_update(lrate, x, x_mask, y, y_mask)
+                if model_options['objective'] == 'RAML':
+                    cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
+                else:
+                    cost = f_update(lrate, x, x_mask, y, y_mask)
 
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
+                xlen = len(x)
+                n_samples += xlen
+
                 assert maxlen is not None and maxlen > 0
 
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
@@ -1778,8 +1807,6 @@ if __name__ == '__main__':
                           help="temperature for sharpness of exponentiated payoff distribution (default: %(default)s)")
     raml.add_argument('--raml_samples', type=int, default=1, metavar='INT',
                           help="augment outputs with n samples (default: %(default)s)")
-    raml.add_argument('--raml_reference', action="store_true",
-                          help="keep reference in addition to augmented outputs")
     raml.add_argument('--raml_reward', type=str, default='hamming_distance', metavar='STR',
                           help="reward for sampling from exponentiated payoff distribution (default: %(default)s)")
 
