@@ -126,9 +126,13 @@ def init_params(options):
 
     ctxdim = 2 * options['dim']
 
+    dec_state = options['dim']
+    if options['decoder_deep'].startswith('lstm'):
+        dec_state *= 2
+
     # init_state, init_cell
     params = get_layer_param('ff')(options, params, prefix='ff_state',
-                                nin=ctxdim, nout=options['dim'])
+                                nin=ctxdim, nout=dec_state)
     # decoder
     params = get_layer_param(options['decoder'])(options, params,
                                               prefix='decoder',
@@ -226,6 +230,11 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                  truncate_gradient=options['encoder_truncate_gradient'],
                                                  profile=profile)
 
+    # discard LSTM cell state
+    if options['encoder'].startswith('lstm'):
+        proj[0] = get_slice(proj[0], 0, options['dim'])
+        projr[0] = get_slice(projr[0], 0, options['dim'])
+
     ## bidirectional levels before merge
     for level in range(2, options['enc_depth_bidirectional'] + 1):
         prefix_f = pp('encoder', level)
@@ -251,6 +260,11 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
                                                      recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                      truncate_gradient=options['encoder_truncate_gradient'],
                                                      profile=profile)
+
+        # discard LSTM cell state
+        if options['encoder'].startswith('lstm'):
+            proj[0] = get_slice(proj[0], 0, options['dim'])
+            projr[0] = get_slice(projr[0], 0, options['dim'])
 
         # residual connections
         if level > 1:
@@ -345,6 +359,10 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     if options['dec_depth'] > 1:
         for level in range(2, options['dec_depth'] + 1):
 
+            # don't pass LSTM cell state to next layer
+            if options['decoder'].startswith('lstm'):
+                next_state = get_slice(next_state, 0, options['dim'])
+
             if options['dec_deep_context']:
                 if sampling:
                     axis=1
@@ -369,10 +387,18 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                               profile=profile)[0]
 
             if sampling:
-                ret_state.append(out_state.reshape((1, next_state.shape[0], next_state.shape[1])))
+                ret_state.append(out_state.reshape((1, proj[0].shape[0], proj[0].shape[1])))
+
+            # don't pass LSTM cell state to next layer
+            if options['decoder'].startswith('lstm'):
+                out_state = get_slice(out_state, 0, options['dim'])
 
             # residual connection
             next_state += out_state
+
+    # don't pass LSTM cell state to next layer
+    elif options['decoder'].startswith('lstm'):
+        next_state = get_slice(next_state, 0, options['dim'])
 
     if sampling:
         if options['dec_depth'] > 1:
@@ -1019,6 +1045,12 @@ def train(dim_word=512,  # word vector dimensionality
     # first layer is always bidirectional; make sure people don't forget to increase enc_depth as well
     assert(model_options['enc_depth_bidirectional'] >= 1 and model_options['enc_depth_bidirectional'] <= model_options['enc_depth'])
 
+    if model_options['dec_depth'] > 1 and model_options['decoder'].startswith('lstm') != model_options['decoder_deep'].startswith('lstm'):
+        logging.error('cannot mix LSTM and GRU in decoder')
+        logging.error('decoder: {0}'.format(model_options['decoder']))
+        logging.error('decoder_deep: {0}'.format(model_options['decoder_deep']))
+        sys.exit(1)
+
     # load dictionaries and invert them
     worddicts = [None] * len(dictionaries)
     worddicts_r = [None] * len(dictionaries)
@@ -1647,15 +1679,15 @@ if __name__ == '__main__':
                          help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
-    #network.add_argument('--encoder', type=str, default='gru',
-                         #choices=['gru'],
-                         #help='encoder recurrent layer')
-    #network.add_argument('--decoder', type=str, default='gru_cond',
-                         #choices=['gru_cond'],
-                         #help='first decoder recurrent layer')
+    network.add_argument('--encoder', type=str, default='gru',
+                         choices=['gru', 'lstm'],
+                         help='encoder recurrent layer (default: %(default)s)')
+    network.add_argument('--decoder', type=str, default='gru_cond',
+                         choices=['gru_cond', 'lstm_cond'],
+                         help='first decoder recurrent layer (default: %(default)s)')
     network.add_argument('--decoder_deep', type=str, default='gru',
-                         choices=['gru', 'gru_cond'],
-                         help='decoder recurrent layer after first one')
+                         choices=['gru', 'gru_cond', 'lstm'],
+                         help='decoder recurrent layer after first one (default: %(default)s)')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',

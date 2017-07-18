@@ -167,3 +167,7 @@ def zero_all(params):
     for kk, vv in params.iteritems():
         vv[:] = numpy.zeros_like(vv)
 
+def get_slice(array, n, dim):
+    if array.ndim == 3:
+        return array[:, :, n*dim:(n+1)*dim]
+    return array[:, n*dim:(n+1)*dim]
