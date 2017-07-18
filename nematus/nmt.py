@@ -53,7 +53,7 @@ def prepare_data(seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
         new_lengths_y = []
         new_weights = []
         if weights is None:
-            weights = [0] * len(seqs_y) # to make the zip easier
+            weights = [None] * len(seqs_y) # to make the zip easier
         for l_x, s_x, l_y, s_y, w in zip(lengths_x, seqs_x, lengths_y, seqs_y, weights):
             if l_x < maxlen and l_y < maxlen:
                 new_seqs_x.append(s_x)
@@ -1219,7 +1219,6 @@ def train(dim_word=512,  # word vector dimensionality
         cost *= sample_weights
         cost = cost.mean()
         inps += [sample_weights]
-        #cost = cost.mean()
     elif model_options['objective'] == 'MRT':
         #MRT objective function
         cost, loss = mrt_cost(cost, y_mask, model_options)
@@ -1329,7 +1328,7 @@ def train(dim_word=512,  # word vector dimensionality
                                                                   tgt_worddict=worddicts[-1],
                                                                   options=model_options)
                 else:
-                    sample_weights = [1] * len(y)
+                    sample_weights = None
                 
                 xlen = len(x)
                 n_samples += xlen
