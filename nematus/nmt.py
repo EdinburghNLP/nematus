@@ -11,7 +11,6 @@ import json
 import numpy
 import copy
 import argparse
-from scipy import misc
 
 import os
 import sys
@@ -31,6 +30,7 @@ from training_progress import TrainingProgress
 from util import *
 from theano_util import *
 from alignment_util import *
+from raml_distributions import *
 
 from layers import *
 from initializers import *
@@ -924,7 +924,7 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
     #augment data with copies, of which the targets will be perturbed
     x = [copy.copy(x_s) for x_s in x for _ in xrange(n_samples + int(keep_ref))]
     y = [copy.copy(y_s) for y_s in y for _ in xrange(n_samples + int(keep_ref))]
-    vocab = range(1, len(tgt_worddict)) # vocabulary for perturbation
+    vocab = range(1, vocab_size) # vocabulary for perturbation
     vocab.remove(tgt_worddict['eos'])
     vocab.remove(tgt_worddict['UNK'])
     for y_n, y_s in enumerate(y):
@@ -935,46 +935,24 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, vocab_size, tau=1.0, rewa
             #don't disturb single word sequences
             continue
         elif reward == "hamming_distance":
-            #perturb targets
-            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=len(tgt_worddict), tau=tau)
+            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
             #sample distance from exponentiated payoff distribution
             edits = numpy.random.choice(range(len(y_s)), p=q)
-            #print "Edits: ", edits
-            #make edits at random positions
             positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
             #print "Positions: ", positions
             for position in positions:
                 y_s[position] = numpy.random.choice(vocab)
         elif reward == "edit_distance":
-            pass #TODO
-            #q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
-            #edits = numpy.random.choice(range(len(y_s)), p=q)
+            q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=vocab_size, tau=tau)
+            edits = numpy.random.choice(range(len(y_s)), p=q)
+            print "Edits: ", edits
+            #TODO
         elif reward == "bleu":
+            #importance sampling?
             pass #TODO
         #print seqs2words(y_s, worddicts_r)
             
     return x, y
-
-
-def hamming_distance_distribution(sentence_length, vocab_size, tau=1.0):
-    #based on https://gist.github.com/norouzi/8c4d244922fa052fa8ec18d8af52d366
-    max_edits = sentence_length
-    c = numpy.zeros(max_edits)
-    for edit_dist in xrange(max_edits):
-        n_edits = misc.comb(sentence_length, edit_dist)
-        #reweight
-        c[edit_dist] = numpy.log(n_edits) + edit_dist * numpy.log(vocab_size)
-        c[edit_dist] = c[edit_dist] - edit_dist / tau - edit_dist / tau * numpy.log(vocab_size)
-
-    c = numpy.exp(c)
-    c /= numpy.sum(c)
-    return c
-
-
-def edit_distance_distribution(sentence_length, vocab_size, tau=1.0):
-    pass
-    #max_edits = sentence_length
-    #c = numpy.zeros(max_edits)
 
 
 def train(dim_word=512,  # word vector dimensionality
@@ -1330,7 +1308,7 @@ def train(dim_word=512,  # word vector dimensionality
             if model_options['objective'] in ['CE', 'RAML']:
 
                 if model_options['objective'] == 'RAML':
-                    x, y = augment_raml_data(x, y, worddicts_r[-1], worddicts[-1], vocab_size=model_options['n_words'],
+                    x, y = augment_raml_data(x, y, worddicts_r[-1], tgt_worddict=worddicts[-1], vocab_size = model_options['n_words'],
                                              tau=model_options['raml_tau'], n_samples=model_options['raml_samples'],
                                              reward=model_options['raml_reward'], keep_ref=model_options['raml_reference'])
                 
