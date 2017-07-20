@@ -20,9 +20,12 @@ from alignment_util import *
 
 # layers: 'name': ('parameter initializer', 'feedforward')
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
+          'creluff': ('param_init_crelufflayer', 'crelufflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
-          'embedding': ('param_init_embedding_layer', 'embedding_layer')
+          'embedding': ('param_init_embedding_layer', 'embedding_layer'),
+          'tanh_attention' : ('param_init_tanh_attention', 'tanh_attention'),
+          'crelu_attention' : ('param_init_crelu_attention', 'crelu_attention'),
           }
 
 
@@ -157,6 +160,65 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
         preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
 
     return eval(activ)(preact)
+
+# crelu feedforward layer
+def param_init_crelufflayer(options, params, prefix='creluff', nin=None, nout=None,
+                       ortho=True, weight_matrix=True, bias=True, followed_by_softmax=False):
+    if nin is None:
+        nin = options['dim_proj']
+    if nout is None:
+        nout = options['dim_proj']
+    if weight_matrix:
+        params[pp(prefix, 'W_pos')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
+        params[pp(prefix, 'W_neg')] = -params[pp(prefix, 'W_pos')]  # Looks linear initialization (Balduzzi et al. 2017)
+    if bias:
+       params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype(floatX)
+
+    if options['layer_normalisation'] and not followed_by_softmax:
+        scale_add = 0.0
+        scale_mul = 1.0
+        params[pp(prefix,'ln_b')] = scale_add * numpy.ones((1*nout)).astype(floatX)
+        params[pp(prefix,'ln_s')] = scale_mul * numpy.ones((1*nout)).astype(floatX)
+
+    if options['weight_normalisation'] and not followed_by_softmax:
+        scale_mul = 1.0
+        params[pp(prefix,'W_pos_wns')] = scale_mul * numpy.ones((1*nout)).astype(floatX)
+        params[pp(prefix,'W_neg_wns')] = scale_mul * numpy.ones((1*nout)).astype(floatX)
+
+    return params
+
+
+def crelufflayer(tparams, state_below, options, dropout, prefix='creluff', W_pos=None, W_neg=None, b=None, dropout_probability=0, followed_by_softmax=False, **kwargs):
+    if W_pos == None:
+        W_pos = tparams[pp(prefix, 'W_pos')]
+    if W_neg == None:
+        W_neg = tparams[pp(prefix, 'W_neg')]
+    if b == None:
+        b = tparams[pp(prefix, 'b')]
+
+    # for three-dimensional tensors, we assume that first dimension is number of timesteps
+    # we want to apply same mask to all timesteps
+    if state_below.ndim == 3:
+        dropout_shape = (state_below.shape[1], state_below.shape[2])
+    else:
+        dropout_shape = state_below.shape
+    dropout_mask = dropout(dropout_shape, dropout_probability)
+
+    if options['weight_normalisation'] and not followed_by_softmax:
+         W_pos = weight_norm(W_pos, tparams[pp(prefix, 'W_pos_wns')])
+         W_neg = weight_norm(W_neg, tparams[pp(prefix, 'W_neg_wns')])
+
+    state_below_dr = state_below*dropout_mask
+    state_below_dr.name = pp(prefix, 'state_below_dr')
+    crelu_pos = tensor.nnet.relu(state_below_dr)
+    crelu_neg = tensor.nnet.relu(-state_below_dr)
+    preact = tensor.dot(crelu_pos, W_pos) + tensor.dot(crelu_neg, W_neg) + b
+
+    if options['layer_normalisation'] and not followed_by_softmax:
+        preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
+
+    preact.name = pp(prefix, 'preact')
+    return preact
 
 # embedding layer
 def param_init_embedding_layer(options, params, n_words, dims, factors=None, prefix='', suffix=''):
@@ -364,12 +426,189 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
     rval = [rval]
     return rval
 
+# Attention
 
+# Tanh attention
+def param_init_tanh_attention(options, params, prefix='tanh_attention',
+                              dim=None, dimctx=None, attention_hidden_dim=None):
+    # attention: combined -> hidden
+    W_comb_att = norm_weight(dim, attention_hidden_dim)
+    params[pp(prefix, 'W_comb_att')] = W_comb_att
+
+    # attention: context -> hidden
+    Wc_att = norm_weight(dimctx, attention_hidden_dim)
+    params[pp(prefix, 'Wc_att')] = Wc_att
+
+    # attention: hidden bias
+    b_att = numpy.zeros((attention_hidden_dim,)).astype(floatX)
+    params[pp(prefix, 'b_att')] = b_att
+
+    # attention:
+    U_att = norm_weight(attention_hidden_dim, 1)
+    params[pp(prefix, 'U_att')] = U_att
+    c_att = numpy.zeros((1,)).astype(floatX)
+    params[pp(prefix, 'c_tt')] = c_att
+
+    scale_add = 0.0
+    scale_mul = 1.0    
+    if options['layer_normalisation']:
+        params[pp(prefix,'W_comb_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'W_comb_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+    if options['weight_normalisation']:
+        params[pp(prefix,'W_comb_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'U_att_wns')] = scale_mul * numpy.ones((1*1)).astype(floatX)
+    return params
+
+def tanh_attention(tparams, options, dropout, prefix='',
+                   n_samples=None,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0):
+
+    def wn(param_name):
+        param = tparams[param_name]
+        if options['weight_normalisation']:
+            return weight_norm(param, tparams[param_name+'_wns'])
+        else:
+            return param
+    
+    dim, attention_hidden_dim = tparams[pp(prefix, 'W_comb_att')].shape
+    dimctx = tparams[pp(prefix, 'Wc_att')].shape[0]
+    
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=1)
+    ctx_dropout = dropout((n_samples, dimctx), dropout_probability_ctx, num=1)
+    attention_hidden_dropout = dropout((n_samples, attention_hidden_dim), dropout_probability_ctx, num=1)
+    
+    def project_context(context, pctx_):
+        assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+        if pctx_ is None:
+            pctx_ = tensor.dot(context*ctx_dropout, wn(pp(prefix, 'Wc_att'))) +\
+                tparams[pp(prefix, 'b_att')]
+
+        if options['layer_normalisation']:
+            pctx_ = layer_norm(pctx_, tparams[pp(prefix,'Wc_att_lnb')], tparams[pp(prefix,'Wc_att_lns')])
+        
+        return pctx_
+        
+    def compute_attention(h1, pctx_, context_mask):
+        pstate_ = tensor.dot(h1*rec_dropout, wn(pp(prefix, 'W_comb_att')))
+        if options['layer_normalisation']:
+            pstate_ = layer_norm(pstate_, tparams[pp(prefix, 'W_comb_att_lnb')], tparams[pp(prefix, 'W_comb_att_lns')])
+        pctx__ = pctx_ + pstate_[None, :, :]
+        pctx__ = tensor.tanh(pctx__)
+        alpha = tensor.dot(pctx__*attention_hidden_dropout, wn(pp(prefix, 'U_att')))+tparams[pp(prefix, 'c_tt')]
+        alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
+        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
+        if context_mask:
+            alpha = alpha * context_mask
+        alpha = alpha / alpha.sum(0, keepdims=True)
+        
+        return alpha
+        
+    # DIY object-oriented programming (ToDo: refactor everything to use classes)
+    return (project_context, compute_attention)
+
+# CReLU attention
+def param_init_crelu_attention(options, params, prefix='crelu_attention',
+                              dim=None, dimctx=None, attention_hidden_dim=None):
+    # attention: combined -> hidden
+    W_comb_att = norm_weight(dim, attention_hidden_dim)
+    params[pp(prefix, 'W_comb_att')] = W_comb_att
+
+    # attention: context -> hidden
+    Wc_att = norm_weight(dimctx, attention_hidden_dim)
+    params[pp(prefix, 'Wc_att')] = Wc_att
+
+    # attention: hidden bias
+    b_att = numpy.zeros((attention_hidden_dim,)).astype(floatX)
+    params[pp(prefix, 'b_att')] = b_att
+
+    # attention:
+    U_att_pos = norm_weight(attention_hidden_dim, 1)
+    params[pp(prefix, 'U_att_pos')] = U_att_pos
+    U_att_neg = -U_att_pos     # Looks linear initialization (Balduzzi et al. 2017)
+    params[pp(prefix, 'U_att_neg')] = U_att_neg
+    c_att = numpy.zeros((1,)).astype(floatX)
+    params[pp(prefix, 'c_tt')] = c_att
+
+    scale_add = 0.0
+    scale_mul = 1.0    
+    if options['layer_normalisation']:
+        params[pp(prefix,'W_comb_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'W_comb_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+    if options['weight_normalisation']:
+        params[pp(prefix,'W_comb_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'Wc_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
+        params[pp(prefix,'U_att_pos_wns')] = scale_mul * numpy.ones((1*1)).astype(floatX)
+        params[pp(prefix,'U_att_neg_wns')] = scale_mul * numpy.ones((1*1)).astype(floatX)
+    return params
+
+def crelu_attention(tparams, options, dropout, prefix='',
+                   n_samples=None,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0):
+
+    def wn(param_name):
+        param = tparams[param_name]
+        if options['weight_normalisation']:
+            return weight_norm(param, tparams[param_name+'_wns'])
+        else:
+            return param
+    
+    dim, attention_hidden_dim = tparams[pp(prefix, 'W_comb_att')].shape
+    dimctx = tparams[pp(prefix, 'Wc_att')].shape[0]
+    
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num=1)
+    ctx_dropout = dropout((n_samples, dimctx), dropout_probability_ctx, num=1)
+    attention_hidden_dropout = dropout((n_samples, attention_hidden_dim), dropout_probability_ctx, num=1)
+    
+    def project_context(context, pctx_):
+        assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
+        if pctx_ is None:
+            pctx_ = tensor.dot(context*ctx_dropout, wn(pp(prefix, 'Wc_att'))) +\
+                tparams[pp(prefix, 'b_att')]
+
+        if options['layer_normalisation']:
+            pctx_ = layer_norm(pctx_, tparams[pp(prefix,'Wc_att_lnb')], tparams[pp(prefix,'Wc_att_lns')])
+        
+        return pctx_
+        
+    def compute_attention(h1, pctx_, context_mask):
+        pstate_ = tensor.dot(h1*rec_dropout, wn(pp(prefix, 'W_comb_att')))
+        if options['layer_normalisation']:
+            pstate_ = layer_norm(pstate_, tparams[pp(prefix, 'W_comb_att_lnb')], tparams[pp(prefix, 'W_comb_att_lns')])
+        pctx__ = pctx_ + pstate_[None, :, :]
+        pctx__dropped = pctx__*attention_hidden_dropout     # Note: ReLUs are transparent to dropout
+        pctx__pos = tensor.nnet.relu(pctx__dropped)
+        pctx__neg = tensor.nnet.relu(-pctx__dropped)
+        
+        alpha = tensor.dot(pctx__pos, wn(pp(prefix, 'U_att_pos'))) + \
+                tensor.dot(pctx__neg, wn(pp(prefix, 'U_att_neg'))) + \
+                tparams[pp(prefix, 'c_tt')]                 # Do we need this?
+        alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
+        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
+        if context_mask:
+            alpha = alpha * context_mask
+        alpha = alpha / alpha.sum(0, keepdims=True)
+        
+        return alpha
+        
+    # DIY object-oriented programming (ToDo: refactor everything to use classes)
+    return (project_context, compute_attention)
+
+
+    
 # Conditional GRU layer with Attention
 def param_init_gru_cond(options, params, prefix='gru_cond',
                         nin=None, dim=None, dimctx=None,
                         nin_nonlin=None, dim_nonlin=None,
-                        recurrence_transition_depth=2):
+                        recurrence_transition_depth=2,
+                        attention_hidden_activation='tanh',
+                        attention_hidden_dim=None):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -380,6 +619,8 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
         nin_nonlin = nin
     if dim_nonlin is None:
         dim_nonlin = dim
+    if attention_hidden_dim is None:
+        attention_hidden_dim = 2 * dim
 
     scale_add = 0.0
     scale_mul = 1.0
@@ -432,23 +673,8 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
                 params[pp(prefix,'Wc%s_wns') % suffix] = scale_mul * numpy.ones((2*dim)).astype(floatX)
                 params[pp(prefix,'Wcx%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)          
 
-    # attention: combined -> hidden
-    W_comb_att = norm_weight(dim, dimctx)
-    params[pp(prefix, 'W_comb_att')] = W_comb_att
-
-    # attention: context -> hidden
-    Wc_att = norm_weight(dimctx)
-    params[pp(prefix, 'Wc_att')] = Wc_att
-
-    # attention: hidden bias
-    b_att = numpy.zeros((dimctx,)).astype(floatX)
-    params[pp(prefix, 'b_att')] = b_att
-
-    # attention:
-    U_att = norm_weight(dimctx, 1)
-    params[pp(prefix, 'U_att')] = U_att
-    c_att = numpy.zeros((1,)).astype(floatX)
-    params[pp(prefix, 'c_tt')] = c_att
+    # attention
+    params = get_layer_param(attention_hidden_activation+'_attention')(options, params, prefix=prefix, dim=dim, dimctx=dimctx, attention_hidden_dim=attention_hidden_dim)
 
     if options['layer_normalisation']:
         # layer-normalization parameters
@@ -460,21 +686,13 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
         params[pp(prefix,'Wx_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
         params[pp(prefix,'Ux_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
         params[pp(prefix,'Ux_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
-        params[pp(prefix,'W_comb_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
-        params[pp(prefix,'W_comb_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
-        params[pp(prefix,'Wc_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
-        params[pp(prefix,'Wc_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
     if options['weight_normalisation']:
         params[pp(prefix,'W_wns')] = scale_mul * numpy.ones((2*dim)).astype(floatX)
         params[pp(prefix,'U_wns')] = scale_mul * numpy.ones((2*dim)).astype(floatX)
         params[pp(prefix,'Wx_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
         params[pp(prefix,'Ux_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
-        params[pp(prefix,'W_comb_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
-        params[pp(prefix,'Wc_att_wns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
-        params[pp(prefix,'U_att_wns')] = scale_mul * numpy.ones((1*1)).astype(floatX)
 
-    return params
-
+    return params    
 
 def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    mask=None, context=None, one_step=False,
@@ -486,6 +704,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    pctx_=None,
                    recurrence_transition_depth=2,
                    truncate_gradient=-1,
+                   attention_hidden_activation='tanh',
                    profile=False,
                    **kwargs):
 
@@ -508,7 +727,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
 
     dim = tparams[pp(prefix, 'Wcx')].shape[1]
 
-    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num= 1 + 2 * recurrence_transition_depth)
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num= 2 * recurrence_transition_depth)
     
     # utility function to look up parameters and apply weight normalization if enabled
     def wn(param_name):
@@ -519,21 +738,20 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             return param
 
     below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
-    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=4)
+    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=2)
 
     # initial/previous state
     if init_state is None:
         init_state = tensor.zeros((n_samples, dim))
 
+    project_context, compute_attention = get_layer_constr(attention_hidden_activation+'_attention')(tparams, options, dropout, prefix,
+                                                                                                    n_samples,
+                                                                                                    dropout_probability_ctx,
+                                                                                                    dropout_probability_rec)
+    
     # projected context
-    assert context.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
-    if pctx_ is None:
-        pctx_ = tensor.dot(context*ctx_dropout[0], wn(pp(prefix, 'Wc_att'))) +\
-            tparams[pp(prefix, 'b_att')]
-
-    if options['layer_normalisation']:
-        pctx_ = layer_norm(pctx_, tparams[pp(prefix,'Wc_att_lnb')], tparams[pp(prefix,'Wc_att_lns')])
-
+    pctx_ = project_context(context, pctx_)
+    
     def _slice(_x, n, dim):
         if _x.ndim == 3:
             return _x[:, :, n*dim:(n+1)*dim]
@@ -571,29 +789,18 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
 
         # attention
-        pstate_ = tensor.dot(h1*rec_dropout[2], wn(pp(prefix, 'W_comb_att')))
-        if options['layer_normalisation']:
-            pstate_ = layer_norm(pstate_, tparams[pp(prefix, 'W_comb_att_lnb')], tparams[pp(prefix, 'W_comb_att_lns')])
-        pctx__ = pctx_ + pstate_[None, :, :]
-        #pctx__ += xc_
-        pctx__ = tensor.tanh(pctx__)
-        alpha = tensor.dot(pctx__*ctx_dropout[1], wn(pp(prefix, 'U_att')))+tparams[pp(prefix, 'c_tt')]
-        alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
-        alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
-        if context_mask:
-            alpha = alpha * context_mask
-        alpha = alpha / alpha.sum(0, keepdims=True)
+        alpha = compute_attention(h1, pctx_, context_mask)
         ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
 
         h2_prev = h1
         for i in xrange(recurrence_transition_depth - 1):
             suffix = '' if i == 0 else ('_drt_%s' % i)
 
-            preact2 = tensor.dot(h2_prev*rec_dropout[3+2*i], wn(pp(prefix, 'U_nl'+suffix)))+tparams[pp(prefix, 'b_nl'+suffix)]
+            preact2 = tensor.dot(h2_prev*rec_dropout[2+2*i], wn(pp(prefix, 'U_nl'+suffix)))+tparams[pp(prefix, 'b_nl'+suffix)]
             if options['layer_normalisation']:
                 preact2 = layer_norm(preact2, tparams[pp(prefix, 'U_nl%s_lnb' % suffix)], tparams[pp(prefix, 'U_nl%s_lns' % suffix)])
             if i == 0:
-                ctx1_ = tensor.dot(ctx_*ctx_dropout[2], wn(pp(prefix, 'Wc'+suffix))) # dropout mask is shared over mini-steps
+                ctx1_ = tensor.dot(ctx_*ctx_dropout[0], wn(pp(prefix, 'Wc'+suffix))) # dropout mask is shared over mini-steps
                 if options['layer_normalisation']:
                     ctx1_ = layer_norm(ctx1_, tparams[pp(prefix, 'Wc%s_lnb' % suffix)], tparams[pp(prefix, 'Wc%s_lns' % suffix)])
                 preact2 += ctx1_
@@ -602,12 +809,12 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             r2 = _slice(preact2, 0, dim)
             u2 = _slice(preact2, 1, dim)
 
-            preactx2 = tensor.dot(h2_prev*rec_dropout[4+2*i], wn(pp(prefix, 'Ux_nl'+suffix)))+tparams[pp(prefix, 'bx_nl'+suffix)]
+            preactx2 = tensor.dot(h2_prev*rec_dropout[3+2*i], wn(pp(prefix, 'Ux_nl'+suffix)))+tparams[pp(prefix, 'bx_nl'+suffix)]
             if options['layer_normalisation']:
                preactx2 = layer_norm(preactx2, tparams[pp(prefix, 'Ux_nl%s_lnb' % suffix)], tparams[pp(prefix, 'Ux_nl%s_lns' % suffix)])
             preactx2 *= r2
             if i == 0:
-               ctx2_ = tensor.dot(ctx_*ctx_dropout[3], wn(pp(prefix, 'Wcx'+suffix))) # dropout mask is shared over mini-steps
+               ctx2_ = tensor.dot(ctx_*ctx_dropout[1], wn(pp(prefix, 'Wcx'+suffix))) # dropout mask is shared over mini-steps
                if options['layer_normalisation']:
                    ctx2_ = layer_norm(ctx2_, tparams[pp(prefix, 'Wcx%s_lnb' % suffix)], tparams[pp(prefix, 'Wcx%s_lns' % suffix)])
                preactx2 += ctx2_

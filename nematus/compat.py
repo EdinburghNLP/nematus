@@ -67,3 +67,13 @@ def fill_options(options):
             options['dec_high_recurrence_transition_depth'] = 2
         else:
             options['dec_high_recurrence_transition_depth'] = 1
+
+    if not 'attention_hidden_activation' in options:
+        options['attention_hidden_activation'] = 'tanh'
+    if not 'attention_hidden_dim' in options:
+        options['attention_hidden_dim'] = -1
+    if not 'output_hidden_activation' in options:
+        options['output_hidden_activation'] = 'tanh'
+    if not 'output_crelu_hidden_dim' in options:
+        options['output_crelu_hidden_dim'] = -1
+

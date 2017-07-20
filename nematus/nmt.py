@@ -130,13 +130,16 @@ def init_params(options):
     # init_state, init_cell
     params = get_layer_param('ff')(options, params, prefix='ff_state',
                                 nin=ctxdim, nout=options['dim'])
+    attention_hidden_dim = options['attention_hidden_dim'] if (options['attention_hidden_dim'] != -1) else 2 * options['dim']
     # decoder
     params = get_layer_param(options['decoder'])(options, params,
                                               prefix='decoder',
                                               nin=options['dim_word'],
                                               dim=options['dim'],
                                               dimctx=ctxdim,
-                                              recurrence_transition_depth=options['dec_base_recurrence_transition_depth'])
+                                              recurrence_transition_depth=options['dec_base_recurrence_transition_depth'],
+                                              attention_hidden_activation=options['attention_hidden_activation'],
+                                              attention_hidden_dim=attention_hidden_dim)
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
@@ -151,18 +154,28 @@ def init_params(options):
                                             nin=input_dim,
                                             dim=options['dim'],
                                             dimctx=ctxdim,
-                                            recurrence_transition_depth=options['dec_high_recurrence_transition_depth'])
+                                            recurrence_transition_depth=options['dec_high_recurrence_transition_depth'],
+                                            attention_hidden_activation=options['attention_hidden_activation'],
+                                            attention_hidden_dim=attention_hidden_dim)
 
     # readout
+    output_hidden_dim = options['dim_word']
+    if (options['output_hidden_activation'] == 'crelu') and (options['output_crelu_hidden_dim'] != -1):
+        output_hidden_dim = options['output_crelu_hidden_dim']
+
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
-                                nin=options['dim'], nout=options['dim_word'],
+                                nin=options['dim'], nout=output_hidden_dim,
                                 ortho=False)
     params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
                                 nin=options['dim_word'],
-                                nout=options['dim_word'], ortho=False)
+                                nout=output_hidden_dim, ortho=False)
     params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
-                                nin=ctxdim, nout=options['dim_word'],
+                                nin=ctxdim, nout=output_hidden_dim,
                                 ortho=False)
+
+    if (options['output_hidden_activation'] == 'crelu'):
+        params = get_layer_param('creluff')(options, params, prefix='creluff_logit',
+                                nin=output_hidden_dim, nout=options['dim_word'])
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
@@ -327,6 +340,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                             dropout_probability_ctx=options['dropout_hidden'],
                                             dropout_probability_rec=options['dropout_hidden'],
                                             truncate_gradient=options['decoder_truncate_gradient'],
+                                            attention_hidden_activation=options['attention_hidden_activation'],
                                             profile=profile)
     # hidden states of the decoder gru
     next_state = proj[0]
@@ -367,6 +381,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                               dropout_probability_rec=options['dropout_hidden'],
                                               recurrence_transition_depth=options['dec_high_recurrence_transition_depth'],
                                               truncate_gradient=options['decoder_truncate_gradient'],
+                                              attention_hidden_activation=options['attention_hidden_activation'],
                                               profile=profile)[0]
 
             if sampling:
@@ -392,11 +407,21 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
-    logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
+
+    logit_pre_hidden = logit_lstm+logit_prev+logit_ctx
+    if options['output_hidden_activation'] == 'tanh':
+        logit_hidden = tensor.tanh(logit_pre_hidden)
+    elif options['output_hidden_activation'] == 'crelu':
+        logit_hidden = get_layer_constr('creluff')(tparams, logit_pre_hidden, options, dropout,
+                                   dropout_probability=options['dropout_hidden'],
+                                   prefix='creluff_logit')
+    else:
+        assert(False)
 
     # last layer
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
-    logit = get_layer_constr('ff')(tparams, logit, options, dropout,
+    logit = get_layer_constr('ff')(tparams, logit_hidden, options, dropout,
                             dropout_probability=options['dropout_hidden'],
                             prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
@@ -993,6 +1018,10 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
           layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
           weight_normalisation=False, # normalize weights
+          attention_hidden_activation='tanh',
+          attention_hidden_dim=-1,
+          output_hidden_activation='tanh',
+          output_crelu_hidden_dim=-1
     ):
 
     # Model options
@@ -1624,6 +1653,16 @@ if __name__ == '__main__':
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond'],
                          help='decoder recurrent layer after first one')
+    network.add_argument('--attention_hidden_activation', type=str, default='tanh',
+                         choices=['tanh', 'crelu'],
+                         help='activation function in hidden layer of the attention network (default: %(default)s)')
+    network.add_argument('--attention_hidden_dim', type=int, default=-1, metavar='INT',
+                         help="attention hidden layer size (-1: twice as --dim) (default: %(default)s)")
+    network.add_argument('--output_hidden_activation', type=str, default='tanh',
+                         choices=['tanh', 'crelu'],
+                         help='activation function in hidden layer of the output network (default: %(default)s)')
+    network.add_argument('--output_crelu_hidden_dim', type=int, default=-1, metavar='INT',
+                         help="output hidden layer size (-1: same as --dim_word) (default: %(default)s)")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
