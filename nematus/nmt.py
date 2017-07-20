@@ -932,36 +932,48 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
 def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
     #augment data with copies, of which the targets will be perturbed
-    x = [copy.copy(x_s) for x_s in x for _ in xrange(options['raml_samples'])]
-    y = [copy.copy(y_s) for y_s in y for _ in xrange(options['raml_samples'])]
-    sample_weights = numpy.empty(len(y), dtype=floatX)
+    aug_x = []
+    aug_y = []
+    sample_weights = numpy.empty((0), dtype=floatX)
     vocab = range(1, options['n_words']) # vocabulary for perturbation
     vocab.remove(tgt_worddict['eos'])
     vocab.remove(tgt_worddict['UNK'])
-    for y_n, y_s in enumerate(y):
-        if options['raml_reward'] == "hamming_distance":
-            q = hamming_distance_distribution(sentence_length=len(y_s), vocab_size=options['n_words'], tau=options['raml_tau'])
-            #sample distance from exponentiated payoff distribution
-            edits = numpy.random.choice(range(len(y_s)), p=q)
-            sample_weights[y_n] = q[edits]
-            if len(y_s) > 1:
-                positions = numpy.random.choice(range(len(y_s) - 1), size=edits, replace=False)
-            else:
-                positions = [0]
-            for position in positions:
-                y_s[position] = numpy.random.choice(vocab)
+    for x_s, y_s in zip(x, y):
+        y_sample_weights = []
+        for s in xrange(options['raml_samples']):
+            y_c = copy.copy(y_s)
+            if options['raml_reward'] in ["hamming_distance", "bleu"]:
+                #sampling based on bleu is done by sampling based on hamming
+                #distance followed by importance corrections
+                q = hamming_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['raml_tau'])
+                #sample distance from exponentiated payoff distribution
+                edits = numpy.random.choice(range(len(y_c)), p=q)
+                y_sample_weights.append(q[edits])
+                if len(y_c) > 1:
+                    positions = numpy.random.choice(range(len(y_c) - 1), size=edits, replace=False)
+                else:
+                    positions = [0]
+                for position in positions:
+                    y_c[position] = numpy.random.choice(vocab)
 
-        elif options['raml_reward'] == "edit_distance":
-            q = edit_distance_distribution(sentence_length=len(y_s), vocab_size=options['n_words'], tau=options['tau'])
-            edits = numpy.random.choice(range(len(y_s)), p=q)
-            print "Edits: ", edits
-            #TODO
-        elif reward == "bleu":
-            #importance sampling?
-            pass #TODO
-        #print seqs2words(y_s, worddicts_r)
+                if options['raml_reward'] == "bleu":
+                    #importance correction on the weights
+                    pass #TODO
 
-    return x, y, sample_weights
+            elif options['raml_reward'] == "edit_distance":
+                #doesn't do anything yet
+                q = edit_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['tau'])
+                edits = numpy.random.choice(range(len(y_c)), p=q)
+                #print "Edits: ", edits
+                #TODO
+
+            aug_y.append(y_c)
+            aug_x.append(x_s)
+        y_sample_weights = numpy.array(y_sample_weights, dtype=floatX)
+        y_sample_weights /= numpy.sum(y_sample_weights)
+        sample_weights = numpy.concatenate([sample_weights, y_sample_weights])
+
+    return aug_x, aug_y, sample_weights
 
 
 def train(dim_word=512,  # word vector dimensionality
@@ -1328,7 +1340,7 @@ def train(dim_word=512,  # word vector dimensionality
                                                                   tgt_worddict=worddicts[-1],
                                                                   options=model_options)
                 else:
-                    sample_weights = None
+                    sample_weights = [1.0] * len(y)
                 
                 xlen = len(x)
                 n_samples += xlen
