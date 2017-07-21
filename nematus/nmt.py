@@ -938,17 +938,19 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
     vocab = range(1, options['n_words']) # vocabulary for perturbation
     vocab.remove(tgt_worddict['eos'])
     vocab.remove(tgt_worddict['UNK'])
+    bleu_scorer = ScorerProvider().get("SENTENCEBLEU n=4")
     for x_s, y_s in zip(x, y):
         y_sample_weights = []
+        bleu_scorer.set_reference(y_s)
         for s in xrange(options['raml_samples']):
             y_c = copy.copy(y_s)
             if options['raml_reward'] in ["hamming_distance", "bleu"]:
                 #sampling based on bleu is done by sampling based on hamming
                 #distance followed by importance corrections
+                #based on https://github.com/pcyin/pytorch_nmt
                 q = hamming_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['raml_tau'])
                 #sample distance from exponentiated payoff distribution
                 edits = numpy.random.choice(range(len(y_c)), p=q)
-                y_sample_weights.append(q[edits])
                 if len(y_c) > 1:
                     positions = numpy.random.choice(range(len(y_c) - 1), size=edits, replace=False)
                 else:
@@ -958,7 +960,11 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
 
                 if options['raml_reward'] == "bleu":
                     #importance correction on the weights
-                    pass #TODO
+                    y_bleu = bleu_scorer.score(y_c)
+                    y_sample_weights.append(numpy.exp(y_bleu / options['raml_tau']) / numpy.exp(-edits / options['raml_tau']))
+                else:
+                    y_sample_weights = [1.0] * options['raml_samples']
+                    
 
             elif options['raml_reward'] == "edit_distance":
                 #doesn't do anything yet
@@ -966,11 +972,13 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
                 edits = numpy.random.choice(range(len(y_c)), p=q)
                 #print "Edits: ", edits
                 #TODO
-
             aug_y.append(y_c)
             aug_x.append(x_s)
+
         y_sample_weights = numpy.array(y_sample_weights, dtype=floatX)
-        y_sample_weights /= numpy.sum(y_sample_weights)
+        if options['raml_reward'] == "bleu":
+            #normalize importance weights
+            y_sample_weights /= numpy.sum(y_sample_weights)
         sample_weights = numpy.concatenate([sample_weights, y_sample_weights])
 
     return aug_x, aug_y, sample_weights
