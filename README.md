@@ -204,7 +204,7 @@ execute nematus/nmt.py to train a model.
 #### reward augmented maximum likelihood training parameters
 | parameter | description |
 |--- |--- |
-| --raml_tau FLOAT   | (default: 0.85) |
+| --raml_tau FLOAT   | RAML tau (default: 0.85) |
 | --raml_samples INT | samples per source sentence (default: 1)|
 | --raml_reward {hamming_distance,edit_distance,bleu}| reward for RAML sampling|
 
