@@ -930,7 +930,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
-def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
+def augment_raml_data(x, y, tgt_worddict, options):
     #augment data with copies, of which the targets will be perturbed
     aug_x = []
     aug_y = []
@@ -1071,7 +1071,7 @@ def train(dim_word=512,  # word vector dimensionality
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
-          raml_tau=1.0, # 0: becomes equivalent to ML
+          raml_tau=0.85, # in (0,1] 0: becomes equivalent to ML
           raml_samples=1,
           raml_reward="hamming_distance",
           model_version=0.1, #store version used for training for compatibility
@@ -1128,6 +1128,12 @@ def train(dim_word=512,  # word vector dimensionality
         assert (n_words_src == n_words), "When tying encoder and decoder embeddings, source and target vocabulary size must the same"
         if worddicts[0] != worddicts[1]:
             logging.warning("Encoder-decoder embedding tying is enabled with different source and target dictionaries. This is usually a configuration error")
+
+    if model_options['objective'] == 'RAML' and model_options['raml_tau'] == 0:
+        #tau=0 is equivalent to CE training and causes division by zero error
+        #in the RAML code, so simply switch objectives if tau=0.
+        logging.warning("tau is set to 0. Switching to CE training")
+        model_options['objective'] = 'CE'
 
     if model_options['objective'] == 'MRT':
         # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
@@ -1364,9 +1370,9 @@ def train(dim_word=512,  # word vector dimensionality
             if model_options['objective'] in ['CE', 'RAML']:
 
                 if model_options['objective'] == 'RAML':
-                    x, y, sample_weights = augment_raml_data(x, y, worddicts_r[-1],
-                                                                  tgt_worddict=worddicts[-1],
-                                                                  options=model_options)
+                    x, y, sample_weights = augment_raml_data(x, y, options=model_options,
+                                                             tgt_worddict=worddicts[-1])
+                                                            
                 else:
                     sample_weights = [1.0] * len(y)
                 
@@ -1842,7 +1848,7 @@ if __name__ == '__main__':
                          help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
 
     raml = parser.add_argument_group('reward augmented maximum likelihood parameters')
-    raml.add_argument('--raml_tau', type=float, default=1.0, metavar='FLOAT',
+    raml.add_argument('--raml_tau', type=float, default=0.85, metavar='FLOAT',
                           help="temperature for sharpness of exponentiated payoff distribution (default: %(default)s)")
     raml.add_argument('--raml_samples', type=int, default=1, metavar='INT',
                           help="augment outputs with n samples (default: %(default)s)")
