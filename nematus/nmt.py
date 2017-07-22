@@ -987,7 +987,7 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
                             position = 0
                         if position == len(y_c) - 1:
                             #using choice of last position to mean deletion of random word instead
-                            a.delete(numpy.random.choice(range(len(y_c) - 1)))
+                            del y_c[numpy.random.choice(range(len(y_c) - 1))]
                         else:
                             y_c[position] = numpy.random.choice(vocab)
                 y_sample_weights = [1.0] * options['raml_samples']
