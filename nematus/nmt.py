@@ -952,8 +952,10 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
                 #sample distance from exponentiated payoff distribution
                 edits = numpy.random.choice(range(len(y_c)), p=q)
                 if len(y_c) > 1:
+                    #choose random position except last (usually period or question mark etc)
                     positions = numpy.random.choice(range(len(y_c) - 1), size=edits, replace=False)
                 else:
+                    #for single word sentence
                     positions = [0]
                 for position in positions:
                     y_c[position] = numpy.random.choice(vocab)
@@ -967,11 +969,29 @@ def augment_raml_data(x, y, worddicts_r, tgt_worddict, options):
                     
 
             elif options['raml_reward'] == "edit_distance":
-                #doesn't do anything yet
-                q = edit_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['tau'])
+                q = edit_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['raml_tau'])
                 edits = numpy.random.choice(range(len(y_c)), p=q)
-                #print "Edits: ", edits
-                #TODO
+                for e in range(edits):
+                    if numpy.random.choice(["insertion", "substitution"]) == "insertion":
+                        if len(y_c) > 1:
+                            #insert before last period/question mark
+                            position = numpy.random.choice(range(len(y_c)))
+                        else:
+                            #insert before or after single word
+                            position = numpy.random.choice([0, 1])
+                        y_c.insert(position, numpy.random.choice(vocab))
+                    else:
+                        if len(y_c) > 1:
+                            position = numpy.random.choice(range(len(y_c)))
+                        else:
+                            position = 0
+                        if position == len(y_c) - 1:
+                            #using choice of last position to mean deletion of random word instead
+                            a.delete(numpy.random.choice(range(len(y_c) - 1)))
+                        else:
+                            y_c[position] = numpy.random.choice(vocab)
+                y_sample_weights = [1.0] * options['raml_samples']
+
             aug_y.append(y_c)
             aug_x.append(x_s)
 
