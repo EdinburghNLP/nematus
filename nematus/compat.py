@@ -76,4 +76,8 @@ def fill_options(options):
         options['output_hidden_activation'] = 'tanh'
     if not 'output_crelu_hidden_dim' in options:
         options['output_crelu_hidden_dim'] = -1
+    if not 'decoder_initial_state_hidden_activation' in options:
+        options['decoder_initial_state_hidden_activation'] = 'tanh'
+    if not 'decoder_initial_state_crelu_hidden_dim' in options:
+        options['decoder_initial_state_crelu_hidden_dim'] = -1
 

@@ -21,6 +21,7 @@ from alignment_util import *
 # layers: 'name': ('parameter initializer', 'feedforward')
 layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'creluff': ('param_init_crelufflayer', 'crelufflayer'),
+          'preluff': ('param_init_prelufflayer', 'prelufflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
           'embedding': ('param_init_embedding_layer', 'embedding_layer'),
@@ -97,10 +98,16 @@ def layer_norm(x, b, s):
     _eps = numpy_floatX(1e-5)
     if x.ndim == 3:
         output = (x - x.mean(2)[:,:,None]) / tensor.sqrt((x.var(2)[:,:,None] + _eps))
-        output = s[None, None, :] * output + b[None, None,:]
+        if s is not None:
+            output = s[None, None, :] * output
+        if b is not None:
+          output += b[None, None,:]
     else:
         output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
-        output = s[None, :] * output + b[None,:]
+        if s is not None:
+            output = s[None, :] * output
+        if b is not None:
+          output += b[None,:]
     return output
 
 def weight_norm(W, s):
@@ -161,6 +168,34 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
 
     return eval(activ)(preact)
 
+# prelu feedforward layer (activation-only)
+def param_init_prelufflayer(options, params, prefix='preluff', nin=None,
+                            followed_by_softmax=False, forced_layernorm=False, layernorm_has_scaling=True, layernorm_has_bias=True):
+    if nin is None:
+        nin = options['dim_proj']
+    params[pp(prefix,'prelu_p')] = -1.0 * numpy.ones((1*nin)).astype(floatX)    # Looks linear initialization (Balduzzi et al. 2017)
+    has_layernorm = (options['layer_normalisation'] and not followed_by_softmax) or forced_layernorm
+    if has_layernorm:
+        if layernorm_has_bias:
+            params[pp(prefix,'ln_b')] = numpy.zeros((1*nout)).astype(floatX)
+        if layernorm_has_scaling:
+            params[pp(prefix,'ln_s')] = numpy.ones((1*nout)).astype(floatX)
+    return params
+
+def prelufflayer(tparams, state_below, options, dropout=None, prefix='preluff', p=None, followed_by_softmax=False, forced_layernorm=False, **kwargs):
+    if p == None:
+        p = tparams[pp(prefix, 'prelu_p')]
+    prelu_pos = tensor.nnet.relu(state_below)
+    prelu_neg = tensor.nnet.relu(-state_below)
+    rv = prelu_pos + p * prelu_neg
+    has_layernorm = (options['layer_normalisation'] and not followed_by_softmax) or forced_layernorm
+    if has_layernorm:
+        ln_b = tparams.get(pp(prefix,'ln_b'), None)
+        ln_s = tparams.get(pp(prefix,'ln_s'), None)
+        rv = layer_norm(rv, ln_b, ln_s)
+    return rv
+
+    
 # crelu feedforward layer
 def param_init_crelufflayer(options, params, prefix='creluff', nin=None, nout=None,
                        ortho=True, weight_matrix=True, bias=True, followed_by_softmax=False):
