@@ -50,6 +50,7 @@ class TranslationSettings(object):
         self.normalization_alpha = 0.0
         self.char_level = False
         self.n_best = 1
+        self.max_ratio = 0.0
         self.suppress_unk = False
         self.get_word_probs = False
         self.get_alignment = False
@@ -69,6 +70,7 @@ class TranslationSettings(object):
         self.beam_width = args.k
         self.normalization_alpha = args.n
         self.char_level = args.c
+        self.max_ratio = args.max_ratio
         self.n_best = args.n_best
         self.suppress_unk = args.suppress_unk
         self.get_word_probs = args.print_word_probabilities

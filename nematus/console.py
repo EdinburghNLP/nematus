@@ -83,6 +83,8 @@ class ConsoleInterfaceDefault(ConsoleInterface):
                                   action="store_true", help="Print probabilities of each word")
         self._parser.add_argument('--search_graph', '-sg',
                                   help="Output file for search graph rendered as PNG image")
+        self._parser.add_argument("--max-ratio", "-mr", default=0.0, type=float,
+                                  help="If non-zero, target should be no longer than this ratio of source (default: %(default)s).")
 
     def get_translation_settings(self):
         """

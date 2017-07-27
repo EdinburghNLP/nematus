@@ -350,11 +350,16 @@ class Translator(object):
         suppress_unk = input_item.suppress_unk
         k = input_item.k
         seq = input_item.seq
+        max_ratio = input_item.max_ratio
+        
+        maxlen = 200 #TODO: should be configurable
+        if max_ratio:
+          maxlen = int(max_ratio * len(seq))
 
         return gen_sample(fs_init, fs_next,
                           numpy.array(seq).T.reshape(
                               [len(seq[0]), len(seq), 1]),
-                          trng=trng, k=k, maxlen=200,
+                          trng=trng, k=k, maxlen=maxlen,
                           stochastic=False, argmax=False,
                           return_alignment=return_alignment,
                           suppress_unk=suppress_unk,
@@ -392,6 +397,7 @@ class Translator(object):
                                    suppress_unk=translation_settings.suppress_unk,
                                    normalization_alpha=translation_settings.normalization_alpha,
                                    nbest=translation_settings.n_best,
+                                   max_ratio=translation_settings.max_ratio,
                                    seq=x,
                                    idx=idx,
                                    request_id=translation_settings.request_id)
