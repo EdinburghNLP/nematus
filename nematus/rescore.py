@@ -57,6 +57,7 @@ def rescore_model(source_file, nbest_file, saveto, models, options, b, normaliza
                          n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                          batch_size=b,
                          maxlen=float('inf'),
+                         use_factor=(options[0]['factors'] > 1),
                          sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd have to synchronize scores with n-best list after
 
 

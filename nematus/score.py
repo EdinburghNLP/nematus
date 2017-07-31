@@ -67,6 +67,7 @@ def rescore_model(source_file, target_file, saveto, models, options, b, normaliz
                      n_words_source=options[0]['n_words_src'], n_words_target=options[0]['n_words'],
                      batch_size=b,
                      maxlen=float('inf'),
+                     use_factor=(options[0]['factors'] > 1),
                      sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd want to resort after
 
     scores, alignments = _score(pairs, alignweights)
