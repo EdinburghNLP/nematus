@@ -15,7 +15,7 @@ from Queue import Empty
 from util import load_dict, load_config, seqs2words
 from compat import fill_options
 from hypgraph import HypGraphRenderer
-from console import ConsoleInterfaceDefault
+from settings import TranslationSettings
 
 class Translation(object):
     #TODO move to separate file?
@@ -114,14 +114,14 @@ class QueueItem(object):
 
 class Translator(object):
 
-    def __init__(self, decoder_settings):
+    def __init__(self, settings):
         """
         Loads translation models.
         """
-        self._models = decoder_settings.models
-        self._num_processes = decoder_settings.num_processes
-        self._device_list = decoder_settings.device_list
-        self._verbose = decoder_settings.verbose
+        self._models = settings.models
+        self._num_processes = settings.num_processes
+        self._device_list = settings.device_list
+        self._verbose = settings.verbose
         self._retrieved_translations = defaultdict(dict)
 
         # load model options
@@ -351,7 +351,7 @@ class Translator(object):
         k = input_item.k
         seq = input_item.seq
         max_ratio = input_item.max_ratio
-        
+
         maxlen = 200 #TODO: should be configurable
         if max_ratio:
           maxlen = int(max_ratio * len(seq))
@@ -507,11 +507,10 @@ class Translator(object):
         Writes alignments to a file.
         """
         output_file = translation_settings.alignment_filename
-        # TODO: 1 = TEXT, 2 = JSON
-        if translation_settings.alignment_type == 1:
-            output_file.write(translation.get_alignment_text() + "\n\n")
-        else:
+        if translation_settings.json_alignment:
             output_file.write(translation.get_alignment_json() + "\n")
+        else:
+            output_file.write(translation.get_alignment_text() + "\n\n")
 
     def write_translation(self, output_file, translation, translation_settings):
         """
@@ -564,14 +563,13 @@ class Translator(object):
             for translation in translations:
                 self.write_translation(output_file, translation, translation_settings)
 
-def main(input_file, output_file, decoder_settings, translation_settings):
+def main(input_file, output_file, translation_settings):
     """
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    translator = Translator(decoder_settings)
+    translator = Translator(translation_settings)
     translations = translator.translate_file(input_file, translation_settings)
-
     translator.write_translations(output_file, translations, translation_settings)
 
     logging.info('Done')
@@ -580,13 +578,10 @@ def main(input_file, output_file, decoder_settings, translation_settings):
 
 if __name__ == "__main__":
     # parse console arguments
-    parser = ConsoleInterfaceDefault()
-    args = parser.parse_args()
-    input_file = args.input
-    output_file = args.output
-    decoder_settings = parser.get_decoder_settings()
-    translation_settings = parser.get_translation_settings()
+    translation_settings = TranslationSettings(from_console_arguments=True)
+    input_file = translation_settings.input
+    output_file = translation_settings.output
     # start logging
-    level = logging.DEBUG if decoder_settings.verbose else logging.WARNING
+    level = logging.DEBUG if translation_settings.verbose else logging.WARNING
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    main(input_file, output_file, decoder_settings, translation_settings)
+    main(input_file, output_file, console_arguments)
