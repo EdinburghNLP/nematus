@@ -584,4 +584,4 @@ if __name__ == "__main__":
     # start logging
     level = logging.DEBUG if translation_settings.verbose else logging.WARNING
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    main(input_file, output_file, console_arguments)
+    main(input_file, output_file, translation_settings)

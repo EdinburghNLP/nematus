@@ -95,7 +95,7 @@ class TranslationSettings(DecoderSettings):
                                   help="Write n-best list (of size k)")
         self._parser.add_argument('--suppress-unk', action="store_true",
                                   help="Suppress hypotheses containing UNK.")
-        self._parser.add_argument('--print-word-probabilities', '-wp',
+        self._parser.add_argument('--print-word-probabilities', '-wp', dest="get_word_probs",
                                   action="store_true", help="Print probabilities of each word")
         self._parser.add_argument('--search_graph', '-sg', dest='search_graph_filename',
                                   help="Output file for search graph rendered as PNG image")
