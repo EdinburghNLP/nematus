@@ -6,9 +6,9 @@ Parses console arguments.
 import sys
 import argparse
 import uuid
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 
-class DecoderSettings(object):
+class BaseSettings(object):
     """
     All modes (abstract base class)
     """
@@ -17,12 +17,11 @@ class DecoderSettings(object):
     def __init__(self, from_console_arguments=False):
         self._from_console_arguments = from_console_arguments
         self._parser = argparse.ArgumentParser()
-        self._add_shared_console_arguments()
-        self._add_individual_console_arguments()
-        self._set_attributes()
+        self._add_console_arguments()
+        self._set_console_arguments()
         self._set_additional_vars()
 
-    def _add_shared_console_arguments(self):
+    def _add_console_arguments(self):
         """
         Console arguments used in all modes
         """
@@ -34,14 +33,7 @@ class DecoderSettings(object):
                                   help="User specified device list for multi-thread decoding (default: [])")
         self._parser.add_argument('-v', dest='verbose', action="store_true", help="verbose mode.")
 
-    @abstractmethod
-    def _add_individual_console_arguments(self):
-        """
-        Console arguments used in specific mode
-        """
-        pass # to be implemented in subclass
-
-    def _set_attributes(self):
+    def _set_console_arguments(self):
         """
         Parses console arguments and loads them into the namespace of this
         object.
@@ -57,21 +49,22 @@ class DecoderSettings(object):
         for key, value in args.iteritems():
             setattr(self, key, value)
 
-    @abstractmethod
     def _set_additional_vars(self):
         """
         Adds additional variables/constants to this object. They can be derived
         or independent from parsed console arguments.
         """
-        pass # to be implemented in subclass
+        pass # override in subclass
 
 
-class TranslationSettings(DecoderSettings):
+class TranslationSettings(BaseSettings):
     """
     Console interface for file translation mode
     """
 
-    def _add_individual_console_arguments(self):
+    def _add_console_arguments(self):
+        super(TranslationSettings, self)._add_console_arguments()
+
         self._parser.add_argument('-k', dest='beam_width', type=int, default=5,
                                   help="Beam size (default: %(default)s))")
         self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
@@ -110,7 +103,7 @@ class TranslationSettings(DecoderSettings):
         self.get_search_graph = True if self.search_graph_filename else False
 
 
-class ServerSettings(DecoderSettings):
+class ServerSettings(BaseSettings):
     """
     Console interface for server mode
 
@@ -118,7 +111,8 @@ class ServerSettings(DecoderSettings):
     request to the server (see `nematus/server/request.py`).
     """
 
-    def _add_individual_console_arguments(self):
+    def _add_console_arguments(self):
+        super(ServerSettings, self)._add_console_arguments()
         self._parser.add_argument('--style', default='Nematus',
                                   help='API style; see `README.md` (default: Nematus)')
         self._parser.add_argument('--host', default='localhost',
@@ -126,31 +120,45 @@ class ServerSettings(DecoderSettings):
         self._parser.add_argument('--port', type=int, default=8080,
                                   help='Host port (default: 8080)')
 
-    def _set_additional_vars(self):
-        pass
 
-
-class ScorerSettings(DecoderSettings):
+class ScorerBaseSettings(BaseSettings):
     """
-    Console interface for scoring mode.
+    Base class for scorer and rescorer settings
     """
+    __metaclass__ = ABCMeta
 
-    def _add_individual_console_arguments(self):
+    def _add_console_arguments(self):
+        super(ScorerBaseSettings, self)._add_console_arguments()
         self._parser.add_argument('-b', type=int, default=80,
                                   help="Minibatch size (default: %(default)s))")
         self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
                                   help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
-
-        if self._from_console_arguments: # don't open files if no console arguments are parsed
-            self._parser.add_argument('--source', '-s', type=argparse.FileType('r'),
-                                      required=True, metavar='PATH', help="Source text file")
-            self._parser.add_argument('--target', '-t', type=argparse.FileType('r'),
-                                      required=True, metavar='PATH', help="Target text file")
-            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
-                                      default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")
-
         self._parser.add_argument('--walign', '-w', dest='alignweights', required = False, action="store_true",
                                   help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment")
+        if self._from_console_arguments: # don't open files if no console arguments are parsed
+            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
+                                      default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")
+            self._parser.add_argument('--source', '-s', type=argparse.FileType('r'),
+                                      required=True, metavar='PATH', help="Source text file")
 
-    def _set_additional_vars(self):
-        pass
+
+class ScorerSettings(ScorerBaseSettings):
+    """
+    Console interface for scoring (score.py)
+    """
+    def _add_console_arguments(self):
+        super(ScorerSettings, self)._add_console_arguments()
+        if self._from_console_arguments:
+            self._parser.add_argument('--target', '-t', type=argparse.FileType('r'),
+                                      required=True, metavar='PATH', help="Target text file")
+
+
+class RescorerSettings(ScorerBaseSettings):
+    """
+    Console interface for rescoring (rescore.py)
+    """
+    def _add_console_arguments(self):
+        super(RescorerSettings, self)._add_console_arguments()
+        if self._from_console_arguments:
+            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+                                      default=sys.stdin, metavar='PATH', help="Input n-best list file (default: standard input)")
