@@ -8,6 +8,7 @@ import requests
 
 sys.path.append(os.path.abspath('../nematus'))
 from score import main as score
+from settings import ScorerSettings
 
 
 def load_wmt16_model(src, target):
@@ -23,9 +24,9 @@ def load_wmt16_model(src, target):
                     for chunk in r.iter_content(1024**2):
                         f.write(chunk)
 
-class TestTranslate(unittest.TestCase):
+class TestScore(unittest.TestCase):
     """
-    Regression tests for translation with WMT16 models
+    Regression tests for scoring with WMT16 models
     """
 
     def setUp(self):
@@ -35,6 +36,14 @@ class TestTranslate(unittest.TestCase):
         load_wmt16_model('en','de')
         load_wmt16_model('en','ro')
 
+    @staticmethod
+    def get_settings():
+        scorer_settings = ScorerSettings()
+        scorer_settings.models = ['model.npz']
+        scorer_settings.b = 80
+        scorer_settings.normalization_alpha = 1.0
+        return scorer_settings
+
     def scoreEqual(self, output1, output2):
         """given two files with translation scores, check that probabilities are equal within rounding error.
         """
@@ -43,18 +52,19 @@ class TestTranslate(unittest.TestCase):
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
+        scorer_settings = self.get_settings()
         os.chdir('models/en-de/')
-        score(['model.npz'], open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), normalization_alpha=1.0)
+        score(open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), scorer_settings)
         os.chdir('../..')
         self.scoreEqual('en-de/ref_score', 'en-de/out_score')
 
     # English-Romanian WMT16 system, dropout
     def test_enro(self):
+        scorer_settings = self.get_settings()
         os.chdir('models/en-ro/')
-        score(['model.npz'], open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), normalization_alpha=1.0)
+        score(open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), scorer_settings)
         os.chdir('../..')
         self.scoreEqual('en-ro/ref_score', 'en-ro/out_score')
-
 
 
 if __name__ == '__main__':

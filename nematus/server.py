@@ -7,7 +7,6 @@ Runs Nematus as a Web Server.
 
 import json
 import pkg_resources
-import sys
 import logging
 
 from bottle import Bottle, request, response
@@ -15,7 +14,7 @@ from bottle_log import LoggingPlugin
 
 from server.response import TranslationResponse
 from server.api.provider import request_provider, response_provider
-from console import ConsoleInterfaceServer
+from settings import ServerSettings
 from translate import Translator
 
 class NematusServer(object):
@@ -26,29 +25,29 @@ class NematusServer(object):
     STATUS_LOADING = 'loading'
     STATUS_OK = 'ok'
 
-    def __init__(self, server_settings, decoder_settings):
+    def __init__(self, server_settings):
         """
         Loads a translation model and initialises the webserver.
 
-        @param startup args: as defined in `console.py`
+        @param server_settings: see `settings.py`
         """
         self._style = server_settings.style
         self._host = server_settings.host
         self._port = server_settings.port
-        self._debug = decoder_settings.verbose
-        self._models = decoder_settings.models
-        self._num_processes = decoder_settings.num_processes
-        self._device_list = decoder_settings.device_list
+        self._debug = server_settings.verbose
+        self._models = server_settings.models
+        self._num_processes = server_settings.num_processes
+        self._device_list = server_settings.device_list
         self._status = self.STATUS_LOADING
         # start webserver
         self._server = Bottle()
-        self._server.config['logging.level'] = 'DEBUG' if decoder_settings.verbose else 'WARNING'
+        self._server.config['logging.level'] = 'DEBUG' if server_settings.verbose else 'WARNING'
         self._server.config['logging.format'] = '%(levelname)s: %(message)s'
         self._server.install(LoggingPlugin(self._server.config))
         logging.info("Starting Nematus Server")
         # start translation workers
         logging.info("Loading translation models")
-        self._translator = Translator(decoder_settings)
+        self._translator = Translator(server_settings)
         self._status = self.STATUS_OK
 
     def status(self):
@@ -111,8 +110,6 @@ class NematusServer(object):
 
 if __name__ == "__main__":
     # parse console arguments
-    parser = ConsoleInterfaceServer()
-    server_settings = parser.get_server_settings()
-    decoder_settings = parser.get_decoder_settings()
-    server = NematusServer(server_settings, decoder_settings)
+    server_settings = ServerSettings(from_console_arguments=True)
+    server = NematusServer(server_settings)
     server.start()
