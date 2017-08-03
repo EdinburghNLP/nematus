@@ -506,7 +506,7 @@ class Translator(object):
         """
         Writes alignments to a file.
         """
-        output_file = translation_settings.alignment_filename
+        output_file = translation_settings.output_alignment
         if translation_settings.json_alignment:
             output_file.write(translation.get_alignment_json() + "\n")
         else:
