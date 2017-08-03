@@ -6,9 +6,10 @@ v0.2 (dev)
 
  - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
  - weight normalisation (Salimans and Kingma, 2016) https://arxiv.org/abs/1602.07868
- - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
+ - deep models (Zhou et al., 2016; Wu et al., 2016; Miceli Barone et al., 2017) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144 https://arxiv.org/abs/1707.07631
  - better memory efficiency
  - save historical gradient information for seamless resuming of interrupted training runs
+ - server mode
  - sgdmomentum optimizer
  - learning rate annealing
  - LSTM cells

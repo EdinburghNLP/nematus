@@ -10,7 +10,7 @@ The changes to Nematus include:
 
  - new architecture variants for better performance:
      - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
-     - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
+     - deep models (Zhou et al., 2016; Wu et al., 2016; Miceli Barone et al., 2017) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144 https://arxiv.org/abs/1707.07631
      - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
      - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
@@ -26,6 +26,7 @@ The changes to Nematus include:
      - more output options (attention weights; word-level probabilities) and visualization scripts
      - execute arbitrary validation scripts (for BLEU early stopping)
      - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
+     - server mode
 
 see changelog for more info
 
