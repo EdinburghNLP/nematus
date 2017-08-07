@@ -87,14 +87,17 @@ def rescore_model(source_file, target_file, output_file, scorer_settings, option
             output_file.write('{0} '.format(line.strip()))
         output_file.write('{0}\n'.format(score_str))
 
-    ### optional save weights mode.
+    # optionally save attention weights
     if scorer_settings.alignweights:
-        ### writing out the alignments.
         temp_name = output_file.name + ".json"
         with tempfile.NamedTemporaryFile(prefix=temp_name) as align_OUT:
             for line in alignments:
-                align_OUT.write(line + "\n")
-            ### combining the actual source and target words.
+                if type(line)==list:
+                    for l in line:
+                        align_OUT.write(l + "\n")
+                else:
+                    align_OUT.write(line + "\n")
+            # combining the actual source and target words.
             combine_source_target_text_1to1(source_file,
                                             target_file,
                                             output_file.name,

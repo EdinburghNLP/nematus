@@ -240,7 +240,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --source PATH, -s PATH | Source text file |
 | --target PATH, -t PATH | Target text file |
 | --output PATH, -o PATH | Output file (default: standard output) |
-| --walign, -w           | Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment |
+| --walign, -w           | Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment.json |
 
 
 #### `nematus/rescore.py` : use an existing model to rescore an n-best list.

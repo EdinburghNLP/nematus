@@ -16,34 +16,23 @@ The number of columns is equal to the number of source_words + 1.
 import json
 import sys
 import codecs
+import logging
 
 def get_alignments(attention, x_mask, y_mask):
-    #print "\nPrinting Attention..."
-    #print attention
-    #print "\nPrinting x_mask, need to figure out how to use it"
-    #print x_mask
-    #print "\nPrinting y_mask, need to figure out how to use it"
-    #print y_mask
 
     n_rows, n_cols = y_mask.shape  ###n_cols correspond to the number of sentences.
-    #print "Number of rows and number of columns: \n\n", n_rows, n_cols
 
     for target_sent_index in range(n_cols):
-        #print "\n\n","*" * 40
-        print "Going through sentence", target_sent_index
-        #source_sent_index = source_indexes[target_sent_index]
+
         target_length = y_mask[:,target_sent_index].tolist().count(1)
         source_length = x_mask[:,target_sent_index].tolist().count(1)
-        # #print "STEP1: The attention matrix that is relevant for this sentence",
         temp_attention = attention[range(target_length),:,:]
-        #print "STEP2: The attention matrix that is particular to just this sentence\n",
         this_attention = temp_attention[:,target_sent_index,range(source_length)]
 
         jdata = {}
         jdata['matrix'] = this_attention.tolist()
         jdata = json.dumps(jdata)
-        #print "\t\tJSON Data"
-        #print "\t\t",jdata
+
         yield jdata
 
 def combine_source_target_text(source_IN, nbest_IN, saveto, alignment_IN):
@@ -54,7 +43,7 @@ def combine_source_target_text(source_IN, nbest_IN, saveto, alignment_IN):
     nbest_IN.seek(0)
     alignment_IN.seek(0)
 
-    with open(saveto + "_withwords.json", "w") as alignment_OUT:
+    with open(saveto + ".alignment.json", "w") as alignment_OUT:
         all_matrixes = alignment_IN.readlines()
         nbest_lines = nbest_IN.readlines()
         source_lines = source_IN.readlines()
@@ -71,9 +60,8 @@ def combine_source_target_text(source_IN, nbest_IN, saveto, alignment_IN):
             jdata["source_sent"] = source_sent
             jdata["target_sent"] = target_sent
             jdata["id"] = refer_index
-            jdata["prob"] = 0 #float(elements[2].strip().split()[1])
+            jdata["prob"] = 0
 
-            #jdata = json.dumps(jdata)
             jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
             alignment_OUT.write(jdata + "\n")
 
@@ -84,7 +72,7 @@ def combine_source_target_text_1to1(source_IN, target_IN, saveto, alignment_IN):
     source_IN.seek(0)
     target_IN.seek(0)
     alignment_IN.seek(0)
-    with open(saveto + "_withwords.json", "w") as alignment_OUT:
+    with open(saveto + ".alignment.json", "w") as alignment_OUT:
 
         all_matrixes = alignment_IN.readlines()
         target_lines = target_IN.readlines()
@@ -97,9 +85,8 @@ def combine_source_target_text_1to1(source_IN, target_IN, saveto, alignment_IN):
             jdata["source_sent"] = source_lines[target_index].strip()
             jdata["target_sent"] = target_lines[target_index].strip()
             jdata["id"] = target_index
-            jdata["prob"] = 0 #float(elements[2].strip().split()[1])
+            jdata["prob"] = 0
 
-            #jdata = json.dumps(jdata)
             jdata = json.dumps(jdata).decode('unicode-escape').encode('utf8')
             alignment_OUT.write(jdata + "\n")
 
@@ -125,7 +112,6 @@ def convert_to_nodes_edges_each_v1(data):
     source_words = jdata["source_sent"].strip().split()
     target_words = jdata["target_sent"].strip().split()
 
-    ###make the data for source and target words
     web_data["nodes"] = []
     for word in source_words:
         web_data["nodes"].append({"name":word, "group": 1})
@@ -153,7 +139,7 @@ def convert_to_nodes_edges_each_v1(data):
             web_data["links"].append( {"source": source_word, "target": target_word, "value": score} )
 
     web_data = json.dumps(web_data).decode('unicode-escape').encode('utf8')
-    #print web_data, "\n\n"
+
     return web_data
 
 def convert_to_nodes_edges_v2(filename):
@@ -187,17 +173,12 @@ def convert_to_nodes_edges_each_v2(data, sent_id):
     """
     give a single data object string, convert it into a json data string that is compatible with the Web interface.
     """
-    #print data
     jdata = json.loads(data)
-    #jdata = json.loads(json.dumps(jdata).decode('unicode-escape').encode('utf8'))
-    print jdata
     source_words = jdata["source_sent"].encode('unicode-escape').strip().split()
     source_words.append("EOS")
     target_words = jdata["target_sent"].strip().split()
-    #print target_words
     target_words.append("EOS")
 
-    #print target_words
 
     matrix = jdata["matrix"]
     n_rows = len(matrix)
@@ -227,6 +208,7 @@ if __name__ == "__main__":
     import sys
     reload(sys)
     sys.setdefaultencoding('utf-8')
+
 ### Json for web visuaslization format version 1.
 ### This corresponds to convert_to_nodes_edges_each_v1; and convert_to_nodes_edges_v1.
 """
@@ -245,7 +227,3 @@ if __name__ == "__main__":
     ]
 }
 """
-
-### Json for Web visualization format version 2.
-### This corresponds to
-

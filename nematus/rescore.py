@@ -74,7 +74,11 @@ def rescore_model(source_file, nbest_file, output_file, rescorer_settings, optio
         ### optional save weights mode.
         if rescorer_settings.alignweights:
             for line in alignments:
-                align_OUT.write(line + "\n")
+                if type(line)==list:
+                    for l in line:
+                        align_OUT.write(l + "\n")
+                else:
+                    align_OUT.write(line + "\n")
     if rescorer_settings.alignweights:
         combine_source_target_text(source_file, nbest_file, output_file.name, align_OUT)
         align_OUT.close()

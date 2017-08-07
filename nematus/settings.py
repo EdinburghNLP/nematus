@@ -134,7 +134,7 @@ class ScorerBaseSettings(BaseSettings):
         self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
                                   help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
         self._parser.add_argument('--walign', '-w', dest='alignweights', required = False, action="store_true",
-                                  help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment")
+                                  help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment.json")
         if self._from_console_arguments: # don't open files if no console arguments are parsed
             self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                                       default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")
