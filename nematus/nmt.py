@@ -1034,7 +1034,7 @@ def train(dim_word=512,  # word vector dimensionality
     assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
     assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
     assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
-    assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file
+    assert(prior_model != None and (os.path.exists(prior_model)) or (map_decay_c==0.0)) # MAP training requires a prior model file: Use command-line option --prior_model
 
     assert(enc_recurrence_transition_depth >= 1) # enc recurrence transition depth must be at least 1.
     assert(dec_base_recurrence_transition_depth >= 2) # dec base recurrence transition depth must be at least 2.
@@ -1704,7 +1704,9 @@ if __name__ == '__main__':
     training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
                          help="L2 regularization penalty (default: %(default)s)")
     training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
-                         help="L2 regularization penalty towards original weights (default: %(default)s)")
+                         help="MAP-L2 regularization penalty towards original weights (default: %(default)s)")
+    training.add_argument('--prior_model', type=str, metavar='PATH',
+                         help="Prior model for MAP-L2 regularization. Unless using \"--reload\", this will also be used for initialization.")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
