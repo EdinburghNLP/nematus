@@ -127,7 +127,7 @@ def init_params(options):
     ctxdim = 2 * options['dim']
 
     dec_state = options['dim']
-    if options['decoder_deep'].startswith('lstm'):
+    if options['decoder'].startswith('lstm'):
         dec_state *= 2
 
     # init_state, init_cell
