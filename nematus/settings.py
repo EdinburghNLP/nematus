@@ -1,114 +1,164 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 """
-Configuration containers.
+Parses console arguments.
 """
-
+import sys
+import argparse
 import uuid
+from abc import ABCMeta
 
-class DecoderSettings(object):
+class BaseSettings(object):
+    """
+    All modes (abstract base class)
+    """
+    __metaclass__ = ABCMeta
 
-    def __init__(self, parsed_console_arguments=None):
+    def __init__(self, from_console_arguments=False):
+        self._from_console_arguments = from_console_arguments
+        self._parser = argparse.ArgumentParser()
+        self._add_console_arguments()
+        self._set_console_arguments()
+        self._set_additional_vars()
+
+    def _add_console_arguments(self):
         """
-        Decoder settings are initialised with default values, unless parsed
-        console arguments as returned by a `ConsoleInterface`'s `parse_args()`
-        method are provided.
+        Console arguments used in all modes
         """
-        self.models = []
-        self.num_processes = 1
-        self.device_list = []
-        self.verbose = False
-        if parsed_console_arguments:
-            self.update_from(parsed_console_arguments)
+        self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True, metavar="MODEL",
+                                  help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
+        self._parser.add_argument('-p', dest='num_processes', type=int, default=1,
+                                  help="Number of processes (default: %(default)s))")
+        self._parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False, metavar="DEVICE",
+                                  help="User specified device list for multi-thread decoding (default: [])")
+        self._parser.add_argument('-v', dest='verbose', action="store_true", help="verbose mode.")
 
-    def update_from(self, parsed_console_arguments):
+    def _set_console_arguments(self):
         """
-        Updates decoder settings based on @param parsed_console_arguments,
-        as returned by a `ConsoleInterface`'s `parse_args()` method.
+        Parses console arguments and loads them into the namespace of this
+        object.
+
+        If there are no console arguments, the argument parser's default values
+        (see `self._parse_shared_console_arguments` and
+        `self._parse_individual_console_arguments`) are used.
         """
-        args = parsed_console_arguments
-        self.models = args.models
-        self.num_processes = args.p
-        self.device_list = args.device_list
-        self.verbose = args.v
+        if self._from_console_arguments:
+            args = vars(self._parser.parse_args())
+        else:
+            args = {a.dest: self._parser.get_default(a.dest) for a in self._parser._actions}
+        for key, value in args.iteritems():
+            setattr(self, key, value)
 
-
-class TranslationSettings(object):
-
-    ALIGNMENT_TEXT = 1
-    ALIGNMENT_JSON = 2
-
-    def __init__(self, parsed_console_arguments=None):
+    def _set_additional_vars(self):
         """
-        Translation settings are initialised with default values, unless parsed
-        console arguments as returned by a `ConsoleInterface`'s `parse_args()`
-        method are provided.
+        Adds additional variables/constants to this object. They can be derived
+        or independent from parsed console arguments.
         """
+        pass # override in subclass
+
+
+class TranslationSettings(BaseSettings):
+    """
+    Console interface for file translation mode
+    """
+
+    def _add_console_arguments(self):
+        super(TranslationSettings, self)._add_console_arguments()
+
+        self._parser.add_argument('-k', dest='beam_width', type=int, default=5,
+                                  help="Beam size (default: %(default)s))")
+        self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
+                                  help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
+        self._parser.add_argument('-c', dest='char_level', action="store_true", help="Character-level")
+
+        if self._from_console_arguments: # don't open files if no console arguments are parsed
+            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+                                      default=sys.stdin, metavar='PATH',
+                                      help="Input file (default: standard input)")
+            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
+                                      default=sys.stdout, metavar='PATH',
+                                      help="Output file (default: standard output)")
+            self._parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
+                                      default=None, metavar='PATH',
+                                      help="Output file for alignment weights (default: standard output)")
+
+        self._parser.add_argument('--json_alignment', action="store_true",
+                                  help="Output alignment in json format")
+        self._parser.add_argument('--n-best', action="store_true",
+                                  help="Write n-best list (of size k)")
+        self._parser.add_argument('--suppress-unk', action="store_true",
+                                  help="Suppress hypotheses containing UNK.")
+        self._parser.add_argument('--print-word-probabilities', '-wp', dest="get_word_probs",
+                                  action="store_true", help="Print probabilities of each word")
+        self._parser.add_argument('--search_graph', '-sg', dest='search_graph_filename',
+                                  help="Output file for search graph rendered as PNG image")
+        self._parser.add_argument("--max-ratio", "-mr", default=0.0, type=float,
+                                  help="If non-zero, target should be no longer than this ratio of source (default: %(default)s).")
+
+    def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
-        self.beam_width = 5
-        self.normalization_alpha = 0.0
-        self.char_level = False
-        self.n_best = 1
-        self.suppress_unk = False
-        self.get_word_probs = False
         self.get_alignment = False
-        self.alignment_type = None
-        self.alignment_filename = None
-        self.get_search_graph = False
-        self.search_graph_filename = None
-        if parsed_console_arguments:
-            self.update_from(parsed_console_arguments)
-
-    def update_from(self, parsed_console_arguments):
-        """
-        Updates translation settings based on @param parsed_console_arguments,
-        as returned by a `ConsoleInterface`'s `parse_args()` method.
-        """
-        args = parsed_console_arguments
-        self.beam_width = args.k
-        self.normalization_alpha = args.n
-        self.char_level = args.c
-        self.n_best = args.n_best
-        self.suppress_unk = args.suppress_unk
-        self.get_word_probs = args.print_word_probabilities
-        if args.output_alignment:
+        if self._from_console_arguments and self.output_alignment:
             self.get_alignment = True
-            self.alignment_filename = args.output_alignment
-            if args.json_alignment:
-                self.alignment_type = self.ALIGNMENT_JSON
-            else:
-                self.alignment_type = self.ALIGNMENT_TEXT
-        else:
-            self.get_alignment = False
-        if args.search_graph:
-            self.get_search_graph = True
-            self.search_graph_filename = args.search_graph
-        else:
-            self.get_search_graph = False
-            self.search_graph_filename = None
+        self.get_search_graph = True if self.search_graph_filename else False
 
 
-class ServerSettings(object):
+class ServerSettings(BaseSettings):
+    """
+    Console interface for server mode
 
-    def __init__(self, parsed_console_arguments=None):
-        """
-        Server settings are initialised with default values, unless parsed
-        console arguments as returned by a `ConsoleInterface`'s `parse_args()`
-        method are provided.
-        """
-        self.style = "Nematus" #TODO: use constant
-        self.host = "localhost"
-        self.port = 8080
-        if parsed_console_arguments:
-            self.update_from(parsed_console_arguments)
+    Most parameters required in default mode are provided with each translation
+    request to the server (see `nematus/server/request.py`).
+    """
 
-    def update_from(self, parsed_console_arguments):
-        """
-        Updates decoder settings based on @param parsed_console_arguments,
-        as returned by a `ConsoleInterface`'s `parse_args()` method.
-        """
-        args = parsed_console_arguments
-        self.style = args.style
-        self.host = args.host
-        self.port = args.port
+    def _add_console_arguments(self):
+        super(ServerSettings, self)._add_console_arguments()
+        self._parser.add_argument('--style', default='Nematus',
+                                  help='API style; see `README.md` (default: Nematus)')
+        self._parser.add_argument('--host', default='localhost',
+                                  help='Host address (default: localhost)')
+        self._parser.add_argument('--port', type=int, default=8080,
+                                  help='Host port (default: 8080)')
+
+
+class ScorerBaseSettings(BaseSettings):
+    """
+    Base class for scorer and rescorer settings
+    """
+    __metaclass__ = ABCMeta
+
+    def _add_console_arguments(self):
+        super(ScorerBaseSettings, self)._add_console_arguments()
+        self._parser.add_argument('-b', type=int, default=80,
+                                  help="Minibatch size (default: %(default)s))")
+        self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
+                                  help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
+        self._parser.add_argument('--walign', '-w', dest='alignweights', required = False, action="store_true",
+                                  help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment.json")
+        if self._from_console_arguments: # don't open files if no console arguments are parsed
+            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
+                                      default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")
+            self._parser.add_argument('--source', '-s', type=argparse.FileType('r'),
+                                      required=True, metavar='PATH', help="Source text file")
+
+
+class ScorerSettings(ScorerBaseSettings):
+    """
+    Console interface for scoring (score.py)
+    """
+    def _add_console_arguments(self):
+        super(ScorerSettings, self)._add_console_arguments()
+        if self._from_console_arguments:
+            self._parser.add_argument('--target', '-t', type=argparse.FileType('r'),
+                                      required=True, metavar='PATH', help="Target text file")
+
+
+class RescorerSettings(ScorerBaseSettings):
+    """
+    Console interface for rescoring (rescore.py)
+    """
+    def _add_console_arguments(self):
+        super(RescorerSettings, self)._add_console_arguments()
+        if self._from_console_arguments:
+            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+                                      default=sys.stdin, metavar='PATH', help="Input n-best list file (default: standard input)")

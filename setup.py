@@ -10,7 +10,7 @@ setuptools.setup(
     long_description=open(os.path.join(os.path.dirname(
         os.path.abspath(__file__)), 'README.md')).read(),
     license='BSD 3-clause',
-    url='http://github.com/rsennrich/nematus',
+    url='http://github.com/EdinburghNLP/nematus',
     install_requires=['numpy',
                       'Theano',
                       'bottle',

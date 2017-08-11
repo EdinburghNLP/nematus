@@ -10,7 +10,7 @@ The changes to Nematus include:
 
  - new architecture variants for better performance:
      - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
-     - deep models (Zhou et al., 2016; Wu et al., 2016) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144
+     - deep models (Zhou et al., 2016; Wu et al., 2016; Miceli Barone et al., 2017) https://arxiv.org/abs/1606.04199 https://arxiv.org/abs/1609.08144 https://arxiv.org/abs/1707.07631
      - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
      - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
@@ -26,6 +26,7 @@ The changes to Nematus include:
      - more output options (attention weights; word-level probabilities) and visualization scripts
      - execute arbitrary validation scripts (for BLEU early stopping)
      - vocabulary files and model parameters are stored in JSON format (backward-compatible loading)
+     - server mode
 
 see changelog for more info
 
@@ -148,11 +149,13 @@ execute nematus/nmt.py to train a model.
 | --weight_normalisation   | use weight normalisation (default: False) | 
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
-| --enc_depth INT | number of encoder layers (default: 1) |
+| --encoder                 | encoder cell type (default: gru)
+| --enc_depth INT           | number of encoder layers (default: 1) |
 | --enc_depth_bidirectional | number of bidirectional encoder layers; if enc_depth is greater, remaining layers are unidirectional; by default, all layers are bidirectional. |
-| --dec_depth INT | number of decoder layers (default: 1) |
-| --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
-| --decoder_deep | type of recurrent layer for decoder layers after the first (default: gru) |
+| --decoder                 | type of recurrent layer for first decoder layer (default: gru_cond |
+| --decoder_deep            | type of recurrent layer for decoder layers after the first (default: gru) |
+| --dec_depth INT           | number of decoder layers (default: 1) |
+| --dec_deep_context        | pass context vector (from first layer) to deep decoder layers |
 | --enc_recurrence_transition_depth | number of GRU transition operations applied in an encoder layer (default: 1) |
 | --dec_base_recurrence_transition_depth | number of GRU transition operations applied in first decoder layer (default: 2) |
 | --dec_high_recurrence_transition_depth | number of GRU transition operations applied in decoder layers after the first (default: 1) |
@@ -166,7 +169,8 @@ execute nematus/nmt.py to train a model.
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
-| --map_decay_c FLOAT  |  L2 regularization penalty towards original weights (default: 0) |
+| --map_decay_c FLOAT  | MAP-L2 regularization penalty towards original weights (default: 0) |
+| --prior_model STR    | Prior model for MAP-L2 regularization. Unless using "--reload", this will also be used for initialization. |
 | --clip_c FLOAT       |  gradient clipping threshold (default: 1) |
 | --lrate FLOAT        |  learning rate (default: 0.0001) |
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
@@ -244,7 +248,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --source PATH, -s PATH | Source text file |
 | --target PATH, -t PATH | Target text file |
 | --output PATH, -o PATH | Output file (default: standard output) |
-| --walign, -w           | Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment |
+| --walign, -w           | Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment.json |
 
 
 #### `nematus/rescore.py` : use an existing model to rescore an n-best list.

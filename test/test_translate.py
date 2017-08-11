@@ -8,7 +8,7 @@ import requests
 
 sys.path.append(os.path.abspath('../nematus'))
 from translate import main as translate
-from settings import DecoderSettings, TranslationSettings
+from settings import TranslationSettings
 
 
 def load_wmt16_model(src, target):
@@ -53,28 +53,25 @@ class TestTranslate(unittest.TestCase):
         """
         Initialize and customize settings.
         """
-        decoder_settings = DecoderSettings()
-        decoder_settings.models = ["model.npz"]
-        decoder_settings.num_processes = 1
-
         translation_settings = TranslationSettings()
+        translation_settings.models = ["model.npz"]
+        translation_settings.num_processes = 1
         translation_settings.beam_width = 12
         translation_settings.normalization_alpha = 1.0
         translation_settings.suppress_unk = True
         translation_settings.get_word_probs = True
 
-        return decoder_settings, translation_settings
+        return translation_settings
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
         os.chdir('models/en-de/')
 
-        decoder_settings, translation_settings = self.get_settings()
+        translation_settings = self.get_settings()
 
         translate(
                   input_file=open('../../en-de/in'),
                   output_file=open('../../en-de/out','w'),
-                  decoder_settings=decoder_settings,
                   translation_settings=translation_settings
                   )
 
@@ -85,12 +82,11 @@ class TestTranslate(unittest.TestCase):
     def test_enro(self):
         os.chdir('models/en-ro/')
 
-        decoder_settings, translation_settings = self.get_settings()
+        translation_settings = self.get_settings()
 
         translate(
                   input_file=open('../../en-ro/in'),
                   output_file=open('../../en-ro/out','w'),
-                  decoder_settings=decoder_settings,
                   translation_settings=translation_settings
                   )
 
