@@ -176,7 +176,7 @@ execute nematus/nmt.py to train a model.
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
-| --objective {CE,MRT} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) |
+| --objective {CE,MRT,RAML} |  training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf); RAML: Reward Augmented Maximum Likelihood (https://arxiv.org/pdf/1609.00150.pdf) |
 
 #### validation parameters
 | parameter            | description |
@@ -204,6 +204,13 @@ execute nematus/nmt.py to train a model.
 | --mrt_loss STR               | loss used in MRT (default: SENTENCEBLEU n=4) |
 | --mrt_reference              | add reference to MRT samples. |
 | --mrt_ml_mix                 | mix in ML objective in MRT training with this scaling factor (default: 0) |
+
+#### reward augmented maximum likelihood training parameters
+| parameter | description |
+|--- |--- |
+| --raml_tau FLOAT   | RAML tau (default: 0.85) |
+| --raml_samples INT | samples per source sentence (default: 1)|
+| --raml_reward {hamming_distance,edit_distance,bleu}| reward for RAML sampling|
 
 more instructions to train a model, including a sample configuration and
 preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-scripts

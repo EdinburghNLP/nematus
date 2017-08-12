@@ -30,6 +30,7 @@ from training_progress import TrainingProgress
 from util import *
 from theano_util import *
 from alignment_util import *
+from raml_distributions import *
 
 from layers import *
 from initializers import *
@@ -39,7 +40,7 @@ from metrics.scorer_provider import ScorerProvider
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
 # batch preparation
-def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
+def prepare_data(seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
                  n_words=30000, n_factors=1):
     # x: a list of sentences
     lengths_x = [len(s) for s in seqs_x]
@@ -50,19 +51,27 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
         new_seqs_y = []
         new_lengths_x = []
         new_lengths_y = []
-        for l_x, s_x, l_y, s_y in zip(lengths_x, seqs_x, lengths_y, seqs_y):
+        new_weights = []
+        if weights is None:
+            weights = [None] * len(seqs_y) # to make the zip easier
+        for l_x, s_x, l_y, s_y, w in zip(lengths_x, seqs_x, lengths_y, seqs_y, weights):
             if l_x < maxlen and l_y < maxlen:
                 new_seqs_x.append(s_x)
                 new_lengths_x.append(l_x)
                 new_seqs_y.append(s_y)
                 new_lengths_y.append(l_y)
+                new_weights.append(w)
         lengths_x = new_lengths_x
         seqs_x = new_seqs_x
         lengths_y = new_lengths_y
         seqs_y = new_seqs_y
+        weights = new_weights
 
         if len(lengths_x) < 1 or len(lengths_y) < 1:
-            return None, None, None, None
+            if weights is not None:
+                return None, None, None, None, None
+            else:
+                return None, None, None, None
 
     n_samples = len(seqs_x)
     maxlen_x = numpy.max(lengths_x) + 1
@@ -77,8 +86,10 @@ def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
-
-    return x, x_mask, y, y_mask
+    if weights is not None:
+        return x, x_mask, y, y_mask, weights
+    else:
+        return x, x_mask, y, y_mask
 
 # initialize all parameters
 def init_params(options):
@@ -945,6 +956,80 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
     return numpy.array(probs), alignments_json
 
 
+def augment_raml_data(x, y, tgt_worddict, options):
+    #augment data with copies, of which the targets will be perturbed
+    aug_x = []
+    aug_y = []
+    sample_weights = numpy.empty((0), dtype=floatX)
+    vocab = range(1, options['n_words']) # vocabulary for perturbation
+    vocab.remove(tgt_worddict['eos'])
+    vocab.remove(tgt_worddict['UNK'])
+    bleu_scorer = ScorerProvider().get("SENTENCEBLEU n=4")
+    for x_s, y_s in zip(x, y):
+        y_sample_weights = []
+        bleu_scorer.set_reference(y_s)
+        for s in xrange(options['raml_samples']):
+            y_c = copy.copy(y_s)
+            if options['raml_reward'] in ["hamming_distance", "bleu"]:
+                #sampling based on bleu is done by sampling based on hamming
+                #distance followed by importance corrections
+                #based on https://github.com/pcyin/pytorch_nmt
+                q = hamming_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['raml_tau'])
+                #sample distance from exponentiated payoff distribution
+                edits = numpy.random.choice(range(len(y_c)), p=q)
+                if len(y_c) > 1:
+                    #choose random position except last (usually period or question mark etc)
+                    positions = numpy.random.choice(range(len(y_c) - 1), size=edits, replace=False)
+                else:
+                    #for single word sentence
+                    positions = [0]
+                for position in positions:
+                    y_c[position] = numpy.random.choice(vocab)
+
+                if options['raml_reward'] == "bleu":
+                    #importance correction on the weights
+                    y_bleu = bleu_scorer.score(y_c)
+                    y_sample_weights.append(numpy.exp(y_bleu / options['raml_tau']) / numpy.exp(-edits / options['raml_tau']))
+                else:
+                    y_sample_weights = [1.0] * options['raml_samples']
+                    
+
+            elif options['raml_reward'] == "edit_distance":
+                q = edit_distance_distribution(sentence_length=len(y_c), vocab_size=options['n_words'], tau=options['raml_tau'])
+                edits = numpy.random.choice(range(len(y_c)), p=q)
+                for e in range(edits):
+                    if numpy.random.choice(["insertion", "substitution"]) == "insertion":
+                        if len(y_c) > 1:
+                            #insert before last period/question mark
+                            position = numpy.random.choice(range(len(y_c)))
+                        else:
+                            #insert before or after single word
+                            position = numpy.random.choice([0, 1])
+                        y_c.insert(position, numpy.random.choice(vocab))
+                    else:
+                        if len(y_c) > 1:
+                            position = numpy.random.choice(range(len(y_c)))
+                        else:
+                            position = 0
+                        if position == len(y_c) - 1:
+                            #using choice of last position to mean deletion of random word instead
+                            del y_c[numpy.random.choice(range(len(y_c) - 1))]
+                        else:
+                            y_c[position] = numpy.random.choice(vocab)
+                y_sample_weights = [1.0] * options['raml_samples']
+
+            aug_y.append(y_c)
+            aug_x.append(x_s)
+
+        y_sample_weights = numpy.array(y_sample_weights, dtype=floatX)
+        if options['raml_reward'] == "bleu":
+            #normalize importance weights
+            y_sample_weights /= numpy.sum(y_sample_weights)
+        sample_weights = numpy.concatenate([sample_weights, y_sample_weights])
+
+    return aug_x, aug_y, sample_weights
+
+
 def train(dim_word=512,  # word vector dimensionality
           dim=1000,  # the number of LSTM units
           enc_depth=1, # number of layers in the encoder
@@ -1004,13 +1089,17 @@ def train(dim_word=512,  # word vector dimensionality
           anneal_restarts=0, # when patience run out, restart with annealed learning rate X times before early stopping
           anneal_decay=0.5, # decay learning rate by this amount on each restart
           maxibatch_size=20, #How many minibatches to load at one time
-          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
+          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) \
+                          #RAML: reward-augmented maximum likelihood (see https://papers.nips.cc/paper/6547-reward-augmented-maximum-likelihood-for-neural-structured-prediction.pdf)
           mrt_alpha=0.005,
           mrt_samples=100,
           mrt_samples_meanloss=10,
           mrt_reference=False,
           mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
           mrt_ml_mix=0, # interpolate mrt loss with ML loss
+          raml_tau=0.85, # in (0,1] 0: becomes equivalent to ML
+          raml_samples=1,
+          raml_reward="hamming_distance",
           model_version=0.1, #store version used for training for compatibility
           prior_model=None, # Prior model file, used for MAP
           tie_encoder_decoder_embeddings=False, # Tie the input embeddings of the encoder and the decoder (first factor only)
@@ -1072,12 +1161,24 @@ def train(dim_word=512,  # word vector dimensionality
         if worddicts[0] != worddicts[1]:
             logging.warning("Encoder-decoder embedding tying is enabled with different source and target dictionaries. This is usually a configuration error")
 
+    if model_options['objective'] == 'RAML' and model_options['raml_tau'] == 0:
+        #tau=0 is equivalent to CE training and causes division by zero error
+        #in the RAML code, so simply switch objectives if tau=0.
+        logging.warning("tau is set to 0. Switching to CE training")
+        model_options['objective'] = 'CE'
+
     if model_options['objective'] == 'MRT':
         # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
         # per pair of train sentences (== per batch of samples), so we set batch_size to 1 to make
         # model saving, validation, etc trigger after the same number of updates as before
         logging.info('Running in MRT mode, minibatch size set to 1 sentence')
         batch_size = 1
+    elif model_options['objective'] == 'RAML':
+        # in RAML mode, training examples are augmented with samples, causing the size of the
+        # batch to increase. Thus, divide batch_size by the number of samples to have approx.
+        # the same batch size for each update and thus prevent running out of memory.
+        batch_size = batch_size // model_options['raml_samples']
+        logging.info('Running in RAML mode, minibatch size divided by number of samples, set to %d' % batch_size)
 
     # initialize training progress
     training_progress = TrainingProgress()
@@ -1191,12 +1292,17 @@ def train(dim_word=512,  # word vector dimensionality
 
     if model_options['objective'] == 'CE':
         cost = cost.mean()
+    elif model_options['objective'] == 'RAML':
+        sample_weights = tensor.vector('sample_weights', dtype='floatX')
+        cost *= sample_weights
+        cost = cost.mean()
+        inps += [sample_weights]
     elif model_options['objective'] == 'MRT':
         #MRT objective function
         cost, loss = mrt_cost(cost, y_mask, model_options)
         inps += [loss]
     else:
-        logging.error('Objective must be one of ["CE", "MRT"]')
+        logging.error('Objective must be one of ["CE", "MRT", "RAML"]')
         sys.exit(1)
 
     # apply L2 regularization on weights
@@ -1293,31 +1399,45 @@ def train(dim_word=512,  # word vector dimensionality
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
-            xlen = len(x)
-            n_samples += xlen
+            if model_options['objective'] in ['CE', 'RAML']:
 
-            if model_options['objective'] == 'CE':
+                if model_options['objective'] == 'RAML':
+                    x, y, sample_weights = augment_raml_data(x, y, options=model_options,
+                                                             tgt_worddict=worddicts[-1])
+                                                            
+                else:
+                    sample_weights = [1.0] * len(y)
+                
+                xlen = len(x)
+                n_samples += xlen
 
-                x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
-                                                    n_factors=factors,
-                                                    n_words_src=n_words_src,
-                                                    n_words=n_words)
+                x, x_mask, y, y_mask, sample_weights = prepare_data(x, y, weights=sample_weights,
+                                                                    maxlen=maxlen,
+                                                                    n_factors=factors,
+                                                                    n_words_src=n_words_src,
+                                                                    n_words=n_words)
 
                 if x is None:
                     logging.warning('Minibatch with zero sample under length %d' % maxlen)
                     training_progress.uidx -= 1
                     continue
-
+                
                 cost_batches += 1
                 last_disp_samples += xlen
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
                 # compute cost, grads and update parameters
-                cost = f_update(lrate, x, x_mask, y, y_mask)
+                if model_options['objective'] == 'RAML':
+                    cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
+                else:
+                    cost = f_update(lrate, x, x_mask, y, y_mask)
 
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
+                xlen = len(x)
+                n_samples += xlen
+
                 assert maxlen is not None and maxlen > 0
 
                 xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
@@ -1717,8 +1837,9 @@ if __name__ == '__main__':
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--objective', choices=['CE', 'MRT'], default='CE',
-                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
+    training.add_argument('--objective', choices=['CE', 'MRT', 'RAML'], default='CE',
+                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) \
+                               RAML: Reward Augmented Maximum Likelihood (https://papers.nips.cc/paper/6547-reward-augmented-maximum-likelihood-for-neural-structured-prediction.pdf)')
     training.add_argument('--encoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
@@ -1758,7 +1879,15 @@ if __name__ == '__main__':
     mrt.add_argument('--mrt_reference', action="store_true",
                          help='add reference to MRT samples.')
     mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
-                     help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+                         help="mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+
+    raml = parser.add_argument_group('reward augmented maximum likelihood parameters')
+    raml.add_argument('--raml_tau', type=float, default=0.85, metavar='FLOAT',
+                          help="temperature for sharpness of exponentiated payoff distribution (default: %(default)s)")
+    raml.add_argument('--raml_samples', type=int, default=1, metavar='INT',
+                          help="augment outputs with n samples (default: %(default)s)")
+    raml.add_argument('--raml_reward', type=str, default='hamming_distance', metavar='STR',
+                          help="reward for sampling from exponentiated payoff distribution (default: %(default)s)")
 
     domain_interpolation = parser.add_argument_group('domain interpolation parameters')
     domain_interpolation.add_argument('--use_domain_interpolation', action='store_true',  dest='use_domain_interpolation',
