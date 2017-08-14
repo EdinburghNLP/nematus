@@ -34,6 +34,7 @@ class NematusServer(object):
         self._style = server_settings.style
         self._host = server_settings.host
         self._port = server_settings.port
+        self._threads = server_settings.threads
         self._debug = server_settings.verbose
         self._models = server_settings.models
         self._num_processes = server_settings.num_processes
@@ -91,7 +92,7 @@ class NematusServer(object):
         Starts the webserver.
         """
         self._route()
-        self._server.run(host=self._host, port=self._port, debug=self._debug, server='paste')
+        self._server.run(host=self._host, port=self._port, debug=self._debug, server='tornado', threads=self._threads)
         self._cleanup()
 
     def _cleanup(self):

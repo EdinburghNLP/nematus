@@ -15,7 +15,7 @@ setuptools.setup(
                       'Theano',
                       'bottle',
                       'bottle-log',
-                      'paste'],
+                      'tornado'],
     dependency_links=['git+http://github.com/Theano/Theano.git#egg=Theano',],
     classifiers=['Development Status :: 3 - Alpha',
                  'Intended Audience :: Science/Research',

@@ -115,10 +115,12 @@ class ServerSettings(BaseSettings):
         super(ServerSettings, self)._add_console_arguments()
         self._parser.add_argument('--style', default='Nematus',
                                   help='API style; see `README.md` (default: Nematus)')
-        self._parser.add_argument('--host', default='localhost',
-                                  help='Host address (default: localhost)')
+        self._parser.add_argument('--host', default='0.0.0.0',
+                                  help='Host address (default: 0.0.0.0)')
         self._parser.add_argument('--port', type=int, default=8080,
                                   help='Host port (default: 8080)')
+        self._parser.add_argument('--threads', type=int, default=4,
+                                  help='Number of threads (default: 4)')
 
 
 class ScorerBaseSettings(BaseSettings):

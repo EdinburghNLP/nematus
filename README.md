@@ -45,7 +45,7 @@ Nematus requires the following packages:
  - Theano >= 0.7 (and its dependencies).
 
 we recommend executing the following command in a Python virtual environment:
-   `pip install numpy numexpr cython tables theano bottle bottle-log paste`
+   `pip install numpy numexpr cython tables theano bottle bottle-log tornado`
 
 the following packages are optional, but *highly* recommended
 
@@ -146,7 +146,7 @@ execute nematus/nmt.py to train a model.
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
 | --layer_normalisation    | use layer normalisation (default: False) |
-| --weight_normalisation   | use weight normalisation (default: False) | 
+| --weight_normalisation   | use weight normalisation (default: False) |
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must the same |
 | --encoder                 | encoder cell type (default: gru)

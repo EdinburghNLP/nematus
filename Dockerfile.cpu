@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip
 
-RUN pip install numpy numexpr cython theano tables bottle bottle-log paste
+RUN pip install numpy numexpr cython theano tables bottle bottle-log tornado
 
 RUN mkdir -p /path/to
 WORKDIR /path/to/
@@ -37,4 +37,3 @@ WORKDIR /
 # docker run -v `pwd`:/playground -it nematus-docker
 RUN mkdir playground
 WORKDIR /playground
-
