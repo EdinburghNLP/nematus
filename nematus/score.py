@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Given a parallel corpus of sentence pairs: with one-to-one of target and source sentences,
 produce the score, and optionally alignment for each pair.
