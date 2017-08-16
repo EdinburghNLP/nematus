@@ -26,10 +26,10 @@ def main():
         sorted_words = [words[ii] for ii in sorted_idx[::-1]]
 
         worddict = OrderedDict()
-        worddict['eos'] = 0
-        worddict['UNK'] = 1
         for ii, ww in enumerate(sorted_words):
             worddict[ww] = ii+2
+        worddict['<eos>'] = 0
+        worddict['<UNK>'] = 1
 
         with open('%s.json'%filename, 'wb') as f:
             json.dump(worddict, f, indent=2, ensure_ascii=False)

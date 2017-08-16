@@ -169,7 +169,7 @@ class Translator(object):
             for kk, vv in word_dict.iteritems():
                 word_idict[vv] = kk
             word_idict[0] = '<eos>'
-            word_idict[1] = 'UNK'
+            word_idict[1] = '<UNK>'
             word_dicts.append(word_dict)
             word_idicts.append(word_idict)
 
@@ -182,7 +182,7 @@ class Translator(object):
         for kk, vv in word_dict_trg.iteritems():
             word_idict_trg[vv] = kk
         word_idict_trg[0] = '<eos>'
-        word_idict_trg[1] = 'UNK'
+        word_idict_trg[1] = '<UNK>'
 
         self._word_idict_trg = word_idict_trg
 

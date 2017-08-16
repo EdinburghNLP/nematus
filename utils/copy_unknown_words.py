@@ -4,9 +4,9 @@ This script is to replace the unknown words in target sentences with their align
 Args: 
 	- input: an alignment file produced by translating with the option '--output_alignment'
 	- output: output text file
-	- unknown word token (optional): a string, default="UNK"
+	- unknown word token (optional): a string, default="<UNK>"
 To use:
-	python copy_unknown_words.py -i translation.txt -o updated_translation.txt -u 'UNK'
+	python copy_unknown_words.py -i translation.txt -o updated_translation.txt -u '<UNK>'
 '''
 
 import json
@@ -16,7 +16,7 @@ import sys
 
 ''' 
 Example input file:
-0 ||| das ist ein Test . ||| 0 ||| this is a UNK . ||| 6 6
+0 ||| das ist ein Test . ||| 0 ||| this is a <UNK> . ||| 6 6
 0.723781 0.0561881 0.0652739 0.0888658 0.0159646 0.0499262
 0.0250772 0.728351 0.105699 0.0764411 0.0245384 0.0398933
 0.0257915 0.0667947 0.543118 0.177978 0.020311 0.166007
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                                                 default=sys.stdout, metavar='PATH',
                                                 help="Output file (default: standard output)")
-        parser.add_argument('--unknown', '-u', type=str, nargs = '?', default="UNK",
-                                                help='Unknown token to be replaced (default: "UNK")')
+        parser.add_argument('--unknown', '-u', type=str, nargs = '?', default="<UNK>",
+                                                help='Unknown token to be replaced (default: "<UNK>")')
 
         args = parser.parse_args()
 
