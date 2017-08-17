@@ -91,7 +91,7 @@ class TranslationSettings(BaseSettings):
         self._parser.add_argument('--print-word-probabilities', '-wp', dest="get_word_probs",
                                   action="store_true", help="Print probabilities of each word")
         self._parser.add_argument('--search_graph', '-sg', dest='search_graph_filename',
-                                  help="Output file for search graph rendered as PNG image")
+                                  help="Output file for search graph visualisation. File format is determined by file name, e.g., PDF for `search_graph.pdf`")
         self._parser.add_argument("--max-ratio", "-mr", default=0.0, type=float,
                                   help="If non-zero, target should be no longer than this ratio of source (default: %(default)s).")
 

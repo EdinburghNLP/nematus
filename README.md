@@ -233,7 +233,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --n-best             | Write n-best list (of size k) |
 | --suppress-unk       | Suppress hypotheses containing UNK. |
 | --print-word-probabilities, -wp | Print probabilities of each word |
-| --search_graph, -sg  | Output file for search graph rendered as PNG image |
+| --search_graph, -sg  | Output file for search graph visualisation. File format is determined by file name, e.g., PDF for `search_graph.pdf` |
 | --device-list, -dl      | User specified device list for multi-processing decoding. For example: --device-list gpu0 gpu1 gpu2 |
 
 
