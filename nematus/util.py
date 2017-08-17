@@ -40,5 +40,5 @@ def seqs2words(seq, inverse_target_dictionary, join=True):
         if w in inverse_target_dictionary:
             words.append(inverse_target_dictionary[w])
         else:
-            words.append('UNK')
+            words.append('<UNK>')
     return ' '.join(words) if join else words

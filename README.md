@@ -231,7 +231,7 @@ preprocessing scripts, are provided in https://github.com/rsennrich/wmt16-script
 | --output_alignment PATH, -a PATH | Output file for alignment weights (default: standard output) |
 | --json_alignment     | Output alignment in json format |
 | --n-best             | Write n-best list (of size k) |
-| --suppress-unk       | Suppress hypotheses containing UNK. |
+| --suppress-unk       | Suppress hypotheses containing `<UNK>`. |
 | --print-word-probabilities, -wp | Print probabilities of each word |
 | --search_graph, -sg  | Output file for search graph visualisation. File format is determined by file name, e.g., PDF for `search_graph.pdf` |
 | --device-list, -dl      | User specified device list for multi-processing decoding. For example: --device-list gpu0 gpu1 gpu2 |
