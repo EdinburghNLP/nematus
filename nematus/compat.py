@@ -81,3 +81,7 @@ def fill_options(options):
     if not 'decoder_initial_state_crelu_hidden_dim' in options:
         options['decoder_initial_state_crelu_hidden_dim'] = -1
 
+    if not 'monitor_ff_layers' in options:
+        options['monitor_ff_layers'] = False
+
+

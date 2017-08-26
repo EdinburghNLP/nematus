@@ -16,6 +16,8 @@ from util import *
 from theano_util import *
 from alignment_util import *
 
+from training_monitor import *
+
 #from theano import printing
 
 # layers: 'name': ('parameter initializer', 'feedforward')
@@ -94,20 +96,35 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
 
 # layer normalization
 # code from https://github.com/ryankiros/layer-norm
-def layer_norm(x, b, s):
+def layer_norm(x, b, s, monitor_mean_and_std=True, training_monitor=the_training_monitor):
     _eps = numpy_floatX(1e-5)
+    mean_val, std_val = None, None
     if x.ndim == 3:
-        output = (x - x.mean(2)[:,:,None]) / tensor.sqrt((x.var(2)[:,:,None] + _eps))
+        mean_val = x.mean(2)[:,:,None]
+        std_val = tensor.sqrt((x.var(2)[:,:,None] + _eps))
+        output = (x - mean_val) / std_val
         if s is not None:
             output = s[None, None, :] * output
         if b is not None:
           output += b[None, None,:]
     else:
-        output = (x - x.mean(1)[:,None]) / tensor.sqrt((x.var(1)[:,None] + _eps))
+        mean_val = x.mean(1)[:,None]
+        std_val = tensor.sqrt((x.var(1)[:,None] + _eps))
+        output = (x - mean_val) / std_val
         if s is not None:
             output = s[None, :] * output
         if b is not None:
           output += b[None,:]
+
+    if monitor_mean_and_std:
+        name = s.name if s is not None else ""
+        if not (name.startswith("encoder") or name.startswith("decoder")):
+            avg_mean_val, avg_std_val = mean_val.mean(), std_val.mean()
+            avg_mean_val.name = name+"_mean"
+            avg_std_val.name = name+"_std"
+            training_monitor.add_monitor(avg_mean_val)
+            training_monitor.add_monitor(avg_std_val)
+
     return output
 
 def weight_norm(W, s):
@@ -145,7 +162,7 @@ def param_init_fflayer(options, params, prefix='ff', nin=None, nout=None,
 
 
 def fflayer(tparams, state_below, options, dropout, prefix='rconv',
-            activ='lambda x: tensor.tanh(x)', W=None, b=None, dropout_probability=0, followed_by_softmax=False, **kwargs):
+            activ='lambda x: tensor.tanh(x)', W=None, b=None, dropout_probability=0, followed_by_softmax=False, training_monitor=the_training_monitor, **kwargs):
     if W == None:
         W = tparams[pp(prefix, 'W')]
     if b == None:
@@ -162,6 +179,14 @@ def fflayer(tparams, state_below, options, dropout, prefix='rconv',
     if options['weight_normalisation'] and not followed_by_softmax:
          W = weight_norm(W, tparams[pp(prefix, 'W_wns')])
     preact = tensor.dot(state_below*dropout_mask, W) + b
+
+    if options['monitor_ff_layers']:
+        preact_mean = preact.mean()
+        preact_mean.name = prefix+'_mean'
+        training_monitor.add_monitor(preact_mean)
+        preact_std = preact.std(axis=-1).mean()
+        preact_std.name = prefix+'_std'
+        training_monitor.add_monitor(preact_std)
 
     if options['layer_normalisation'] and not followed_by_softmax:
         preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
@@ -204,7 +229,7 @@ def param_init_crelufflayer(options, params, prefix='creluff', nin=None, nout=No
     if nout is None:
         nout = options['dim_proj']
     if weight_matrix:
-        params[pp(prefix, 'W_pos')] = norm_weight(nin, nout, scale=0.01, ortho=ortho)
+        params[pp(prefix, 'W_pos')] = norm_weight(nin, nout, scale='glorot_inout', ortho=ortho)
         params[pp(prefix, 'W_neg')] = -params[pp(prefix, 'W_pos')]  # Looks linear initialization (Balduzzi et al. 2017)
     if bias:
        params[pp(prefix, 'b')] = numpy.zeros((nout,)).astype(floatX)
@@ -223,7 +248,7 @@ def param_init_crelufflayer(options, params, prefix='creluff', nin=None, nout=No
     return params
 
 
-def crelufflayer(tparams, state_below, options, dropout, prefix='creluff', W_pos=None, W_neg=None, b=None, dropout_probability=0, followed_by_softmax=False, **kwargs):
+def crelufflayer(tparams, state_below, options, dropout, prefix='creluff', W_pos=None, W_neg=None, b=None, dropout_probability=0, followed_by_softmax=False, training_monitor=the_training_monitor, **kwargs):
     if W_pos == None:
         W_pos = tparams[pp(prefix, 'W_pos')]
     if W_neg == None:
@@ -248,6 +273,14 @@ def crelufflayer(tparams, state_below, options, dropout, prefix='creluff', W_pos
     crelu_pos = tensor.nnet.relu(state_below_dr)
     crelu_neg = tensor.nnet.relu(-state_below_dr)
     preact = tensor.dot(crelu_pos, W_pos) + tensor.dot(crelu_neg, W_neg) + b
+
+    if options['monitor_ff_layers']:
+        preact_mean = preact.mean()
+        preact_mean.name = prefix+'_mean'
+        training_monitor.add_monitor(preact_mean)
+        preact_std = preact.std(axis=-1).mean()
+        preact_std.name = prefix+'_std'
+        training_monitor.add_monitor(preact_std)
 
     if options['layer_normalisation'] and not followed_by_softmax:
         preact = layer_norm(preact, tparams[pp(prefix,'ln_b')], tparams[pp(prefix,'ln_s')])
@@ -549,11 +582,11 @@ def tanh_attention(tparams, options, dropout, prefix='',
 def param_init_crelu_attention(options, params, prefix='crelu_attention',
                               dim=None, dimctx=None, attention_hidden_dim=None):
     # attention: combined -> hidden
-    W_comb_att = norm_weight(dim, attention_hidden_dim)
+    W_comb_att = norm_weight(dim, attention_hidden_dim, scale='glorot_inout')
     params[pp(prefix, 'W_comb_att')] = W_comb_att
 
     # attention: context -> hidden
-    Wc_att = norm_weight(dimctx, attention_hidden_dim)
+    Wc_att = norm_weight(dimctx, attention_hidden_dim, scale='glorot_inout')
     params[pp(prefix, 'Wc_att')] = Wc_att
 
     # attention: hidden bias
@@ -561,17 +594,17 @@ def param_init_crelu_attention(options, params, prefix='crelu_attention',
     params[pp(prefix, 'b_att')] = b_att
 
     # attention:
-    U_att_pos = norm_weight(attention_hidden_dim, 1)
+    U_att_pos = norm_weight(attention_hidden_dim, 1, scale='glorot_in')
     params[pp(prefix, 'U_att_pos')] = U_att_pos
     U_att_neg = -U_att_pos     # Looks linear initialization (Balduzzi et al. 2017)
     params[pp(prefix, 'U_att_neg')] = U_att_neg
-    c_att = numpy.zeros((1,)).astype(floatX)
-    params[pp(prefix, 'c_tt')] = c_att
+#    c_att = numpy.zeros((1,)).astype(floatX)
+#    params[pp(prefix, 'c_tt')] = c_att
 
     scale_add = 0.0
     scale_mul = 1.0    
     if options['layer_normalisation']:
-        params[pp(prefix,'W_comb_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
+#        params[pp(prefix,'W_comb_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
         params[pp(prefix,'W_comb_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
         params[pp(prefix,'Wc_att_lnb')] = scale_add * numpy.ones((1*dimctx)).astype(floatX)
         params[pp(prefix,'Wc_att_lns')] = scale_mul * numpy.ones((1*dimctx)).astype(floatX)
@@ -615,15 +648,17 @@ def crelu_attention(tparams, options, dropout, prefix='',
     def compute_attention(h1, pctx_, context_mask):
         pstate_ = tensor.dot(h1*rec_dropout, wn(pp(prefix, 'W_comb_att')))
         if options['layer_normalisation']:
-            pstate_ = layer_norm(pstate_, tparams[pp(prefix, 'W_comb_att_lnb')], tparams[pp(prefix, 'W_comb_att_lns')])
+            #pstate_ = layer_norm(pstate_, tparams[pp(prefix, 'W_comb_att_lnb')], tparams[pp(prefix, 'W_comb_att_lns')])
+            pstate_ = layer_norm(pstate_, None, tparams[pp(prefix, 'W_comb_att_lns')])
         pctx__ = pctx_ + pstate_[None, :, :]
         pctx__dropped = pctx__*attention_hidden_dropout     # Note: ReLUs are transparent to dropout
         pctx__pos = tensor.nnet.relu(pctx__dropped)
         pctx__neg = tensor.nnet.relu(-pctx__dropped)
         
         alpha = tensor.dot(pctx__pos, wn(pp(prefix, 'U_att_pos'))) + \
-                tensor.dot(pctx__neg, wn(pp(prefix, 'U_att_neg'))) + \
-                tparams[pp(prefix, 'c_tt')]                 # Do we need this?
+                tensor.dot(pctx__neg, wn(pp(prefix, 'U_att_neg'))) \
+                # + tparams[pp(prefix, 'c_tt')]		# Do we need this? Probably not
+                                 
         alpha = alpha.reshape([alpha.shape[0], alpha.shape[1]])
         alpha = tensor.exp(alpha - alpha.max(0, keepdims=True))
         if context_mask:

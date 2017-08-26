@@ -12,11 +12,13 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from util import *
 from theano_util import *
 
+from training_monitor import *
+
 # Calling convention:
 # f_update = name(hyperp, tparams, grads, inputs (list), cost)
 # with profile as an optional argument
 
-def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimizer_params={}, profile=False):
+def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimizer_params={}, profile=False, training_monitor=the_training_monitor):
     PREFIX='adam_'
 
     updates = []
@@ -66,7 +68,7 @@ def adam(lr, tparams, grads, inp, cost, beta1=0.9, beta2=0.999, e=1e-8, optimize
         updates.append((p, p_t))
     updates.append((t_prev, t))
 
-    f_update = theano.function([lr]+inp, cost, updates=updates,
+    f_update = theano.function([lr]+inp, [cost] + training_monitor.monitors, updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return f_update, optimizer_tparams

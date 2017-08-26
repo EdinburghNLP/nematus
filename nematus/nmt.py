@@ -39,6 +39,8 @@ from metrics.scorer_provider import ScorerProvider
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
+from training_progress import *
+
 # batch preparation
 def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
                  n_words=30000, n_factors=1):
@@ -431,6 +433,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         logit_hidden = get_layer_constr('creluff')(tparams, logit_pre_hidden, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='creluff_logit')
+
     elif options['output_hidden_activation'] == 'prelu':
         logit_hidden = get_layer_constr('preluff')(tparams, logit_pre_hidden, options,
                                    prefix='preluff_logit', forced_layernorm=True)
@@ -1054,7 +1057,8 @@ def train(dim_word=512,  # word vector dimensionality
           output_hidden_activation='tanh',
           output_crelu_hidden_dim=-1,
           decoder_initial_state_hidden_activation='tanh',
-          decoder_initial_state_crelu_hidden_dim=-1
+          decoder_initial_state_crelu_hidden_dim=-1,
+          monitor_ff_layers=False
     ):
 
     # Model options
@@ -1195,11 +1199,14 @@ def train(dim_word=512,  # word vector dimensionality
 
     tparams = init_theano_params(params)
 
+    the_training_monitor.log_file = saveto + '.training_monitor.log'
+    the_training_monitor.enable_add=True
     trng, use_noise, \
         x, x_mask, y, y_mask, \
         opt_ret, \
         cost = \
         build_model(tparams, model_options)
+    the_training_monitor.enable_add=False
 
     inps = [x, x_mask, y, y_mask]
 
@@ -1341,6 +1348,11 @@ def train(dim_word=512,  # word vector dimensionality
                 # compute cost, grads and update parameters
                 cost = f_update(lrate, x, x_mask, y, y_mask)
 
+                # extract monitored values if they exist
+                if isinstance(cost, list):
+                    cost, monitored_values = cost[0], cost[1:]
+                    the_training_monitor.monitor_step(training_progress.uidx, *monitored_values)
+
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
@@ -1422,6 +1434,11 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask, loss)
+
+                    # extract monitored values if they exist
+                    if isinstance(cost, list):
+                        cost, monitored_values = cost[0], cost[1:]
+                        the_training_monitor.monitor_step(training_progress.uidx, *monitored_values)
 
                     cost_sum += cost
 
@@ -1573,6 +1590,8 @@ def train(dim_word=512,  # word vector dimensionality
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     print 'Done'
                     p_validation = Popen([external_validation_script])
+
+                the_training_monitor.flush_logfile()
 
             # finish after this many updates
             if training_progress.uidx >= finish_after:
@@ -1734,6 +1753,8 @@ if __name__ == '__main__':
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
+    training.add_argument('--monitor_ff_layers', action="store_true", dest="monitor_ff_layers",
+                          help='monitor mean and std activations of ff_layers (pre-layernorm).')
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
