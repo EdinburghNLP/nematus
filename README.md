@@ -3,6 +3,14 @@ NEMATUS
 
 Attention-based encoder-decoder model for neural machine translation
 
+TUNEOUT BRANCH
+--------------
+
+This branch contains the implementation of the Tuneout fine-tuning technique from the paper:
+Antonio Valerio Miceli Barone, Barry Haddow, Ulrich Germann, Rico Sennrich "Regularization techniques for fine-tuning in neural machine translation" 2017.
+https://arxiv.org/abs/1707.09920
+
+
 This package is based on the dl4mt-tutorial by Kyunghyun Cho et al. ( https://github.com/nyu-dl/dl4mt-tutorial ).
 It was used to produce top-scoring systems at the WMT 16 shared translation task.
 
