@@ -131,17 +131,21 @@ def init_params(options):
 
     # init_state, init_cell
     decoder_state_hidden_dim = options['dim']
-    if (options['decoder_initial_state_hidden_activation'] == 'crelu') and (options['decoder_initial_state_crelu_hidden_dim'] != -1):
-        decoder_state_hidden_dim = options['decoder_initial_state_crelu_hidden_dim']
-    params = get_layer_param('ff')(options, params, prefix='ff_state',
+    if options['decoder_initial_state_fixed']:
+        params[pp(prefix, 'fixed_init_state')] = norm_weight(1, nout, scale=0.1)
+    else:
+        if (options['decoder_initial_state_hidden_activation'] == 'crelu') and (options['decoder_initial_state_crelu_hidden_dim'] != -1):
+            decoder_state_hidden_dim = options['decoder_initial_state_crelu_hidden_dim']
+        params = get_layer_param('ff')(options, params, prefix='ff_state',
                                    nin=ctxdim, nout=decoder_state_hidden_dim)
-    if (options['decoder_initial_state_hidden_activation'] == 'crelu'):
-        params = get_layer_param('creluff')(options, params, prefix='creluff_state',
+        if (options['decoder_initial_state_hidden_activation'] == 'crelu'):
+            params = get_layer_param('creluff')(options, params, prefix='creluff_state',
                                             nin=decoder_state_hidden_dim, nout=options['dim'])
-    elif (options['decoder_initial_state_hidden_activation'] == 'prelu'):
-        params = get_layer_param('preluff')(options, params, prefix='preluff_state',
+        elif (options['decoder_initial_state_hidden_activation'] == 'prelu'):
+            params = get_layer_param('preluff')(options, params, prefix='preluff_state',
                                             nin=decoder_state_hidden_dim,
                                             forced_layernorm=True, layernorm_has_scaling=False, layernorm_has_bias=False)
+        
                                 
     attention_hidden_dim = options['attention_hidden_dim'] if (options['attention_hidden_dim'] != -1) else 2 * options['dim']
     # decoder
@@ -450,20 +454,23 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
 # build initial state network
 def build_init_state(tparams, ctx_mean, options, dropout):
-    pre_init_state = get_layer_constr('ff')(tparams, ctx_mean, options, dropout,
+    if options['decoder_initial_state_fixed']:
+        init_state = tparams[pp(prefix, 'fixed_init_state')].repeat(ctx_mean.shape[0], axis=0)
+    else:
+        pre_init_state = get_layer_constr('ff')(tparams, ctx_mean, options, dropout,
                                         dropout_probability=options['dropout_hidden'],
                                         prefix='ff_state', activ='linear')
-    if options['decoder_initial_state_hidden_activation'] == 'tanh':
-        init_state = tensor.tanh(pre_init_state)
-    elif options['decoder_initial_state_hidden_activation'] == 'crelu':
-        init_state = get_layer_constr('creluff')(tparams, pre_init_state, options, dropout,
+        if options['decoder_initial_state_hidden_activation'] == 'tanh':
+            init_state = tensor.tanh(pre_init_state)
+        elif options['decoder_initial_state_hidden_activation'] == 'crelu':
+            init_state = get_layer_constr('creluff')(tparams, pre_init_state, options, dropout,
                                                  dropout_probability=options['dropout_hidden'],
                                                  prefix='creluff_state')
-    elif options['decoder_initial_state_hidden_activation'] == 'prelu':
-        init_state = get_layer_constr('preluff')(tparams, pre_init_state, options,
+        elif options['decoder_initial_state_hidden_activation'] == 'prelu':
+            init_state = get_layer_constr('preluff')(tparams, pre_init_state, options,
                                                  prefix='preluff_state', forced_layernorm=True)
-    else:
-        assert(False)
+        else:
+            assert(False)
     return init_state        
     
 # build a training model
@@ -1058,6 +1065,7 @@ def train(dim_word=512,  # word vector dimensionality
           output_crelu_hidden_dim=-1,
           decoder_initial_state_hidden_activation='tanh',
           decoder_initial_state_crelu_hidden_dim=-1,
+          decoder_initial_state_fixed=False,
           monitor_ff_layers=False
     ):
 
@@ -1710,6 +1718,8 @@ if __name__ == '__main__':
                          help='activation function in hidden layer of the decoder initial state network (default: %(default)s)')
     network.add_argument('--decoder_initial_state_crelu_hidden_dim', type=int, default=-1, metavar='INT',
                          help="decoder initial state hidden layer size (-1: same as --dim) (default: %(default)s)")
+    network.add_argument('--decoder_initial_state_fixed', action=store_true, dest='decoder_initial_state_fixed',
+                         help='Use a fixed trainable initial decoder state instead of computing it from the encoder')
     network.add_argument('--attention_hidden_activation', type=str, default='tanh',
                          choices=['tanh', 'crelu'],
                          help='activation function in hidden layer of the attention network (default: %(default)s)')
