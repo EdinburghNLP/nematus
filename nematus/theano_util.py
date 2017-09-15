@@ -67,7 +67,7 @@ def load_params(path, params, with_prefix=''):
     new_params = OrderedDict()
     for kk, vv in params.iteritems():
         if kk not in pp:
-            warnings.warn('%s is not in the archive' % kk)
+            logging.warn('%s is not in the archive' % kk)
             continue
         if kk == "zipped_params":
             continue
