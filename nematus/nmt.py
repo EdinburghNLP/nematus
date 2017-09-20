@@ -6,6 +6,7 @@ Build a neural machine translation model with soft attention
 import theano
 import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+from theano.printing import Print
 
 import cPickle as pkl
 import json
@@ -143,8 +144,7 @@ def init_params(options):
                                             nin=decoder_state_hidden_dim, nout=options['dim'])
         elif (options['decoder_initial_state_hidden_activation'] == 'prelu'):
             params = get_layer_param('preluff')(options, params, prefix='preluff_state',
-                                            nin=decoder_state_hidden_dim,
-                                            forced_layernorm=True, layernorm_has_scaling=False, layernorm_has_bias=False)
+                                            nin=decoder_state_hidden_dim)
         
                                 
     attention_hidden_dim = options['attention_hidden_dim'] if (options['attention_hidden_dim'] != -1) else 2 * options['dim']
@@ -195,8 +195,7 @@ def init_params(options):
                                             nin=output_hidden_dim, nout=options['dim_word'])
     elif (options['output_hidden_activation'] == 'prelu'):
         params = get_layer_param('preluff')(options, params, prefix='preluff_logit',
-                                            nin=output_hidden_dim,
-                                            forced_layernorm=True, layernorm_has_scaling=False, layernorm_has_bias=False)
+                                            nin=output_hidden_dim)
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
@@ -440,7 +439,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
     elif options['output_hidden_activation'] == 'prelu':
         logit_hidden = get_layer_constr('preluff')(tparams, logit_pre_hidden, options,
-                                   prefix='preluff_logit', forced_layernorm=True)
+                                   prefix='preluff_logit')
     else:
         assert(False)
 
@@ -468,7 +467,7 @@ def build_init_state(tparams, ctx_mean, options, dropout):
                                                  prefix='creluff_state')
         elif options['decoder_initial_state_hidden_activation'] == 'prelu':
             init_state = get_layer_constr('preluff')(tparams, pre_init_state, options,
-                                                 prefix='preluff_state', forced_layernorm=True)
+                                                 prefix='preluff_state')
         else:
             assert(False)
     return init_state        
@@ -560,7 +559,12 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
 
     # compute the softmax probability
+    # Note: Theano softmax sometimes produces probabilities greater than one
     next_probs = tensor.nnet.softmax(logit)
+    #logit_exp = tensor.exp(logit - logit.max(axis=1, keepdims=True))
+    #next_probs = logit_exp / logit_exp.sum(axis=1, keepdims=True)
+    
+    #next_probs += 1e-9 * Print("logit.max(): ")(logit.max())
 
     # sample from softmax distribution to get the sample
     next_sample = trng.multinomial(pvals=next_probs).argmax(1)
