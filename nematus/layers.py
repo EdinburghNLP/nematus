@@ -202,9 +202,9 @@ def param_init_prelufflayer(options, params, prefix='preluff', nin=None,
     has_layernorm = (options['layer_normalisation'] and not followed_by_softmax) or forced_layernorm
     if has_layernorm:
         if layernorm_has_bias:
-            params[pp(prefix,'ln_b')] = numpy.zeros((1*nout)).astype(floatX)
+            params[pp(prefix,'ln_b')] = numpy.zeros((1*nin)).astype(floatX)
         if layernorm_has_scaling:
-            params[pp(prefix,'ln_s')] = numpy.ones((1*nout)).astype(floatX)
+            params[pp(prefix,'ln_s')] = numpy.ones((1*nin)).astype(floatX)
     return params
 
 def prelufflayer(tparams, state_below, options, dropout=None, prefix='preluff', p=None, followed_by_softmax=False, forced_layernorm=False, **kwargs):
