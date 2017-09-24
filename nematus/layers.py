@@ -26,6 +26,7 @@ layers = {'ff': ('param_init_fflayer', 'fflayer'),
           'preluff': ('param_init_prelufflayer', 'prelufflayer'),
           'gru': ('param_init_gru', 'gru_layer'),
           'gru_cond': ('param_init_gru_cond', 'gru_cond_layer'),
+          'crelurhn_cond': ('param_init_crelurhn_cond', 'crelurhn_cond_layer'),
           'embedding': ('param_init_embedding_layer', 'embedding_layer'),
           'tanh_attention' : ('param_init_tanh_attention', 'tanh_attention'),
           'crelu_attention' : ('param_init_crelu_attention', 'crelu_attention'),
@@ -96,24 +97,24 @@ def shared_dropout_layer(shape, use_noise, trng, value, scaled=True):
 
 # layer normalization
 # code from https://github.com/ryankiros/layer-norm
-def layer_norm(x, b, s, monitor_mean_and_std=True, training_monitor=the_training_monitor):
+def layer_norm(x, b, s, monitor_mean_and_std=False, training_monitor=the_training_monitor):
     _eps = numpy_floatX(1e-5)
     mean_val, std_val = None, None
     if x.ndim == 3:
         mean_val = x.mean(2)[:,:,None]
         std_val = tensor.sqrt((x.var(2)[:,:,None] + _eps))
         output = (x - mean_val) / std_val
-        if s is not None:
+        if s != None:
             output = s[None, None, :] * output
-        if b is not None:
+        if b != None:
           output += b[None, None,:]
     else:
         mean_val = x.mean(1)[:,None]
         std_val = tensor.sqrt((x.var(1)[:,None] + _eps))
         output = (x - mean_val) / std_val
-        if s is not None:
+        if s != None:
             output = s[None, :] * output
-        if b is not None:
+        if b != None:
           output += b[None,:]
 
     if monitor_mean_and_std:
@@ -897,6 +898,291 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
 
     seqs = [mask, state_below_, state_belowx]
+    #seqs = [mask, state_below_, state_belowx, state_belowc]
+    _step = _step_slice
+
+    shared_vars = []
+
+    if one_step:
+        rval = _step(*(seqs + [init_state, None, None, pctx_, context, rec_dropout, ctx_dropout] +
+                       shared_vars))
+    else:
+        rval, updates = theano.scan(_step,
+                                    sequences=seqs,
+                                    outputs_info=[init_state,
+                                                  tensor.zeros((n_samples,
+                                                               context.shape[2])),
+                                                  tensor.zeros((n_samples,
+                                                               context.shape[0]))],
+                                    non_sequences=[pctx_, context, rec_dropout, ctx_dropout]+shared_vars,
+                                    name=pp(prefix, '_layers'),
+                                    n_steps=nsteps,
+                                    truncate_gradient=truncate_gradient,
+                                    profile=profile,
+                                    strict=False)
+    return rval
+
+# Conditional GRU layer with Attention
+def param_init_crelurhn_cond(options, params, prefix='crelurhn_cond',
+                        nin=None, dim=None, dimctx=None,
+                        nin_nonlin=None, dim_nonlin=None,
+                        recurrence_transition_depth=2,
+                        attention_hidden_activation='tanh',
+                        attention_hidden_dim=None):
+    if nin is None:
+        nin = options['dim']
+    if dim is None:
+        dim = options['dim']
+    if dimctx is None:
+        dimctx = options['dim']
+    if nin_nonlin is None:
+        nin_nonlin = nin
+    if dim_nonlin is None:
+        dim_nonlin = dim
+    if attention_hidden_dim is None:
+        attention_hidden_dim = 2 * dim
+
+    scale_add = 0.0
+    scale_mul = 1.0
+
+    W = norm_weight(nin, dim)
+    params[pp(prefix, 'W')] = W
+    params[pp(prefix, 'b')] = numpy.zeros((1 * dim,)).astype(floatX)
+    U = ortho_weight(dim_nonlin)
+    params[pp(prefix, 'U')] = U
+
+    Wx_pos = norm_weight(nin_nonlin, dim_nonlin)
+    Wx_neg = -Wx_pos
+    params[pp(prefix, 'Wx_pos')] = Wx_pos
+    params[pp(prefix, 'Wx_neg')] = Wx_neg
+    Ux = ortho_weight(dim_nonlin)
+    Ux_post_pos = Ux.T
+    Ux_post_neg = -Ux_post_pos
+    params[pp(prefix, 'Ux')] = Ux
+    params[pp(prefix, 'Ux_post_pos')] = Ux_post_pos
+    params[pp(prefix, 'Ux_post_neg')] = Ux_post_neg
+    params[pp(prefix, 'bx_pos')] = numpy.zeros((dim_nonlin,)).astype(floatX)
+    params[pp(prefix, 'bx_neg')] = numpy.zeros((dim_nonlin,)).astype(floatX)
+
+    for i in xrange(recurrence_transition_depth - 1):
+        suffix = '' if i == 0 else ('_drt_%s' % i)
+        U_nl = ortho_weight(dim_nonlin)
+        params[pp(prefix, 'U_nl'+suffix)] = U_nl
+        params[pp(prefix, 'b_nl'+suffix)] = numpy.zeros((1 * dim_nonlin,)).astype(floatX)
+        Ux_nl = ortho_weight(dim_nonlin)
+        Ux_nl_post_pos = Ux_nl.T
+        Ux_nl_post_neg = -Ux_nl_post_pos
+        params[pp(prefix, 'Ux_nl'+suffix)] = Ux_nl
+        params[pp(prefix, 'Ux_nl_post_pos'+suffix)] = Ux_nl_post_pos
+        params[pp(prefix, 'Ux_nl_post_neg'+suffix)] = Ux_nl_post_neg
+        params[pp(prefix, 'bx_nl_pos'+suffix)] = numpy.zeros((dim_nonlin,)).astype(floatX)
+        params[pp(prefix, 'bx_nl_neg'+suffix)] = numpy.zeros((dim_nonlin,)).astype(floatX)
+        
+        if options['layer_normalisation']:
+            params[pp(prefix,'U_nl%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+            params[pp(prefix,'U_nl%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            #params[pp(prefix,'Ux_nl%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+            #params[pp(prefix,'Ux_nl%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        if options['weight_normalisation']:
+            params[pp(prefix,'U_nl%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            #params[pp(prefix,'Ux_nl%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+
+        # context to LSTM
+        if i == 0:
+            Wc = norm_weight(dimctx, dim*1)
+            params[pp(prefix, 'Wc'+suffix)] = Wc
+            Wcx_pos = norm_weight(dimctx, dim)
+            Wcx_neg = -Wcx_pos
+            params[pp(prefix, 'Wcx_pos'+suffix)] = Wcx_pos
+            params[pp(prefix, 'Wcx_neg'+suffix)] = Wcx_neg
+            if options['layer_normalisation']:
+                params[pp(prefix,'Wc%s_lnb') % suffix] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wc%s_lns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_pos%s_lnb') % suffix] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_pos%s_lns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_neg%s_lnb') % suffix] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_neg%s_lns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            if options['weight_normalisation']:
+                params[pp(prefix,'Wc%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_pos%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wcx_neg%s_wns') % suffix] = scale_mul * numpy.ones((1*dim)).astype(floatX)          
+
+    # attention
+    params = get_layer_param(attention_hidden_activation+'_attention')(options, params, prefix=prefix, dim=dim, dimctx=dimctx, attention_hidden_dim=attention_hidden_dim)
+
+    if options['layer_normalisation']:
+        # layer-normalization parameters
+        params[pp(prefix,'W_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'W_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'U_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'U_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_pos_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_pos_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_neg_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_neg_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        #params[pp(prefix,'Ux_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
+        #params[pp(prefix,'Ux_lns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+    if options['weight_normalisation']:
+        params[pp(prefix,'W_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'U_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_pos_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        params[pp(prefix,'Wx_neg_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+        #params[pp(prefix,'Ux_wns')] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+
+    return params    
+
+def crelurhn_cond_layer(tparams, state_below, options, dropout, prefix='crelurhn_cond',
+                   mask=None, context=None, one_step=False,
+                   init_memory=None, init_state=None,
+                   context_mask=None,
+                   dropout_probability_below=0,
+                   dropout_probability_ctx=0,
+                   dropout_probability_rec=0,
+                   pctx_=None,
+                   recurrence_transition_depth=2,
+                   truncate_gradient=-1,
+                   attention_hidden_activation='tanh',
+                   profile=False,
+                   **kwargs):
+
+    assert context, 'Context must be provided'
+
+    if one_step:
+        assert init_state, 'previous state must be provided'
+
+    nsteps = state_below.shape[0]
+    if state_below.ndim == 3:
+        n_samples = state_below.shape[1]
+        dim_below = state_below.shape[2]
+    else:
+        n_samples = 1
+        dim_below = state_below.shape[1]
+
+    # mask
+    if mask is None:
+        mask = tensor.ones((state_below.shape[0], 1))
+
+    dim = tparams[pp(prefix, 'Wcx_pos')].shape[1]
+
+    rec_dropout = dropout((n_samples, dim), dropout_probability_rec, num= 2 * recurrence_transition_depth)
+    
+    # utility function to look up parameters and apply weight normalization if enabled
+    def wn(param_name):
+        param = tparams[param_name]
+        if options['weight_normalisation']:
+            return weight_norm(param, tparams[param_name+'_wns'])
+        else:
+            return param
+
+    below_dropout = dropout((n_samples, dim_below),  dropout_probability_below, num=2)
+    ctx_dropout = dropout((n_samples, 2*options['dim']), dropout_probability_ctx, num=2)
+
+    # initial/previous state
+    #if init_state is None:
+    #    init_state = tensor.zeros((n_samples, dim))
+    init_state = layer_norm(init_state, None, None)
+
+    project_context, compute_attention = get_layer_constr(attention_hidden_activation+'_attention')(tparams, options, dropout, prefix,
+                                                                                                    n_samples,
+                                                                                                    dropout_probability_ctx,
+                                                                                                    dropout_probability_rec)
+    
+    # projected context
+    pctx_ = project_context(context, pctx_)
+    
+    def _slice(_x, n, dim):
+        if _x.ndim == 3:
+            return _x[:, :, n*dim:(n+1)*dim]
+        return _x[:, n*dim:(n+1)*dim]
+
+    # state_below is the previous output word embedding
+    state_belowx_pos = tensor.dot(state_below*below_dropout[0], wn(pp(prefix, 'Wx_pos'))) + tparams[pp(prefix, 'bx_pos')]
+    state_belowx_neg = tensor.dot(state_below*below_dropout[0], wn(pp(prefix, 'Wx_neg'))) + tparams[pp(prefix, 'bx_neg')]
+    state_below_ = tensor.dot(state_below*below_dropout[1], wn(pp(prefix, 'W'))) +tparams[pp(prefix, 'b')]
+
+    def _step_slice(m_, x_, xx_pos, xx_neg, h_, ctx_, alpha_, pctx_, cc_, rec_dropout, ctx_dropout):
+        if options['layer_normalisation']:
+            x_ = layer_norm(x_, tparams[pp(prefix, 'W_lnb')], tparams[pp(prefix, 'W_lns')])
+            xx_pos = layer_norm(xx_pos, tparams[pp(prefix, 'Wx_pos_lnb')], tparams[pp(prefix, 'Wx_pos_lns')])
+            xx_neg = layer_norm(xx_neg, tparams[pp(prefix, 'Wx_neg_lnb')], tparams[pp(prefix, 'Wx_neg_lns')])
+
+        preact1 = tensor.dot(h_*rec_dropout[0], wn(pp(prefix, 'U')))
+        if options['layer_normalisation']:
+            preact1 = layer_norm(preact1, tparams[pp(prefix, 'U_lnb')], tparams[pp(prefix, 'U_lns')])
+        preact1 += x_
+        preact1 = tensor.nnet.sigmoid(preact1)
+
+        #r1 = _slice(preact1, 0, dim)
+        #u1 = _slice(preact1, 1, dim)
+        u1 = preact1
+
+        preactx1 = tensor.dot((h_ + xx_pos)*rec_dropout[1], wn(pp(prefix, 'Ux')))
+        #if options['layer_normalisation']:
+        #    preactx1 = layer_norm(preactx1, tparams[pp(prefix, 'Ux_lnb')], tparams[pp(prefix, 'Ux_lns')])
+        #preactx1 *= r1
+        #preactx1 += xx_
+
+        actx1_pos = tensor.nnet.relu(preactx1)
+        actx1_neg = tensor.nnet.relu(-preactx1)
+        actx1_post = tensor.dot(actx1_pos, wn(pp(prefix, 'Ux_post_pos'))) + tensor.dot(actx1_neg, wn(pp(prefix, 'Ux_post_neg')))
+        h1_raw = actx1_post + xx_neg
+        h1 = layer_norm(h1_raw, None, None)
+        
+
+        h1 = u1 * h_ + (1. - u1) * h1
+        h1 = m_[:, None] * h1 + (1. - m_)[:, None] * h_
+
+        # attention
+        alpha = compute_attention(h1, pctx_, context_mask)
+        ctx_ = (cc_ * alpha[:, :, None]).sum(0)  # current context
+
+        h2_prev = h1
+        for i in xrange(recurrence_transition_depth - 1):
+            suffix = '' if i == 0 else ('_drt_%s' % i)
+
+            preact2 = tensor.dot(h2_prev*rec_dropout[2+2*i], wn(pp(prefix, 'U_nl'+suffix)))+tparams[pp(prefix, 'b_nl'+suffix)]
+            if options['layer_normalisation']:
+                preact2 = layer_norm(preact2, tparams[pp(prefix, 'U_nl%s_lnb' % suffix)], tparams[pp(prefix, 'U_nl%s_lns' % suffix)])
+            if i == 0:
+                ctx1_ = tensor.dot(ctx_*ctx_dropout[0], wn(pp(prefix, 'Wc'+suffix))) # dropout mask is shared over mini-steps
+                if options['layer_normalisation']:
+                    ctx1_ = layer_norm(ctx1_, tparams[pp(prefix, 'Wc%s_lnb' % suffix)], tparams[pp(prefix, 'Wc%s_lns' % suffix)])
+                preact2 += ctx1_
+            preact2 = tensor.nnet.sigmoid(preact2)
+
+            #r2 = _slice(preact2, 0, dim)
+            #u2 = _slice(preact2, 1, dim)
+            u2 = preact2
+
+            h2_prev_in = h2_prev
+            if i == 0:
+                ctx2_pos = tensor.dot(ctx_*ctx_dropout[1], wn(pp(prefix, 'Wcx_pos'+suffix))) # dropout mask is shared over mini-steps
+                ctx2_neg = tensor.dot(ctx_*ctx_dropout[1], wn(pp(prefix, 'Wcx_neg'+suffix))) # dropout mask is shared over mini-steps
+                if options['layer_normalisation']:
+                    ctx2_pos = layer_norm(ctx2_pos, tparams[pp(prefix, 'Wcx_pos%s_lnb' % suffix)], tparams[pp(prefix, 'Wcx_pos%s_lns' % suffix)])
+                    ctx2_neg = layer_norm(ctx2_neg, tparams[pp(prefix, 'Wcx_neg%s_lnb' % suffix)], tparams[pp(prefix, 'Wcx_neg%s_lns' % suffix)])
+                h2_prev_in = h2_prev + ctx2_pos
+            
+            preactx2 = tensor.dot(h2_prev_in*rec_dropout[3+2*i], wn(pp(prefix, 'Ux_nl'+suffix)))+tparams[pp(prefix, 'bx_nl_pos'+suffix)]
+            #if options['layer_normalisation']:
+            #   preactx2 = layer_norm(preactx2, tparams[pp(prefix, 'Ux_nl%s_lnb' % suffix)], tparams[pp(prefix, 'Ux_nl%s_lns' % suffix)])
+            #preactx2 *= r2
+            
+            actx2_pos = tensor.nnet.relu(preactx2)
+            actx2_neg = tensor.nnet.relu(-preactx2)
+            actx2_post = tensor.dot(actx2_pos, wn(pp(prefix, 'Ux_nl_post_pos'+suffix))) + tensor.dot(actx2_neg, wn(pp(prefix, 'Ux_nl_post_neg'+suffix)))
+            h2_raw = actx2_post + tparams[pp(prefix, 'bx_nl_neg'+suffix)]
+            if i == 0:
+                h2_raw += ctx2_neg 
+            h2 = layer_norm(h2_raw, None, None)
+
+            h2 = u2 * h2_prev + (1. - u2) * h2
+            h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h2_prev
+            h2_prev = h2
+
+        return h2, ctx_, alpha.T  # pstate_, preact, preactx, r, u
+
+    seqs = [mask, state_below_, state_belowx_pos, state_belowx_neg]
     #seqs = [mask, state_below_, state_belowx, state_belowc]
     _step = _step_slice
 

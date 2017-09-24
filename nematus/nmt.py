@@ -195,7 +195,8 @@ def init_params(options):
                                             nin=output_hidden_dim, nout=options['dim_word'])
     elif (options['output_hidden_activation'] == 'prelu'):
         params = get_layer_param('preluff')(options, params, prefix='preluff_logit',
-                                            nin=output_hidden_dim)
+                                            nin=output_hidden_dim,
+                                            followed_by_softmax=True)
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit',
                                 nin=options['dim_word'],
@@ -439,7 +440,8 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
     elif options['output_hidden_activation'] == 'prelu':
         logit_hidden = get_layer_constr('preluff')(tparams, logit_pre_hidden, options,
-                                   prefix='preluff_logit')
+                                   prefix='preluff_logit',
+                                   followed_by_softmax=True)
     else:
         assert(False)
 
@@ -1274,6 +1276,13 @@ def train(dim_word=512,  # word vector dimensionality
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
 
     print 'Computing gradient...',
+    # Debug code for decoder
+    #for param_name, param_var in updated_params.iteritems():
+    #    if param_name.startswith('encoder') or param_name.startswith('Wemb') or param_name.startswith('ff_state'):
+    #        continue
+    #    print >> sys.stderr, param_name
+    #    grads = tensor.grad(cost, wrt=param_var)
+    #sys.exit(-1)
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
     print 'Done'
 
@@ -1711,9 +1720,9 @@ if __name__ == '__main__':
     #network.add_argument('--encoder', type=str, default='gru',
                          #choices=['gru'],
                          #help='encoder recurrent layer')
-    #network.add_argument('--decoder', type=str, default='gru_cond',
-                         #choices=['gru_cond'],
-                         #help='first decoder recurrent layer')
+    network.add_argument('--decoder', type=str, default='gru_cond',
+                         choices=['gru_cond', 'crelurhn_cond'],
+                         help='first decoder recurrent layer')
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond'],
                          help='decoder recurrent layer after first one')

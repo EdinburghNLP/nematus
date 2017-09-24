@@ -43,6 +43,8 @@ def fill_options(options):
         options['decoder_truncate_gradient'] = -1
     if not 'enc_depth_bidirectional' in options:
         options['enc_depth_bidirectional'] = options['enc_depth']
+    if not 'decoder' in options:
+        options['decoder'] = 'gru_cond'
     if not 'decoder_deep' in options:
         options['decoder_deep'] = 'gru'
     if not 'layer_normalisation' in options:
