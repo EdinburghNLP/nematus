@@ -47,6 +47,8 @@ def fill_options(options):
         options['decoder'] = 'gru_cond'
     if not 'decoder_deep' in options:
         options['decoder_deep'] = 'gru'
+    if not 'decoder_gru_no_reset_gate' in options:
+        options['decoder_gru_no_reset_gate'] = False
     if not 'layer_normalisation' in options:
         options['layer_normalisation'] = False
     if not 'weight_normalisation' in options:
@@ -84,6 +86,17 @@ def fill_options(options):
         options['decoder_initial_state_crelu_hidden_dim'] = -1
     if not 'decoder_initial_state_fixed' in options:
         options['decoder_initial_state_fixed'] = False
+
+    if not 'decoder_main_activation' in options:
+        options['decoder_main_activation'] = 'tanh'
+    if not 'decoder_main_recurrent_identity_init' in options:
+        options['decoder_main_recurrent_identity_init'] = False
+    if not 'decoder_post_activation_input' in options:
+        options['decoder_post_activation_input'] = False
+    if not 'decoder_zero_init_main_input' in options:
+        options['decoder_zero_init_main_input'] = False
+    if not 'decoder_crelurhn_cond_no_layer_norm_on_state' in options:
+        options['decoder_crelurhn_cond_no_layer_norm_on_state'] = False
 
 
     if not 'monitor_ff_layers' in options:
