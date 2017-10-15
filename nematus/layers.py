@@ -941,8 +941,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         
         if post_activation_input:
             if main_activation == 'crelu':
-                h1_pos += xx_post
-                h1_neg += xx_post
+                h1_pos += xx_post / 2.0
+                h1_neg -= xx_post / 2.0
             else:
                 h1 += xx_post
         
