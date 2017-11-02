@@ -292,7 +292,7 @@ def parse_args():
                          help="dictionary for the target data")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
-    data.add_argument('--saveto', type=str, default='model', metavar='PATH', dest='saveto',
+    data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
                          help="load existing model from this path")
@@ -306,9 +306,9 @@ def parse_args():
                          help="embedding layer size (default: %(default)s)")
     network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
                          help="hidden state size (default: %(default)s)")
-    network.add_argument('--source_vocab_size', type=int, required=True, metavar='INT',
+    network.add_argument('--source_vocab_size', '--n_words_src', type=int, required=True, metavar='INT',
                          help="source vocabulary size (default: %(default)s)")
-    network.add_argument('--target_vocab_size', type=int, required=True, metavar='INT',
+    network.add_argument('--target_vocab_size', '--n_words', type=int, required=True, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
     network.add_argument('--nematus_compat', action='store_true',
                          help="Add this flag to have the same model architecture as Nematus(default: %(default)s)")
