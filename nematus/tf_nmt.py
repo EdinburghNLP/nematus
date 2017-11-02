@@ -302,9 +302,9 @@ def parse_args():
                          help="Save summaries after INT updates (default: %(default)s)")
 
     network = parser.add_argument_group('network parameters')
-    network.add_argument('--embedding_size', type=int, default=512, metavar='INT',
+    network.add_argument('--embedding_size', '--dim_word', type=int, default=512, metavar='INT',
                          help="embedding layer size (default: %(default)s)")
-    network.add_argument('--state_size', type=int, default=1000, metavar='INT',
+    network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
                          help="hidden state size (default: %(default)s)")
     network.add_argument('--source_vocab_size', type=int, required=True, metavar='INT',
                          help="source vocabulary size (default: %(default)s)")
@@ -325,7 +325,7 @@ def parse_args():
                          help="maximum number of updates (minibatches) (default: %(default)s)")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
-    training.add_argument('--learning_rate', type=float, default=0.0001, metavar='FLOAT',
+    training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
                          help="learning rate (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
@@ -335,7 +335,7 @@ def parse_args():
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--use_layer_norm', action="store_true", dest="use_layer_norm",
+    training.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
 
     validation = parser.add_argument_group('validation parameters')
