@@ -81,8 +81,7 @@ class LayerNormLayer(object):
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
-                 state_size,
-                 nematus_compat=False):
+                 state_size):
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
                                     [ortho_weight(state_size),
@@ -108,8 +107,6 @@ class GRUStep(object):
         self.proposal_bias = tf.Variable(
                                     numpy.zeros((state_size,)).astype('float32'),
                                     name='proposal_bias')
-        self.nematus_compat = nematus_compat
-
     
 
     def _get_gates_x(self, x, input_is_3d=False):
@@ -128,14 +125,12 @@ class GRUStep(object):
             proposal_x = matmul3d(x, self.input_to_proposal)
         else:
             proposal_x = tf.matmul(x, self.input_to_proposal)
-        if not self.nematus_compat:
-            proposal_x += self.proposal_bias
         return proposal_x
 
     def _get_proposal_state(self, prev_state):
         proposal_state = tf.matmul(prev_state, self.state_to_proposal)
-        if self.nematus_compat:
-            proposal_state += self.proposal_bias
+        # placing the bias here is unorthodox, but we're keeping this behavior for compatibility with dl4mt-tutorial
+        proposal_state += self.proposal_bias
         return proposal_state
 
     def precompute_from_x(self, x):

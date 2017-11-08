@@ -306,13 +306,10 @@ def parse_args():
                          help="embedding layer size (default: %(default)s)")
     network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
                          help="hidden state size (default: %(default)s)")
-    network.add_argument('--source_vocab_size', '--n_words_src', type=int, required=True, metavar='INT',
+    network.add_argument('--source_vocab_size', '--n_words_src', type=int, default=-1, metavar='INT',
                          help="source vocabulary size (default: %(default)s)")
-    network.add_argument('--target_vocab_size', '--n_words', type=int, required=True, metavar='INT',
+    network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
-    network.add_argument('--nematus_compat', action='store_true',
-                         help="Add this flag to have the same model architecture as Nematus(default: %(default)s)")
-
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=50, metavar='INT',

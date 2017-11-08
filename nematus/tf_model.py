@@ -45,8 +45,7 @@ class Decoder(object):
                         hidden_size=2*config.state_size)
         self.grustep2 = GRUctor(
                             input_size=2*config.state_size,
-                            state_size=config.state_size,
-                            nematus_compat=config.nematus_compat)
+                            state_size=config.state_size)
 
     def sample(self):
        batch_size = tf.shape(self.init_state)[0]
