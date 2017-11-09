@@ -22,7 +22,8 @@ class TextIterator:
                  shuffle_each_epoch=False,
                  sort_by_length=True,
                  use_factor=False,
-                 maxibatch_size=20):
+                 maxibatch_size=20,
+                 multi_sentence_separator=None):
         if shuffle_each_epoch:
             self.source_orig = source
             self.target_orig = target
@@ -91,13 +92,19 @@ class TextIterator:
 
         if len(self.source_buffer) == 0:
             for ss in self.source:
-                ss = ss.split()
-                tt = self.target.readline().split()
+                if multi_sentence_separator == None:
+                    ss = [ss.split()]
+                    tt = [self.target.readline().split()]
+                else:
+                    ss = ss.split(multi_sentence_separator).split()
+                    tt = self.target.readline().split(multi_sentence_separator).split()
                 
-                if self.skip_empty and (len(ss) == 0 or len(tt) == 0):
+                if self.skip_empty and (len(ss[0]) == 0 or len(tt[0]) == 0):
                     continue
                 if len(ss) > self.maxlen or len(tt) > self.maxlen:
                     continue
+                ss = [ss[0]] + [e for e in ss[1:] if (len(e) > 0) and (len(e) <= self.maxlen)]
+                tt = [tt[0]] + [e for e in tt[1:] if (len(e) > 0) and (len(e) <= self.maxlen)]
 
                 self.source_buffer.append(ss)
                 self.target_buffer.append(tt)
@@ -111,7 +118,7 @@ class TextIterator:
 
             # sort by target buffer
             if self.sort_by_length:
-                tlen = numpy.array([len(t) for t in self.target_buffer])
+                tlen = numpy.array([len(t[0]) for t in self.target_buffer])
                 tidx = tlen.argsort()
 
                 _sbuf = [self.source_buffer[i] for i in tidx]
@@ -131,27 +138,35 @@ class TextIterator:
 
                 # read from source file and map to word index
                 try:
-                    ss = self.source_buffer.pop()
+                    source_multi_sent = self.source_buffer.pop()
                 except IndexError:
                     break
-                tmp = []
-                for w in ss:
-                    if self.use_factor:
-                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
-                    else:
-                        w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
-                    tmp.append(w)
-                ss = tmp
+                source_multi_sent_word_ids = []
+                for source_sent in source_multi_sent:
+                    source_sent_word_ids = []
+                    for w in source_sent:
+                        if self.use_factor:
+                            w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                        else:
+                            w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
+                        source_sent_word_ids.append(w)
+                    source_multi_sent_word_ids.append(source_sent_word_ids)
 
-                # read from source file and map to word index
-                tt = self.target_buffer.pop()
-                tt = [self.target_dict[w] if w in self.target_dict else 1
-                      for w in tt]
-                if self.n_words_target > 0:
-                    tt = [w if w < self.n_words_target else 1 for w in tt]
+                # read from target file and map to word index
+                target_multi_sent = self.target_buffer.pop()
+                target_multi_sent_word_ids = []
+                for target_sent in target_multi_sent:
+                    target_sent_word_ids = [self.target_dict[w] if w in self.target_dict else 1 for w in target_sent]
+                    if self.n_words_target > 0:
+                        target_sent_word_ids = [w_id if w_id < self.n_words_target else 1 for w_id in target_sent_word_ids]
+                    target_multi_sent_word_ids.append(target_sent_word_ids)
 
-                source.append(ss)
-                target.append(tt)
+                if multi_sentence_separator == None:
+                    source.append(source_multi_sent_word_ids[0])
+                    target.append(target_multi_sent_word_ids[0])
+                else:
+                    source.append(source_multi_sent_word_ids)
+                    target.append(target_multi_sent_word_ids)
 
                 if len(source) >= self.batch_size or \
                         len(target) >= self.batch_size:

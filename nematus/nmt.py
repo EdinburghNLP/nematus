@@ -1108,6 +1108,8 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_truncate_gradient=-1, # Truncate BPTT gradients in the decoder to this value. Use -1 for no truncation
           layer_normalisation=False, # layer normalisation https://arxiv.org/abs/1607.06450
           weight_normalisation=False, # normalize weights
+          multi_sentence_separator=None,
+          contrastive_training=False, # contrastive training
     ):
 
     # Model options
@@ -1844,6 +1846,12 @@ if __name__ == '__main__':
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
     training.add_argument('--decoder_truncate_gradient', type=int, default=-1, metavar='INT',
                          help="truncate BPTT gradients in the encoder to this value. Use -1 for no truncation (default: %(default)s)")
+
+    training.add_argument('--multi_sentence_separator', type=str,
+                         help="separator string for multiple sentences (default: no multiple sentences allowed)")
+    training.add_argument('--contrastive_training', action="store_true",
+                         help='train with contrastive target sentences')
+
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,

@@ -67,3 +67,8 @@ def fill_options(options):
             options['dec_high_recurrence_transition_depth'] = 2
         else:
             options['dec_high_recurrence_transition_depth'] = 1
+
+    if not 'multi_sentence_separator' in options:
+        options['multi_sentence_separator'] = None
+    if not 'contrastive_training' in options:
+        options['contrastive_training'] = False
