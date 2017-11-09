@@ -321,6 +321,13 @@ def embedding_layer(tparams, ids, factors=None, prefix='', suffix=''):
 # GRU layer
 def param_init_gru(options, params, prefix='gru', nin=None, dim=None,
                    recurrence_transition_depth=1,
+                   reset_gate=True,
+                   main_activation='tanh',
+                   main_recurrent_identity_init=False,
+                   post_activation_input=False,
+                   zero_init_main_input=False,
+                   zero_init_main_state=False,
+                   gate_negativity=0.0,
                    **kwargs):
     if nin is None:
         nin = options['dim_proj']
@@ -329,43 +336,77 @@ def param_init_gru(options, params, prefix='gru', nin=None, dim=None,
 
     scale_add = 0.0
     scale_mul = 1.0
+    scale_mul_main_in = 0.0 if zero_init_main_input else scale_mul
+    scale_add_gates = numpy.log(gate_negativity) if zero_init_main_state and (gate_negativity != 0.0) else scale_add
+    scale_mul_gates = 0.0 if zero_init_main_state else scale_mul
+
+    n_aux_gates = 2 if reset_gate else 1
 
     for i in xrange(recurrence_transition_depth):
         suffix = '' if i == 0 else ('_drt_%s' % i)
         # recurrent transformation weights for gates
-        params[pp(prefix, 'b'+suffix)] = numpy.zeros((2 * dim,)).astype(floatX)
-        U = numpy.concatenate([ortho_weight(dim),
-                           ortho_weight(dim)], axis=1)
+        params[pp(prefix, 'b'+suffix)] = numpy.zeros((n_aux_gates * dim,)).astype(floatX)
+        U = numpy.concatenate([ortho_weight(dim), ortho_weight(dim)], axis=1) if reset_gate else ortho_weight(dim)
         params[pp(prefix, 'U'+suffix)] = U
         # recurrent transformation weights for hidden state proposal
         params[pp(prefix, 'bx'+suffix)] = numpy.zeros((dim,)).astype(floatX)
         Ux = ortho_weight(dim)
         params[pp(prefix, 'Ux'+suffix)] = Ux
+
+        if main_activation == 'tanh':
+            pass
+        elif main_activation == 'crelu':
+            params[pp(prefix, 'Ux_post_pos'+suffix)] = Ux.T
+            params[pp(prefix, 'Ux_post_neg'+suffix)] = -Ux.T
+        else:
+            assert False, 'Unknown main activation %s' % main_activation
+
         if options['layer_normalisation']:
-            params[pp(prefix,'U%s_lnb' % suffix)] = scale_add * numpy.ones((2*dim)).astype(floatX)
-            params[pp(prefix,'U%s_lns' % suffix)] = scale_mul * numpy.ones((2*dim)).astype(floatX)
+            params[pp(prefix,'U%s_lnb' % suffix)] = scale_add_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
+            params[pp(prefix,'U%s_lns' % suffix)] = scale_mul_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
             params[pp(prefix,'Ux%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
             params[pp(prefix,'Ux%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            if main_activation == 'crelu':
+                params[pp(prefix,'Ux_post%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Ux_post%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+
         if options['weight_normalisation']:
-            params[pp(prefix,'U%s_wns' % suffix)] = scale_mul * numpy.ones((2*dim)).astype(floatX)
+            params[pp(prefix,'U%s_wns' % suffix)] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
             params[pp(prefix,'Ux%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+            if main_activation == 'crelu':
+                params[pp(prefix,'Ux_post_pos%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Ux_post_neg%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
 
         if i == 0:
             # embedding to gates transformation weights, biases
-            W = numpy.concatenate([norm_weight(nin, dim),
-                           norm_weight(nin, dim)], axis=1)
+            W = numpy.concatenate([norm_weight(nin, dim), norm_weight(nin, dim)], axis=1) if reset_gate else norm_weight(nin, dim)
             params[pp(prefix, 'W'+suffix)] = W
             # embedding to hidden state proposal weights, biases
-            Wx = norm_weight(nin, dim)
+
+            if zero_init_main_input and not options['layer_normalisation']:
+                Wx = numpy.zeros((nin, dim)).astype(floatX)
+            else:
+                Wx = norm_weight(nin, dim)
             params[pp(prefix, 'Wx'+suffix)] = Wx
+
+            if post_activation_input:
+                Wx_post = -Wx # Looks-linear initialization
+                params[pp(prefix, 'Wx_post')] = Wx_post
+                params[pp(prefix, 'bx_post')] = numpy.zeros((dim,)).astype(floatX)
+
             if options['layer_normalisation']:
-                params[pp(prefix,'W%s_lnb' % suffix)] = scale_add * numpy.ones((2*dim)).astype(floatX)
-                params[pp(prefix,'W%s_lns' % suffix)] = scale_mul * numpy.ones((2*dim)).astype(floatX)
+                params[pp(prefix,'W%s_lnb' % suffix)] = scale_add * numpy.ones((n_aux_gates*dim)).astype(floatX)
+                params[pp(prefix,'W%s_lns' % suffix)] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
                 params[pp(prefix,'Wx%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
-                params[pp(prefix,'Wx%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                params[pp(prefix,'Wx%s_lns' % suffix)] = scale_mul_main_in * numpy.ones((1*dim)).astype(floatX)
+                if post_activation_input:
+                   params[pp(prefix,'Wx_post%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
+                   params[pp(prefix,'Wx_post%s_lns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
             if options['weight_normalisation']:
-                params[pp(prefix,'W%s_wns' % suffix)] = scale_mul * numpy.ones((2*dim)).astype(floatX)
+                params[pp(prefix,'W%s_wns' % suffix)] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
                 params[pp(prefix,'Wx%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
+                if post_activation_input:
+                    params[pp(prefix,'Wx_post%s_wns' % suffix)] = scale_mul * numpy.ones((1*dim)).astype(floatX)
 
     return params
 
@@ -377,6 +418,9 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
               dropout_probability_rec=0,
               recurrence_transition_depth=1,
               truncate_gradient=-1,
+              reset_gate=True,
+              main_activation='tanh',
+              gate_negativity=0.0,
               profile=False,
               **kwargs):
 
@@ -392,6 +436,8 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         dim_below = state_below.shape[1]
 
     dim = tparams[pp(prefix, 'Ux')].shape[1]
+
+    post_activation_input = pp(prefix, 'Wx_post') in tparams
 
     # utility function to look up parameters and apply weight normalization if enabled
     def wn(param_name):
@@ -417,7 +463,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
             return _x[:, :, n*dim:(n+1)*dim]
         return _x[:, n*dim:(n+1)*dim]
 
-    state_below_list, state_belowx_list = [], []
+    state_below_list, state_belowx_list, state_belowx_post_list = [], [], []
 
     # state_below is the input word embeddings
     # input to the gates, concatenated
@@ -430,6 +476,13 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
     state_below_list.append(state_below_)
     state_belowx_list.append(state_belowx)
 
+    if post_activation_input:
+        state_belowx_post = tensor.dot(state_below*below_dropout[1], wn(pp(prefix, 'Wx_post'))) + tparams[pp(prefix, 'bx_post')]
+        if options['layer_normalisation']:
+            state_belowx_post = layer_norm(state_belowx_post, tparams[pp(prefix, 'Wx_post_lnb')], tparams[pp(prefix, 'Wx_post_lns')])
+        state_belowx_post_list.append(state_belowx_post)
+
+
     # step function to be used by scan
     # arguments    | sequences |outputs-info| non-seqs
     def _step_slice(*args):
@@ -437,6 +490,8 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         m_ = args[0]
         x_list = args[1:1+n_ins]
         xx_list = args[1+n_ins:1+2*n_ins]
+        if post_activation_input:
+            xx_post_list = args[1+2*n_ins:1+3*n_ins]
         h_, rec_dropout = args[-2], args[-1]
 
         h_prev = h_
@@ -445,9 +500,12 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
             if i == 0:
                 x_cur = x_list[i]
                 xx_cur = xx_list[i]
+                if post_activation_input:
+                    xx_post_cur = xx_post_list[i]
             else:
                 x_cur = tparams[pp(prefix, 'b'+suffix)]
                 xx_cur = tparams[pp(prefix, 'bx'+suffix)]
+                xx_post_cur = 0
 
             preact = tensor.dot(h_prev*rec_dropout[0+2*i], wn(pp(prefix, 'U'+suffix)))
             if options['layer_normalisation']:
@@ -455,8 +513,15 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
             preact += x_cur
 
             # reset and update gates
-            r = tensor.nnet.sigmoid(_slice(preact, 0, dim))
-            u = tensor.nnet.sigmoid(_slice(preact, 1, dim))
+            gates_act = tensor.nnet.sigmoid(preact)
+            if gate_negativity != 0.0: 	# Does theano already optimize this?
+                gates_act = (1.0 + gate_negativity) * gates_act - gate_negativity
+            if reset_gate:
+                r = _slice(gates_act, 0, dim)
+                u = _slice(gates_act, 1, dim)
+            else:
+                r = 1
+                u = gates_act
 
             # compute the hidden state proposal
             preactx = tensor.dot(h_prev*rec_dropout[1+2*i], wn(pp(prefix, 'Ux'+suffix)))
@@ -465,8 +530,24 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
             preactx = preactx * r
             preactx = preactx + xx_cur
 
-            # hidden state proposal
-            h = tensor.tanh(preactx)
+            if main_activation == 'tanh':
+                h = tensor.tanh(preactx)
+            elif main_activation == 'crelu':
+                h_pos = tensor.nnet.relu(preactx)
+                h_neg = tensor.nnet.relu(-preactx)
+        
+            if post_activation_input:
+                if main_activation == 'crelu':
+                    h_pos += xx_post_cur / 2.0
+                    h_neg -= xx_post_cur / 2.0
+                else:
+                    h += xx_post_cur
+        
+            if main_activation == 'crelu': # Notice that this goes after the post activation input
+                h = tensor.dot(h_pos, wn(pp(prefix, 'Ux_post_pos%s' % suffix))) + tensor.dot(h_neg, wn(pp(prefix, 'Ux_post_neg%s' % suffix)))
+                if options['layer_normalisation']:
+                    h = layer_norm(h, tparams[pp(prefix, 'Ux_post%s_lnb' % suffix)], tparams[pp(prefix, 'Ux_post%s_lns' % suffix)])
+
 
             # leaky integrate and obtain next hidden state
             h = u * h_prev + (1. - u) * h
@@ -476,7 +557,7 @@ def gru_layer(tparams, state_below, options, dropout, prefix='gru',
         return h
 
     # prepare scan arguments
-    seqs = [mask] + state_below_list + state_belowx_list
+    seqs = [mask] + state_below_list + state_belowx_list + state_belowx_post_list
     _step = _step_slice
     shared_vars = [rec_dropout]
 

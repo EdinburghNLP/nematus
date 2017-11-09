@@ -94,16 +94,29 @@ def init_params(options):
         params = get_layer_param('embedding')(options, params, options['n_words'], options['dim_word'], suffix='_dec')
 
     # encoder: bidirectional RNN
+
+    encoder_state_hidden_dim = options['dim']
+    if options['encoder_trainable_initial_state']:
+        params['enc_fixed_init_state'] = norm_weight(1, encoder_state_hidden_dim, scale=0.1)
+
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder',
                                               nin=options['dim_word'],
                                               dim=options['dim'],
-                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'])
+                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                              reset_gate=not options['encoder_gru_no_reset_gate'],
+                                              main_activation=options['encoder_main_activation'],
+                                              post_activation_input=options['encoder_post_activation_input'],
+                                              zero_init_main_input=options['encoder_zero_init_main_input'])
     params = get_layer_param(options['encoder'])(options, params,
                                               prefix='encoder_r',
                                               nin=options['dim_word'],
                                               dim=options['dim'],
-                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'])
+                                              recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                              reset_gate=not options['encoder_gru_no_reset_gate'],
+                                              main_activation=options['encoder_main_activation'],
+                                              post_activation_input=options['encoder_post_activation_input'],
+                                              zero_init_main_input=options['encoder_zero_init_main_input'])
     if options['enc_depth'] > 1:
         for level in range(2, options['enc_depth'] + 1):
             prefix_f = pp('encoder', level)
@@ -114,18 +127,30 @@ def init_params(options):
                                                              prefix=prefix_f,
                                                              nin=options['dim'],
                                                              dim=options['dim'],
-                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'])
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                             main_activation=options['encoder_main_activation'],
+                                                             post_activation_input=options['encoder_post_activation_input'],
+                                                             zero_init_main_input=options['encoder_zero_init_main_input'])
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_r,
                                                              nin=options['dim'],
                                                              dim=options['dim'],
-                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'])
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                             main_activation=options['encoder_main_activation'],
+                                                             post_activation_input=options['encoder_post_activation_input'],
+                                                             zero_init_main_input=options['encoder_zero_init_main_input'])
             else:
                 params = get_layer_param(options['encoder'])(options, params,
                                                              prefix=prefix_f,
                                                              nin=options['dim'] * 2,
                                                              dim=options['dim'] * 2,
-                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'])
+                                                             recurrence_transition_depth=options['enc_recurrence_transition_depth'],
+                                                             reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                             main_activation=options['encoder_main_activation'],
+                                                             post_activation_input=options['encoder_post_activation_input'],
+                                                             zero_init_main_input=options['encoder_zero_init_main_input'])
 
 
     ctxdim = 2 * options['dim']
@@ -253,22 +278,35 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
             embr *= source_dropout[::-1]
 
 
+    # initial state
+    init_state = None
+    if options['encoder_trainable_initial_state']:
+        init_state = tparams['enc_fixed_init_state'].repeat(n_samples, axis=0)
+    if options['encoder'] == 'gru_cond' and (options['encoder_main_activation'] in ['crelu']):
+        init_state = layer_norm(init_state, None, None)
+
     ## level 1
     proj = get_layer_constr(options['encoder'])(tparams, emb, options, dropout,
                                                 prefix='encoder',
                                                 mask=x_mask,
+                                                init_state=init_state,
                                                 dropout_probability_below=options['dropout_embedding'],
                                                 dropout_probability_rec=options['dropout_hidden'],
                                                 recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                 truncate_gradient=options['encoder_truncate_gradient'],
+                                                reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                main_activation=options['encoder_main_activation'],
                                                 profile=profile)
     projr = get_layer_constr(options['encoder'])(tparams, embr, options, dropout,
                                                  prefix='encoder_r',
                                                  mask=xr_mask,
+                                                 init_state=init_state,
                                                  dropout_probability_below=options['dropout_embedding'],
                                                  dropout_probability_rec=options['dropout_hidden'],
                                                  recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                  truncate_gradient=options['encoder_truncate_gradient'],
+                                                 reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                 main_activation=options['encoder_main_activation'],
                                                  profile=profile)
 
     ## bidirectional levels before merge
@@ -283,18 +321,24 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
         proj = get_layer_constr(options['encoder'])(tparams, input_f, options, dropout,
                                                     prefix=prefix_f,
                                                     mask=x_mask,
+                                                    init_state=init_state,
                                                     dropout_probability_below=options['dropout_hidden'],
                                                     dropout_probability_rec=options['dropout_hidden'],
                                                     recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                     truncate_gradient=options['encoder_truncate_gradient'],
+                                                    reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                    main_activation=options['encoder_main_activation'],
                                                     profile=profile)
         projr = get_layer_constr(options['encoder'])(tparams, input_r, options, dropout,
                                                      prefix=prefix_r,
                                                      mask=xr_mask,
+                                                     init_state=init_state,
                                                      dropout_probability_below=options['dropout_hidden'],
                                                      dropout_probability_rec=options['dropout_hidden'],
                                                      recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                      truncate_gradient=options['encoder_truncate_gradient'],
+                                                     reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                     main_activation=options['encoder_main_activation'],
                                                      profile=profile)
 
         # residual connections
@@ -311,10 +355,13 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
         ctx += get_layer_constr(options['encoder'])(tparams, ctx, options, dropout,
                                                    prefix=pp('encoder', level),
                                                    mask=x_mask,
+                                                   init_state=init_state,
                                                    dropout_probability_below=options['dropout_hidden'],
                                                    dropout_probability_rec=options['dropout_hidden'],
                                                    recurrence_transition_depth=options['enc_recurrence_transition_depth'],
                                                    truncate_gradient=options['encoder_truncate_gradient'],
+                                                   reset_gate=not options['encoder_gru_no_reset_gate'],
+                                                   main_activation=options['encoder_main_activation'],
                                                    profile=profile)[0]
 
     return x, ctx
@@ -489,7 +536,7 @@ def build_init_state(tparams, ctx_mean, options, dropout):
         else:
             assert(False)
 
-    # Normalization for retifier RNNs
+    # Normalization for rectifier RNNs
     if options['decoder'] == 'crelurhn_cond' or (options['decoder'] == 'gru_cond' and (options['decoder_main_activation'] in ['prelu', 'crelu'])):
         init_state = layer_norm(init_state, None, None)
         
@@ -1099,6 +1146,13 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_post_activation_input=False,
           decoder_zero_init_main_input=False,
           decoder_crelurhn_cond_no_layer_norm_on_state=False,
+          encoder_trainable_initial_state=False,
+          encoder_gru_no_reset_gate=False,
+          encoder_main_activation='tanh',
+          encoder_post_activation_input=False,
+          encoder_zero_init_main_input=False,
+          encoder_zero_init_main_state=False,
+          encoder_gate_negativity=0.0,
           monitor_ff_layers=False
     ):
 
@@ -1303,9 +1357,9 @@ def train(dim_word=512,  # word vector dimensionality
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
 
     print 'Computing gradient...',
-    # Debug code for decoder
+    # Debug code for encoder
     #for param_name, param_var in updated_params.iteritems():
-    #    if param_name.startswith('encoder') or param_name.startswith('Wemb') or param_name.startswith('ff_state'):
+    #    if param_name.startswith('decoder') or param_name.startswith('Wemb') or param_name.startswith('ff_state'):
     #        continue
     #    print >> sys.stderr, param_name
     #    grads = tensor.grad(cost, wrt=param_var)
@@ -1783,6 +1837,23 @@ if __name__ == '__main__':
                          help='Initialize the main (proposal) input weights of the decoder to zero')
     network.add_argument('--decoder_crelurhn_cond_no_layer_norm_on_state', action="store_true", dest='decoder_crelurhn_cond_no_layer_norm_on_state',
                          help='Disable layer normalization on the state proposal of the crelurhn decoder')
+
+    network.add_argument('--encoder_gru_no_reset_gate', action="store_true",
+                         help='encoder GRU has no reset gate (it is a RHN)')
+    network.add_argument('--encoder_trainable_initial_state', action="store_true", dest='encoder_trainable_initial_state',
+                         help='Use a trainable initial encoder state')
+    network.add_argument('--encoder_main_activation', type=str, default='tanh',
+                         choices=['tanh', 'crelu'],
+                         help='activation function in the main (proposal) gate of the encoder (default: %(default)s)')
+    network.add_argument('--encoder_post_activation_input', action="store_true", dest='encoder_post_activation_input',
+                         help='Enable post-activation input in the decoder with LL-initializaiton for improved information flow')
+    network.add_argument('--encoder_zero_init_main_input', action="store_true", dest='encoder_zero_init_main_input',
+                         help='Initialize the main (proposal) input weights of the decoder to zero')
+    network.add_argument('--encoder_zero_init_main_state', action="store_true", dest='encoder_zero_init_main_state',
+                         help='Initialize the encoder gates to ignore the previous state (requires layernorm)')
+    network.add_argument('--encoder_gate_negativity', type=float, default=0.0, metavar="FLOAT",
+                         help='Allow the update and reset gates of the encoder to go below zero by this value (default 0.0)')
+
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
