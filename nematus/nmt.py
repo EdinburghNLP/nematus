@@ -35,61 +35,11 @@ from raml_distributions import *
 from layers import *
 from initializers import *
 from optimizers import *
+from batch_processing import *
 from metrics.scorer_provider import ScorerProvider
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
 
-# batch preparation
-def prepare_data(seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
-                 n_words=30000, n_factors=1):
-    # x: a list of sentences
-    lengths_x = [len(s) for s in seqs_x]
-    lengths_y = [len(s) for s in seqs_y]
-
-    if maxlen is not None:
-        new_seqs_x = []
-        new_seqs_y = []
-        new_lengths_x = []
-        new_lengths_y = []
-        new_weights = []
-        if weights is None:
-            weights = [None] * len(seqs_y) # to make the zip easier
-        for l_x, s_x, l_y, s_y, w in zip(lengths_x, seqs_x, lengths_y, seqs_y, weights):
-            if l_x < maxlen and l_y < maxlen:
-                new_seqs_x.append(s_x)
-                new_lengths_x.append(l_x)
-                new_seqs_y.append(s_y)
-                new_lengths_y.append(l_y)
-                new_weights.append(w)
-        lengths_x = new_lengths_x
-        seqs_x = new_seqs_x
-        lengths_y = new_lengths_y
-        seqs_y = new_seqs_y
-        weights = new_weights
-
-        if len(lengths_x) < 1 or len(lengths_y) < 1:
-            if weights is not None:
-                return None, None, None, None, None
-            else:
-                return None, None, None, None
-
-    n_samples = len(seqs_x)
-    maxlen_x = numpy.max(lengths_x) + 1
-    maxlen_y = numpy.max(lengths_y) + 1
-
-    x = numpy.zeros((n_factors, maxlen_x, n_samples)).astype('int64')
-    y = numpy.zeros((maxlen_y, n_samples)).astype('int64')
-    x_mask = numpy.zeros((maxlen_x, n_samples)).astype(floatX)
-    y_mask = numpy.zeros((maxlen_y, n_samples)).astype(floatX)
-    for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:, :lengths_x[idx], idx] = zip(*s_x)
-        x_mask[:lengths_x[idx]+1, idx] = 1.
-        y[:lengths_y[idx], idx] = s_y
-        y_mask[:lengths_y[idx]+1, idx] = 1.
-    if weights is not None:
-        return x, x_mask, y, y_mask, weights
-    else:
-        return x, x_mask, y, y_mask
 
 # initialize all parameters
 def init_params(options):
