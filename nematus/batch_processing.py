@@ -19,6 +19,9 @@ import logging
 
 import itertools
 
+from util import *
+from theano_util import *
+
 class Batch(object):
 
   def __init__(self, seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
@@ -40,13 +43,13 @@ class Batch(object):
         self.x_extra_ids = []
         self.y_extra_ids = []
         for i in xrange(self.n_samples):
-            main_seqs_x.append(seqs_x[i][0])
-            extra_seqs_x.extend(seqs_x[i][1:])
-            self.x_extra_ids.extend([i] * len(seqs_x[i])-1)
+            self.main_seqs_x.append(seqs_x[i][0])
+            self.extra_seqs_x.extend(seqs_x[i][1:])
+            self.x_extra_ids.extend([i] * (len(seqs_x[i])-1))
 
-            main_seqs_y.append(seqs_y[i][0])
-            extra_seqs_y.extend(seqs_y[i][1:])
-            self.y_extra_ids.extend([i] * len(seqs_y[i])-1)
+            self.main_seqs_y.append(seqs_y[i][0])
+            self.extra_seqs_y.extend(seqs_y[i][1:])
+            self.y_extra_ids.extend([i] * (len(seqs_y[i])-1))
 
         seqs_x = self.main_seqs_x + self.extra_seqs_x
         seqs_y = self.main_seqs_y + self.extra_seqs_y
@@ -99,10 +102,10 @@ class Batch(object):
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
-    self.x = numpy.zeros((n_factors, maxlen_x, batch_size_x)).astype('int64')
-    self.y = numpy.zeros((maxlen_y, batch_size_y)).astype('int64')
-    self.x_mask = numpy.zeros((maxlen_x, batch_size_x)).astype(floatX)
-    self.y_mask = numpy.zeros((maxlen_y, batch_size_y)).astype(floatX)
+    self.x = numpy.zeros((n_factors, maxlen_x, self.batch_size_x)).astype('int64')
+    self.y = numpy.zeros((maxlen_y, self.batch_size_y)).astype('int64')
+    self.x_mask = numpy.zeros((maxlen_x, self.batch_size_x)).astype(floatX)
+    self.y_mask = numpy.zeros((maxlen_y, self.batch_size_y)).astype(floatX)
     for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
         self.x[:, :lengths_x[idx], idx] = zip(*s_x)
         self.x_mask[:lengths_x[idx]+1, idx] = 1.
