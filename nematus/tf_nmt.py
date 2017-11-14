@@ -1,17 +1,27 @@
-import tensorflow as tf
-from tf_layers import *
-from data_iterator import TextIterator
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+Build a neural machine translation model with soft attention
+'''
+import os
+import logging
 import time
 import argparse
-from tf_model import *
-from util import *
-import os
+
+import tensorflow as tf
+
 from threading import Thread
 from Queue import Queue
 from datetime import datetime
 
+from tf_layers import *
+from data_iterator import TextIterator
+
+from tf_model import *
+from util import *
+
 def create_model(config, sess):
-    print >>sys.stderr, 'Building model...',
+    logging.info('Building model...')
     model = StandardModel(config)
 
     # initialize model
@@ -21,12 +31,12 @@ def create_model(config, sess):
         sess.run(init_op)
     else:
         saver.restore(sess, os.path.abspath(config.reload))
-    print >>sys.stderr, 'Done'
+    logging.info('Done')
 
     return model, saver 
 
 def load_data(config):
-    print >>sys.stderr, 'Reading data...',
+    logging.info('Reading data...')
     text_iterator = TextIterator(
                         source=config.source_dataset,
                         target=config.target_dataset,
@@ -42,7 +52,7 @@ def load_data(config):
                         maxibatch_size=config.maxibatch_size,
                         keep_data_in_memory=config.keep_train_set_in_memory)
 
-    if config.validFreq:
+    if config.validFreq and config.valid_source_dataset and config.valid_target_dataset:
         valid_text_iterator = TextIterator(
                             source=config.valid_source_dataset,
                             target=config.valid_target_dataset,
@@ -56,8 +66,9 @@ def load_data(config):
                             sort_by_length=True,
                             maxibatch_size=config.maxibatch_size)
     else:
+        logging.info('no validation set loaded')
         valid_text_iterator = None
-    print >>sys.stderr, 'Done'
+    logging.info('Done')
     return text_iterator, valid_text_iterator
 
 def load_dictionaries(config):
@@ -98,7 +109,7 @@ def train(config, sess):
 
     if config.summaryFreq:
         writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
-    tf.summary.scalar(name='mean cost', tensor=mean_loss)
+    tf.summary.scalar(name='mean_cost', tensor=mean_loss)
     tf.summary.scalar(name='t', tensor=t)
     merged = tf.summary.merge_all()
 
@@ -108,14 +119,14 @@ def train(config, sess):
     n_sents, n_words = 0, 0
     last_time = time.time()
     uidx = sess.run(t)
-    print >>sys.stderr, "Initial uidx={}".format(uidx)
+    logging.info("Initial uidx={}".format(uidx))
     STOP = False
     for eidx in xrange(config.max_epochs):
-        print 'Starting epoch', eidx
+        logging.info('Starting epoch {0}'.format(eidx))
         for source_sents, target_sents in text_iterator:
             x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
             if x_in is None:
-                print >>sys.stderr, 'Minibatch with zero sample under length ', config.maxlen
+                logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
             (seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
@@ -135,12 +146,7 @@ def train(config, sess):
             if config.dispFreq and uidx % config.dispFreq == 0:
                 duration = time.time() - last_time
                 disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
-                print disp_time, \
-                      'Epoch:', eidx, \
-                      'Update:', uidx, \
-                      'Loss/word:', total_loss/n_words, \
-                      'Words/sec:', n_words/duration, \
-                      'Sents/sec:', n_sents/duration
+                logging.info(disp_time, '{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, eidx, uidx, total_loss/n_words, n_words/duration, n_sents/duration))
                 last_time = time.time()
                 total_loss = 0.
                 n_sents = 0
@@ -154,9 +160,9 @@ def train(config, sess):
                 samples = model.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    print >>sys.stderr, 'SOURCE:', seqs2words(xx, num_to_source)
-                    print >>sys.stderr, 'TARGET:', seqs2words(yy, num_to_target)
-                    print >>sys.stderr, 'SAMPLE:', seqs2words(ss, num_to_target)
+                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
+                    logging.info('SAMPLE: {0}'.format(seqs2words(ss, num_to_target)))
 
             if config.beamFreq and uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
@@ -164,16 +170,16 @@ def train(config, sess):
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    print >>sys.stderr, 'SOURCE:', seqs2words(xx, num_to_source)
-                    print >>sys.stderr, 'TARGET:', seqs2words(yy, num_to_target)
+                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
                     for i, (sample, cost) in enumerate(ss):
-                        print >>sys.stderr, 'SAMPLE', i, ':', seqs2words(sample, num_to_target), 'Cost/Len/Avg:', cost, '/', len(sample), '/', cost/len(sample)
+                        logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seqs2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
 
             if config.validFreq and uidx % config.validFreq == 0:
                 validate(sess, valid_text_iterator, model)
 
             if config.finish_after and uidx % config.finish_after == 0:
-                print >>sys.stderr, "Maximum number of updates reached"
+                logging.info("Maximum number of updates reached")
                 STOP=True
                 break
         if STOP:
@@ -183,7 +189,7 @@ def translate(config, sess):
     model, saver = create_model(config, sess)
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
-    print >>sys.stderr, "NOTE: Length of translations is capped to {}".format(config.translation_maxlen)
+    logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
     n_sent = 0
     batches, idxs = read_all_lines(config, config.valid_source_dataset)
@@ -219,7 +225,7 @@ def translate(config, sess):
         i, samples = out_queue.get()
         outputs[i] = list(samples)
         n_sent += len(samples)
-        print >>sys.stderr, 'Translated {} sents'.format(n_sent)
+        logging.info('Translated {} sents'.format(n_sent))
     for _ in range(config.n_threads):
         in_queue.put(None)
     outputs = [beam for batch in outputs for beam in batch]
@@ -237,7 +243,7 @@ def translate(config, sess):
             best_hypo, cost = beam[0]
             print seqs2words(best_hypo, num_to_target)
     duration = time.time() - start_time
-    print >> sys.stderr, 'Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration)
+    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
 
 
 def validate(sess, valid_text_iterator, model):
@@ -253,8 +259,8 @@ def validate(sess, valid_text_iterator, model):
         total_loss += loss_per_sentence_out.sum()
         total_seen += x_v_in.shape[1]
         costs += list(loss_per_sentence_out)
-        print >>sys.stderr, "Seen", total_seen
-    print 'Validation loss (AVG/SUM/N_SENT):', total_loss/total_seen, total_loss, total_seen
+        logging.info( "Seen " + total_seen)
+    logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(total_loss/total_seen, total_loss, total_seen))
     return costs
 
 def validate_helper(config, sess):
@@ -274,7 +280,7 @@ def validate_helper(config, sess):
     costs = validate(sess, valid_text_iterator, model)
     lines = open(config.valid_target_dataset).readlines()
     for cost, line in zip(costs, lines):
-        print cost, line.strip()
+        logging.info(cost + ' ' + line.strip())
 
 
 
@@ -282,14 +288,16 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     data = parser.add_argument_group('data sets; model loading and saving')
-    data.add_argument('--source_dataset', type=str, required=True, metavar='PATH', 
+
+    data.add_argument('--source_dataset', type=str, metavar='PATH', 
                          help="parallel training corpus (source)")
-    data.add_argument('--target_dataset', type=str, required=True, metavar='PATH', 
+    data.add_argument('--target_dataset', type=str, metavar='PATH', 
                          help="parallel training corpus (target)")
-    data.add_argument('--source_vocab', type=str, required=True, metavar='PATH', 
-                         help="dictionary for the source data")
-    data.add_argument('--target_vocab', type=str, required=True, metavar='PATH',
-                         help="dictionary for the target data")
+    # parallel training corpus (source and target). Hidden option for backward compatibility
+    data.add_argument('--datasets', type=str, metavar='PATH', nargs=2,
+                         help=argparse.SUPPRESS)
+    data.add_argument('--dictionaries', type=str, required=True, metavar='PATH', nargs="+",
+                         help="network vocabularies (one per source factor, plus target vocabulary)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
@@ -334,12 +342,18 @@ def parse_args():
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
     training.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
+    training.add_argument('--optimizer', type=str, default="adam",
+                         choices=['adam'],
+                         help="optimizer (default: %(default)s)")
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_source_dataset', type=str, default=None, metavar='PATH', 
                          help="source validation corpus (default: %(default)s)")
     validation.add_argument('--valid_target_dataset', type=str, default=None, metavar='PATH',
                          help="target validation corpus (default: %(default)s)")
+    # parallel validation corpus (source and target). Hidden option for backward compatibility
+    validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
+                         help=argparse.SUPPRESS)
     validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
                          help="validation minibatch size (default: %(default)s)")
     validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
@@ -373,11 +387,48 @@ def parse_args():
     translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
                          help="Maximum length of translation output sentence (default: %(default)s)")
     config = parser.parse_args()
+
+
+    # allow "--datasets" for backward compatibility
+    if config.datasets:
+        if config.source_dataset or config.target_dataset:
+            logging.error('argument clash: --datasets is mutually exclusive with --source_dataset and --target_dataset')
+            sys.exit(1)
+        else:
+            config.source_dataset = config.datasets[0]
+            config.target_dataset = config.datasets[1]
+    elif not config.source_dataset:
+        logging.error('--source_dataset is required')
+        sys.exit(1)
+    elif not config.target_dataset:
+        logging.error('--target_dataset is required')
+        sys.exit(1)
+
+    # allow "--valid_datasets" for backward compatibility
+    if config.valid_datasets:
+        if config.valid_source_dataset or config.valid_target_dataset:
+            logging.error('argument clash: --valid_datasets is mutually exclusive with --valid_source_dataset and --valid_target_dataset')
+            sys.exit(1)
+        else:
+            config.valid_source_dataset = config.valid_datasets[0]
+            config.valid_target_dataset = config.valid_datasets[1]
+
+    # put check in place until factors are implemented
+    if len(config.dictionaries) != 2:
+        logging.error('exactly two dictionaries need to be provided')
+    config.source_vocab = config.dictionaries[0]
+    config.target_vocab = config.dictionaries[-1]
+
     return config
 
 if __name__ == "__main__":
+
+    # set up logging
+    level = logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
     config = parse_args()
-    print >>sys.stderr, config
+    logging.info(config)
     with tf.Session() as sess:
         if config.translate_valid:
             translate(config, sess)

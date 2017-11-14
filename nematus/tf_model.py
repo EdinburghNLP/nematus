@@ -363,8 +363,9 @@ class StandardModel(object):
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
             self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keep_dims=False)
 
-        #with tf.name_scope("optimizer"):
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+        if config.optimizer == 'adam':
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+
         self.t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
         grad_vars = self.optimizer.compute_gradients(self.mean_loss)
         grads, varss = zip(*grad_vars)
