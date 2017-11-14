@@ -4,10 +4,6 @@ Parameter initializers
 
 import numpy
 
-import theano
-import theano.tensor as tensor
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-
 def ortho_weight(ndim):
     W = numpy.random.randn(ndim, ndim)
     u, s, v = numpy.linalg.svd(W)

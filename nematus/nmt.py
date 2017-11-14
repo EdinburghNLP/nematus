@@ -3,1537 +3,436 @@
 '''
 Build a neural machine translation model with soft attention
 '''
-import theano
-import theano.tensor as tensor
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-
-import cPickle as pkl
-import json
-import ipdb
-import numpy
-import copy
+import os
+import logging
+import time
 import argparse
 
-import os
-import warnings
-import sys
-import time
+import tensorflow as tf
 
-import itertools
-
-from subprocess import Popen
-
-from collections import OrderedDict
-
-profile = False
-
-from data_iterator import TextIterator
-from util import *
-from theano_util import *
-from alignment_util import *
+from threading import Thread
+from Queue import Queue
+from datetime import datetime
 
 from layers import *
-from initializers import *
-from optimizers import *
-from metrics.scorer_provider import ScorerProvider
+from data_iterator import TextIterator
 
-from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
+from model import *
+from util import *
 
-# batch preparation
-def prepare_data(seqs_x, seqs_y, maxlen=None, n_words_src=30000,
-                 n_words=30000):
-    # x: a list of sentences
-    lengths_x = [len(s) for s in seqs_x]
-    lengths_y = [len(s) for s in seqs_y]
+def create_model(config, sess):
+    logging.info('Building model...')
+    model = StandardModel(config)
 
-    if maxlen is not None:
-        new_seqs_x = []
-        new_seqs_y = []
-        new_lengths_x = []
-        new_lengths_y = []
-        for l_x, s_x, l_y, s_y in zip(lengths_x, seqs_x, lengths_y, seqs_y):
-            if l_x < maxlen and l_y < maxlen:
-                new_seqs_x.append(s_x)
-                new_lengths_x.append(l_x)
-                new_seqs_y.append(s_y)
-                new_lengths_y.append(l_y)
-        lengths_x = new_lengths_x
-        seqs_x = new_seqs_x
-        lengths_y = new_lengths_y
-        seqs_y = new_seqs_y
-
-        if len(lengths_x) < 1 or len(lengths_y) < 1:
-            return None, None, None, None
-
-    n_samples = len(seqs_x)
-    n_factors = len(seqs_x[0][0])
-    maxlen_x = numpy.max(lengths_x) + 1
-    maxlen_y = numpy.max(lengths_y) + 1
-
-    x = numpy.zeros((n_factors, maxlen_x, n_samples)).astype('int64')
-    y = numpy.zeros((maxlen_y, n_samples)).astype('int64')
-    x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
-    y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
-    for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:, :lengths_x[idx], idx] = zip(*s_x)
-        x_mask[:lengths_x[idx]+1, idx] = 1.
-        y[:lengths_y[idx], idx] = s_y
-        y_mask[:lengths_y[idx]+1, idx] = 1.
-
-    return x, x_mask, y, y_mask
-
-
-# initialize all parameters
-def init_params(options):
-    params = OrderedDict()
-
-    # embedding
-    for factor in range(options['factors']):
-        params[embedding_name(factor)] = norm_weight(options['n_words_src'], options['dim_per_factor'][factor])
-
-    params['Wemb_dec'] = norm_weight(options['n_words'], options['dim_word'])
-
-    # encoder: bidirectional RNN
-    params = get_layer_param(options['encoder'])(options, params,
-                                              prefix='encoder',
-                                              nin=options['dim_word'],
-                                              dim=options['dim'])
-    params = get_layer_param(options['encoder'])(options, params,
-                                              prefix='encoder_r',
-                                              nin=options['dim_word'],
-                                              dim=options['dim'])
-    ctxdim = 2 * options['dim']
-
-    # init_state, init_cell
-    params = get_layer_param('ff')(options, params, prefix='ff_state',
-                                nin=ctxdim, nout=options['dim'])
-    # decoder
-    params = get_layer_param(options['decoder'])(options, params,
-                                              prefix='decoder',
-                                              nin=options['dim_word'],
-                                              dim=options['dim'],
-                                              dimctx=ctxdim)
-    # readout
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
-                                nin=options['dim'], nout=options['dim_word'],
-                                ortho=False)
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
-                                nin=options['dim_word'],
-                                nout=options['dim_word'], ortho=False)
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
-                                nin=ctxdim, nout=options['dim_word'],
-                                ortho=False)
-    params = get_layer_param('ff')(options, params, prefix='ff_logit',
-                                nin=options['dim_word'],
-                                nout=options['n_words'])
-
-    return params
-
-
-# bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
-def build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=False):
-
-    x = tensor.tensor3('x', dtype='int64')
-    x.tag.test_value = (numpy.random.rand(1, 5, 10)*100).astype('int64')
-
-    # for the backward rnn, we just need to invert x
-    xr = x[:,::-1]
-    if x_mask is None:
-        xr_mask = None
+    # initialize model
+    saver = tf.train.Saver(max_to_keep=None)
+    if not config.reload:
+        init_op = tf.global_variables_initializer()
+        sess.run(init_op)
     else:
-        xr_mask = x_mask[::-1]
+        saver.restore(sess, os.path.abspath(config.reload))
+    logging.info('Done')
 
-    n_timesteps = x.shape[1]
-    n_samples = x.shape[2]
+    return model, saver 
 
-    if options['use_dropout']:
-        retain_probability_emb = 1-options['dropout_embedding']
-        retain_probability_hidden = 1-options['dropout_hidden']
-        retain_probability_source = 1-options['dropout_source']
-        if sampling:
-            if options['model_version'] < 0.1:
-                rec_dropout = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-                rec_dropout_r = theano.shared(numpy.array([retain_probability_hidden]*2, dtype='float32'))
-                emb_dropout = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-                emb_dropout_r = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-                source_dropout = theano.shared(numpy.float32(retain_probability_source))
-            else:
-                rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-                source_dropout = theano.shared(numpy.float32(1.))
-        else:
-            if options['model_version'] < 0.1:
-                scaled = False
-            else:
-                scaled = True
-            rec_dropout = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-            rec_dropout_r = shared_dropout_layer((2, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-            emb_dropout = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
-            emb_dropout_r = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
-            source_dropout = shared_dropout_layer((n_timesteps, n_samples, 1), use_noise, trng, retain_probability_source, scaled)
-            source_dropout = tensor.tile(source_dropout, (1,1,options['dim_word']))
+def load_data(config):
+    logging.info('Reading data...')
+    text_iterator = TextIterator(
+                        source=config.source_dataset,
+                        target=config.target_dataset,
+                        source_dicts=[config.source_vocab],
+                        target_dict=config.target_vocab,
+                        batch_size=config.batch_size,
+                        maxlen=config.maxlen,
+                        n_words_source=config.source_vocab_size,
+                        n_words_target=config.target_vocab_size,
+                        skip_empty=True,
+                        shuffle_each_epoch=config.shuffle_each_epoch,
+                        sort_by_length=config.sort_by_length,
+                        maxibatch_size=config.maxibatch_size,
+                        keep_data_in_memory=config.keep_train_set_in_memory)
+
+    if config.validFreq and config.valid_source_dataset and config.valid_target_dataset:
+        valid_text_iterator = TextIterator(
+                            source=config.valid_source_dataset,
+                            target=config.valid_target_dataset,
+                            source_dicts=[config.source_vocab],
+                            target_dict=config.target_vocab,
+                            batch_size=config.valid_batch_size,
+                            maxlen=config.validation_maxlen,
+                            n_words_source=config.source_vocab_size,
+                            n_words_target=config.target_vocab_size,
+                            shuffle_each_epoch=False,
+                            sort_by_length=True,
+                            maxibatch_size=config.maxibatch_size)
     else:
-        rec_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        rec_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        emb_dropout_r = theano.shared(numpy.array([1.]*2, dtype='float32'))
-
-    # word embedding for forward rnn (source)
-    emb = []
-    for factor in range(options['factors']):
-        emb.append(tparams[embedding_name(factor)][x[factor].flatten()])
-    emb = concatenate(emb, axis=1)
-    emb = emb.reshape([n_timesteps, n_samples, options['dim_word']])
-    if options['use_dropout']:
-        emb *= source_dropout
-
-    proj = get_layer_constr(options['encoder'])(tparams, emb, options,
-                                            prefix='encoder',
-                                            mask=x_mask,
-                                            emb_dropout=emb_dropout,
-                                            rec_dropout=rec_dropout,
-                                            profile=profile)
-
-
-    # word embedding for backward rnn (source)
-    embr = []
-    for factor in range(options['factors']):
-        embr.append(tparams[embedding_name(factor)][xr[factor].flatten()])
-    embr = concatenate(embr, axis=1)
-    embr = embr.reshape([n_timesteps, n_samples, options['dim_word']])
-    if options['use_dropout']:
-        if sampling:
-            embr *= source_dropout
-        else:
-            # we drop out the same words in both directions
-            embr *= source_dropout[::-1]
-
-    projr = get_layer_constr(options['encoder'])(tparams, embr, options,
-                                             prefix='encoder_r',
-                                             mask=xr_mask,
-                                             emb_dropout=emb_dropout_r,
-                                             rec_dropout=rec_dropout_r,
-                                             profile=profile)
-
-    # context will be the concatenation of forward and backward rnns
-    ctx = concatenate([proj[0], projr[0][::-1]], axis=proj[0].ndim-1)
-
-    return x, ctx
-
-
-# build a training model
-def build_model(tparams, options):
-    opt_ret = dict()
-
-    trng = RandomStreams(1234)
-    use_noise = theano.shared(numpy.float32(0.))
-
-    x_mask = tensor.matrix('x_mask', dtype='float32')
-    x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-    y = tensor.matrix('y', dtype='int64')
-    y.tag.test_value = (numpy.random.rand(8, 10)*100).astype('int64')
-    y_mask = tensor.matrix('y_mask', dtype='float32')
-    y_mask.tag.test_value = numpy.ones(shape=(8, 10)).astype('float32')
-
-    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=False)
-    n_samples = x.shape[2]
-    n_timesteps_trg = y.shape[0]
-
-    if options['use_dropout']:
-        retain_probability_emb = 1-options['dropout_embedding']
-        retain_probability_hidden = 1-options['dropout_hidden']
-        retain_probability_target = 1-options['dropout_target']
-        if options['model_version'] < 0.1:
-            scaled = False
-        else:
-            scaled = True
-        rec_dropout_d = shared_dropout_layer((5, n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-        emb_dropout_d = shared_dropout_layer((2, n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
-        ctx_dropout_d = shared_dropout_layer((4, n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-        target_dropout = shared_dropout_layer((n_timesteps_trg, n_samples, 1), use_noise, trng, retain_probability_target, scaled)
-        target_dropout = tensor.tile(target_dropout, (1,1,options['dim_word']))
-    else:
-        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
-
-    # mean of the context (across time) will be used to initialize decoder rnn
-    ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
-
-    # or you can use the last state of forward + backward encoder rnns
-    # ctx_mean = concatenate([proj[0][-1], projr[0][-1]], axis=proj[0].ndim-2)
-
-    if options['use_dropout']:
-        ctx_mean *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-
-    # initial decoder state
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
-                                    prefix='ff_state', activ='tanh')
-
-    # word embedding (target), we will shift the target sequence one time step
-    # to the right. This is done because of the bi-gram connections in the
-    # readout and decoder rnn. The first target will be all zeros and we will
-    # not condition on the last output.
-    emb = tparams['Wemb_dec'][y.flatten()]
-    emb = emb.reshape([n_timesteps_trg, n_samples, options['dim_word']])
-
-    emb_shifted = tensor.zeros_like(emb)
-    emb_shifted = tensor.set_subtensor(emb_shifted[1:], emb[:-1])
-    emb = emb_shifted
-
-    if options['use_dropout']:
-        emb *= target_dropout
-
-    # decoder - pass through the decoder conditional gru with attention
-    proj = get_layer_constr(options['decoder'])(tparams, emb, options,
-                                            prefix='decoder',
-                                            mask=y_mask, context=ctx,
-                                            context_mask=x_mask,
-                                            one_step=False,
-                                            init_state=init_state,
-                                            emb_dropout=emb_dropout_d,
-                                            ctx_dropout=ctx_dropout_d,
-                                            rec_dropout=rec_dropout_d,
-                                            profile=profile)
-    # hidden states of the decoder gru
-    proj_h = proj[0]
-
-    # weighted averages of context, generated by attention module
-    ctxs = proj[1]
-
-    if options['use_dropout']:
-        proj_h *= shared_dropout_layer((n_samples, options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-        emb *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_emb, scaled)
-        ctxs *= shared_dropout_layer((n_samples, 2*options['dim']), use_noise, trng, retain_probability_hidden, scaled)
-
-    # weights (alignment matrix) #####LIUCAN: this is where the attention vector is.
-    opt_ret['dec_alphas'] = proj[2]
-
-    # compute word probabilities
-    logit_lstm = get_layer_constr('ff')(tparams, proj_h, options,
-                                    prefix='ff_logit_lstm', activ='linear')
-    logit_prev = get_layer_constr('ff')(tparams, emb, options,
-                                    prefix='ff_logit_prev', activ='linear')
-    logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
-                                   prefix='ff_logit_ctx', activ='linear')
-    logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-
-    if options['use_dropout']:
-        logit *= shared_dropout_layer((n_samples, options['dim_word']), use_noise, trng, retain_probability_hidden, scaled)
-
-    logit = get_layer_constr('ff')(tparams, logit, options,
-                                   prefix='ff_logit', activ='linear')
-    logit_shp = logit.shape
-    probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
-                                               logit_shp[2]]))
-
-    # cost
-    y_flat = y.flatten()
-    y_flat_idx = tensor.arange(y_flat.shape[0]) * options['n_words'] + y_flat
-    cost = -tensor.log(probs.flatten()[y_flat_idx])
-    cost = cost.reshape([y.shape[0], y.shape[1]])
-    cost = (cost * y_mask).sum(0)
-
-    #print "Print out in build_model()"
-    #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
-
-
-# build a sampler
-def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        retain_probability_emb = 1-options['dropout_embedding']
-        retain_probability_hidden = 1-options['dropout_hidden']
-        retain_probability_source = 1-options['dropout_source']
-        retain_probability_target = 1-options['dropout_target']
-        rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
-        target_dropout = theano.shared(numpy.float32(retain_probability_target))
-    else:
-        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
-
-    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask=None, sampling=True)
-    n_samples = x.shape[2]
-
-    # get the input for decoder rnn initializer mlp
-    ctx_mean = ctx.mean(0)
-    # ctx_mean = concatenate([proj[0][-1],projr[0][-1]], axis=proj[0].ndim-2)
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        ctx_mean *= retain_probability_hidden
-
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
-                                    prefix='ff_state', activ='tanh')
-
-    print >>sys.stderr, 'Building f_init...',
-    outs = [init_state, ctx]
-    f_init = theano.function([x], outs, name='f_init', profile=profile)
-    print >>sys.stderr, 'Done'
-
-    # x: 1 x 1
-    y = tensor.vector('y_sampler', dtype='int64')
-    init_state = tensor.matrix('init_state', dtype='float32')
-
-    # if it's the first word, emb should be all zero and it is indicated by -1
-    emb = tensor.switch(y[:, None] < 0,
-                        tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
-                        tparams['Wemb_dec'][y])
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        emb *= target_dropout
-
-    # apply one step of conditional gru with attention
-    proj = get_layer_constr(options['decoder'])(tparams, emb, options,
-                                            prefix='decoder',
-                                            mask=None, context=ctx,
-                                            one_step=True,
-                                            init_state=init_state,
-                                            emb_dropout=emb_dropout_d,
-                                            ctx_dropout=ctx_dropout_d,
-                                            rec_dropout=rec_dropout_d,
-                                            profile=profile)
-    # get the next hidden state
-    next_state = proj[0]
-
-    # get the weighted averages of context for this target word y
-    ctxs = proj[1]
-
-    # alignment matrix (attention model)
-    dec_alphas = proj[2]
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        next_state_up = next_state * retain_probability_hidden
-        emb *= retain_probability_emb
-        ctxs *= retain_probability_hidden
-    else:
-        next_state_up = next_state
-
-    logit_lstm = get_layer_constr('ff')(tparams, next_state_up, options,
-                                    prefix='ff_logit_lstm', activ='linear')
-    logit_prev = get_layer_constr('ff')(tparams, emb, options,
-                                    prefix='ff_logit_prev', activ='linear')
-    logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
-                                   prefix='ff_logit_ctx', activ='linear')
-    logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        logit *= retain_probability_hidden
-
-    logit = get_layer_constr('ff')(tparams, logit, options,
-                              prefix='ff_logit', activ='linear')
-
-    # compute the softmax probability
-    next_probs = tensor.nnet.softmax(logit)
-
-    # sample from softmax distribution to get the sample
-    next_sample = trng.multinomial(pvals=next_probs).argmax(1)
-
-    # compile a function to do the whole thing above, next word probability,
-    # sampled word for the next target, next hidden state to be used
-    print >>sys.stderr, 'Building f_next..',
-    inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, next_state]
-
-    if return_alignment:
-        outs.append(dec_alphas)
-
-    f_next = theano.function(inps, outs, name='f_next', profile=profile)
-    print >>sys.stderr, 'Done'
-
-    return f_init, f_next
-
-
-# minimum risk cost
-# assumes cost is the negative sentence-level log probability
-# and each sentence in the minibatch is a sample of the same source sentence
-def mrt_cost(cost, y_mask, options):
-    loss = tensor.vector('loss', dtype='float32')
-    alpha = theano.shared(numpy.float32(options['mrt_alpha']))
-
-    if options['mrt_ml_mix'] > 0:
-        ml_cost = cost[0]
-
-        # remove reference for MRT objective unless enabled
-        if not options['mrt_reference']:
-            cost = cost[1:]
-
-    cost *= alpha
-
-    #get normalized probability
-    cost = tensor.nnet.softmax(-cost)[0]
-
-    # risk: expected loss
-    if options['mrt_ml_mix'] > 0 and not options['mrt_reference']:
-        cost *= loss[1:]
-    else:
-        cost *= loss
-
-
-    cost = cost.sum()
-
-    if options['mrt_ml_mix'] > 0:
-        #normalize ML by length (because MRT is length-invariant)
-        ml_cost /= y_mask[:,0].sum(0)
-        ml_cost *= options['mrt_ml_mix']
-        cost += ml_cost
-
-    return cost, loss
-
-
-# build a sampler that produces samples in one theano function
-def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        retain_probability_emb = 1-options['dropout_embedding']
-        retain_probability_hidden = 1-options['dropout_hidden']
-        retain_probability_target = 1-options['dropout_target']
-        rec_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*5, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([retain_probability_emb]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([retain_probability_hidden]*4, dtype='float32'))
-        target_dropout = theano.shared(numpy.float32(retain_probability_target))
-    else:
-        rec_dropout_d = theano.shared(numpy.array([1.]*5, dtype='float32'))
-        emb_dropout_d = theano.shared(numpy.array([1.]*2, dtype='float32'))
-        ctx_dropout_d = theano.shared(numpy.array([1.]*4, dtype='float32'))
-        target_dropout = theano.shared(numpy.float32(1.))
-
-    if greedy:
-        x_mask = tensor.matrix('x_mask', dtype='float32')
-        x_mask.tag.test_value = numpy.ones(shape=(5, 10)).astype('float32')
-    else:
-        x_mask = None
-
-    x, ctx = build_encoder(tparams, options, trng, use_noise, x_mask, sampling=True)
-    n_samples = x.shape[2]
-
-    if x_mask:
-        ctx_mean = (ctx * x_mask[:, :, None]).sum(0) / x_mask.sum(0)[:, None]
-    else:
-        ctx_mean = ctx.mean(0)
-
-    if options['use_dropout'] and options['model_version'] < 0.1:
-        ctx_mean *= retain_probability_hidden
-
-    init_state = get_layer_constr('ff')(tparams, ctx_mean, options,
-                                    prefix='ff_state', activ='tanh')
-
-    if greedy:
-        init_w = tensor.alloc(numpy.int64(-1), n_samples)
-    else:
-        k = tensor.iscalar("k")
-        k.tag.test_value = 12
-        init_w = tensor.alloc(numpy.int64(-1), k*n_samples)
-
-        ctx = tensor.tile(ctx, [k, 1])
-
-        init_state = tensor.tile(init_state, [k, 1])
-
-    # projected context
-    assert ctx.ndim == 3, 'Context must be 3-d: #annotation x #sample x dim'
-    pctx_ = tensor.dot(ctx*ctx_dropout_d[0], tparams[pp('decoder', 'Wc_att')]) +\
-        tparams[pp('decoder', 'b_att')]
-
-    def decoder_step(y, init_state, ctx, pctx_, target_dropout, emb_dropout, rec_dropout, ctx_dropout, *shared_vars):
-
-        # if it's the first word, emb should be all zero and it is indicated by -1
-        emb = tensor.switch(y[:, None] < 0,
-                            tensor.alloc(0., 1, tparams['Wemb_dec'].shape[1]),
-                            tparams['Wemb_dec'][y])
-
-        emb *= target_dropout
-
-        # apply one step of conditional gru with attention
-        proj = get_layer_constr('gru_cond')(tparams, emb, options,
-                                                prefix='decoder',
-                                                mask=None,
-                                                context=ctx,
-                                                context_mask=x_mask,
-                                                pctx_=pctx_,
-                                                one_step=True,
-                                                init_state=init_state,
-                                                emb_dropout=emb_dropout,
-                                                ctx_dropout=ctx_dropout,
-                                                rec_dropout=rec_dropout,
-                                                shared_vars=shared_vars,
-                                                profile=profile)
-        # get the next hidden state
-        next_state = proj[0]
-
-        # get the weighted averages of context for this target word y
-        ctxs = proj[1]
-
-        # alignment matrix (attention model)
-        dec_alphas = proj[2]
-
-        if options['use_dropout'] and options['model_version'] < 0.1:
-            next_state_up = next_state * retain_probability_hidden
-            emb *= retain_probability_emb
-            ctxs *= retain_probability_hidden
-        else:
-            next_state_up = next_state
-
-        logit_lstm = get_layer_constr('ff')(tparams, next_state_up, options,
-                                        prefix='ff_logit_lstm', activ='linear')
-        logit_prev = get_layer_constr('ff')(tparams, emb, options,
-                                        prefix='ff_logit_prev', activ='linear')
-        logit_ctx = get_layer_constr('ff')(tparams, ctxs, options,
-                                    prefix='ff_logit_ctx', activ='linear')
-        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
-
-        if options['use_dropout'] and options['model_version'] < 0.1:
-            logit *= retain_probability_hidden
-
-        logit = get_layer_constr('ff')(tparams, logit, options,
-                                prefix='ff_logit', activ='linear')
-
-        # compute the softmax probability
-        next_probs = tensor.nnet.softmax(logit)
-
-        if greedy:
-            next_sample = next_probs.argmax(1)
-        else:
-            # sample from softmax distribution to get the sample
-            next_sample = trng.multinomial(pvals=next_probs).argmax(1)
-
-        # do not produce words after EOS
-        next_sample = tensor.switch(
-                      tensor.eq(y,0),
-                      0,
-                      next_sample)
-
-        return [next_sample, next_state, next_probs[:, next_sample].diagonal()], \
-               theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
-
-    # symbolic loop for sequence generation
-    shared_vars = [tparams[pp('decoder', 'U')],
-                   tparams[pp('decoder', 'Wc')],
-                   tparams[pp('decoder', 'W_comb_att')],
-                   tparams[pp('decoder', 'U_att')],
-                   tparams[pp('decoder', 'c_tt')],
-                   tparams[pp('decoder', 'Ux')],
-                   tparams[pp('decoder', 'Wcx')],
-                   tparams[pp('decoder', 'U_nl')],
-                   tparams[pp('decoder', 'Ux_nl')],
-                   tparams[pp('decoder', 'b_nl')],
-                   tparams[pp('decoder', 'bx_nl')]]
-
-
-    n_steps = tensor.iscalar("n_steps")
-    n_steps.tag.test_value = 50
-
-    (sample, state, probs), updates = theano.scan(decoder_step,
-                        outputs_info=[init_w, init_state, None],
-                        non_sequences=[ctx, pctx_, target_dropout, emb_dropout_d, rec_dropout_d, ctx_dropout_d]+shared_vars,
-                        n_steps=n_steps)
-
-    print >>sys.stderr, 'Building f_sample...',
-    if greedy:
-        inps = [x, x_mask, n_steps]
-    else:
-        inps = [x, k, n_steps]
-    outs = [sample, probs]
-    f_sample = theano.function(inps, outs, name='f_sample', updates=updates, profile=profile)
-    print >>sys.stderr, 'Done'
-
-    return f_sample
-
-
-
-# generate sample, either with stochastic sampling or beam search. Note that,
-# this function iteratively calls f_init and f_next functions.
-def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
-               stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
-               return_hyp_graph=False):
-
-    # k is the beam size we have
-    if k > 1 and argmax:
-        assert not stochastic, \
-            'Beam search does not support stochastic sampling with argmax'
-
-    sample = []
-    sample_score = []
-    sample_word_probs = []
-    alignment = []
-    hyp_graph = None
-    if stochastic:
-        if argmax:
-            sample_score = 0
-        live_k=k
-    else:
-        live_k = 1
-
-    if return_hyp_graph:
-        from hypgraph import HypGraph
-        hyp_graph = HypGraph()
-
-    dead_k = 0
-
-    hyp_samples=[ [] for i in xrange(live_k) ]
-    word_probs=[ [] for i in xrange(live_k) ]
-    hyp_scores = numpy.zeros(live_k).astype('float32')
-    hyp_states = []
-    if return_alignment:
-        hyp_alignment = [[] for _ in xrange(live_k)]
-
-    # for ensemble decoding, we keep track of states and probability distribution
-    # for each model in the ensemble
-    num_models = len(f_init)
-    next_state = [None]*num_models
-    ctx0 = [None]*num_models
-    next_p = [None]*num_models
-    dec_alphas = [None]*num_models
-    # get initial state of decoder rnn and encoder context
-    for i in xrange(num_models):
-        ret = f_init[i](x)
-        next_state[i] = numpy.tile( ret[0] , (live_k,1))
-        ctx0[i] = ret[1]
-    next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
-
-    # x is a sequence of word ids followed by 0, eos id
-    for ii in xrange(maxlen):
-        for i in xrange(num_models):
-            ctx = numpy.tile(ctx0[i], [live_k, 1])
-            inps = [next_w, ctx, next_state[i]]
-            ret = f_next[i](*inps)
-            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
-            if return_alignment:
-                dec_alphas[i] = ret[3]
-
-            if suppress_unk:
-                next_p[i][:,1] = -numpy.inf
-        if stochastic:
-            #batches are not supported with argmax: output data structure is different
-            if argmax:
-                nw = sum(next_p)[0].argmax()
-                sample.append(nw)
-                sample_score += numpy.log(next_p[0][0, nw])
-                if nw == 0:
-                    break
-            else:
-                #FIXME: sampling is currently performed according to the last model only
-                nws = next_w_tmp
-                cand_scores = numpy.array(hyp_scores)[:, None] - numpy.log(next_p[-1])
-                probs = next_p[-1]
-
-                for idx,nw in enumerate(nws):
-                    hyp_samples[idx].append(nw)
-
-
-                hyp_states=[]
-                for ti in xrange(live_k):
-                    hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
-                    hyp_scores[ti]=cand_scores[ti][nws[ti]]
-                    word_probs[ti].append(probs[ti][nws[ti]])
-
-                new_hyp_states=[]
-                new_hyp_samples=[]
-                new_hyp_scores=[]
-                new_word_probs=[]
-                for hyp_sample,hyp_state, hyp_score, hyp_word_prob in zip(hyp_samples,hyp_states,hyp_scores, word_probs):
-                    if hyp_sample[-1]  > 0:
-                        new_hyp_samples.append(copy.copy(hyp_sample))
-                        new_hyp_states.append(copy.copy(hyp_state))
-                        new_hyp_scores.append(hyp_score)
-                        new_word_probs.append(hyp_word_prob)
-                    else:
-                        sample.append(copy.copy(hyp_sample))
-                        sample_score.append(hyp_score)
-                        sample_word_probs.append(hyp_word_prob)
-
-                hyp_samples=new_hyp_samples
-                hyp_states=new_hyp_states
-                hyp_scores=new_hyp_scores
-                word_probs=new_word_probs
-
-                live_k=len(hyp_samples)
-                if live_k < 1:
-                    break
-
-                next_w = numpy.array([w[-1] for w in hyp_samples])
-                next_state = [numpy.array(state) for state in zip(*hyp_states)]
-        else:
-            cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
-            probs = sum(next_p)/num_models
-            cand_flat = cand_scores.flatten()
-            probs_flat = probs.flatten()
-            ranks_flat = cand_flat.argpartition(k-dead_k-1)[:(k-dead_k)]
-
-            #averaging the attention weights accross models
-            if return_alignment:
-                mean_alignment = sum(dec_alphas)/num_models
-
-            voc_size = next_p[0].shape[1]
-            # index of each k-best hypothesis
-            trans_indices = ranks_flat / voc_size
-            word_indices = ranks_flat % voc_size
-            costs = cand_flat[ranks_flat]
-
-            new_hyp_samples = []
-            new_hyp_scores = numpy.zeros(k-dead_k).astype('float32')
-            new_word_probs = []
-            new_hyp_states = []
-            if return_alignment:
-                # holds the history of attention weights for each time step for each of the surviving hypothesis
-                # dimensions (live_k * target_words * source_hidden_units]
-                # at each time step we append the attention weights corresponding to the current target word
-                new_hyp_alignment = [[] for _ in xrange(k-dead_k)]
-
-            # ti -> index of k-best hypothesis
-            for idx, [ti, wi] in enumerate(zip(trans_indices, word_indices)):
-                new_hyp_samples.append(hyp_samples[ti]+[wi])
-                new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
-                new_hyp_scores[idx] = copy.copy(costs[idx])
-                new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
-                if return_alignment:
-                    # get history of attention weights for the current hypothesis
-                    new_hyp_alignment[idx] = copy.copy(hyp_alignment[ti])
-                    # extend the history with current attention weights
-                    new_hyp_alignment[idx].append(mean_alignment[ti])
-
-
-            # check the finished samples
-            new_live_k = 0
-            hyp_samples = []
-            hyp_scores = []
-            hyp_states = []
-            word_probs = []
-            if return_alignment:
-                hyp_alignment = []
-
-            # sample and sample_score hold the k-best translations and their scores
-            for idx in xrange(len(new_hyp_samples)):
-                if return_hyp_graph:
-                    word, history = new_hyp_samples[idx][-1], new_hyp_samples[idx][:-1]
-                    score = new_hyp_scores[idx]
-                    word_prob = new_word_probs[idx][-1]
-                    hyp_graph.add(word, history, word_prob=word_prob, cost=score)
-                if new_hyp_samples[idx][-1] == 0:
-                    sample.append(copy.copy(new_hyp_samples[idx]))
-                    sample_score.append(new_hyp_scores[idx])
-                    sample_word_probs.append(new_word_probs[idx])
-                    if return_alignment:
-                        alignment.append(new_hyp_alignment[idx])
-                    dead_k += 1
-                else:
-                    new_live_k += 1
-                    hyp_samples.append(copy.copy(new_hyp_samples[idx]))
-                    hyp_scores.append(new_hyp_scores[idx])
-                    hyp_states.append(copy.copy(new_hyp_states[idx]))
-                    word_probs.append(new_word_probs[idx])
-                    if return_alignment:
-                        hyp_alignment.append(new_hyp_alignment[idx])
-            hyp_scores = numpy.array(hyp_scores)
-
-            live_k = new_live_k
-
-            if new_live_k < 1:
-                break
-            if dead_k >= k:
-                break
-
-            next_w = numpy.array([w[-1] for w in hyp_samples])
-            next_state = [numpy.array(state) for state in zip(*hyp_states)]
-
-    # dump every remaining one
-    if not argmax and live_k > 0:
-        for idx in xrange(live_k):
-            sample.append(hyp_samples[idx])
-            sample_score.append(hyp_scores[idx])
-            sample_word_probs.append(word_probs[idx])
-            if return_alignment:
-                alignment.append(hyp_alignment[idx])
-
-    if not return_alignment:
-        alignment = [None for i in range(len(sample))]
-
-    return sample, sample_score, sample_word_probs, alignment, hyp_graph
-
-
-# calculate the log probablities on a given corpus using translation model
-def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalize=False, alignweights=False):
-    probs = []
-    n_done = 0
-
-    alignments_json = []
-
-    for x, y in iterator:
-        #ensure consistency in number of factors
-        if len(x[0][0]) != options['factors']:
-            sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(options['factors'], len(x[0][0])))
-            sys.exit(1)
-
-        n_done += len(x)
-
-        x, x_mask, y, y_mask = prepare_data(x, y,
-                                            n_words_src=options['n_words_src'],
-                                            n_words=options['n_words'])
-
-        ### in optional save weights mode.
-        if alignweights:
-            pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
-            for jdata in get_alignments(attention, x_mask, y_mask):
-                alignments_json.append(jdata)
-        else:
-            pprobs = f_log_probs(x, x_mask, y, y_mask)
-
-        # normalize scores according to output length
-        if normalize:
-            lengths = numpy.array([numpy.count_nonzero(s) for s in y_mask.T])
-            pprobs /= lengths
-
-        for pp in pprobs:
-            probs.append(pp)
-
-        if numpy.isnan(numpy.mean(probs)):
-            ipdb.set_trace()
-
-        if verbose:
-            print >>sys.stderr, '%d samples computed' % (n_done)
-
-    return numpy.array(probs), alignments_json
-
-
-def train(dim_word=100,  # word vector dimensionality
-          dim=1000,  # the number of LSTM units
-          factors=1, # input factors
-          dim_per_factor=None, # list of word vector dimensionalities (one per factor): [250,200,50] for total dimensionality of 500
-          encoder='gru',
-          decoder='gru_cond',
-          patience=10,  # early stopping patience
-          max_epochs=5000,
-          finish_after=10000000,  # finish after this many updates
-          dispFreq=100,
-          decay_c=0.,  # L2 regularization penalty
-          map_decay_c=0., # L2 regularization penalty towards original weights
-          alpha_c=0.,  # alignment regularization
-          clip_c=-1.,  # gradient clipping threshold
-          lrate=0.01,  # learning rate
-          n_words_src=None,  # source vocabulary size
-          n_words=None,  # target vocabulary size
-          maxlen=100,  # maximum length of the description
-          optimizer='rmsprop',
-          batch_size=16,
-          valid_batch_size=16,
-          saveto='model.npz',
-          validFreq=1000,
-          saveFreq=1000,   # save the parameters after every saveFreq updates
-          sampleFreq=100,   # generate some samples after every sampleFreq
-          datasets=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok'],
-          valid_datasets=['../data/dev/newstest2011.en.tok',
-                          '../data/dev/newstest2011.fr.tok'],
-          dictionaries=[
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.en.tok.pkl',
-              '/data/lisatmp3/chokyun/europarl/europarl-v7.fr-en.fr.tok.pkl'],
-          use_dropout=False,
-          dropout_embedding=0.2, # dropout for input embeddings (0: no dropout)
-          dropout_hidden=0.5, # dropout for hidden layers (0: no dropout)
-          dropout_source=0, # dropout source words (0: no dropout)
-          dropout_target=0, # dropout target words (0: no dropout)
-          reload_=False,
-          overwrite=False,
-          external_validation_script=None,
-          shuffle_each_epoch=True,
-          finetune=False,
-          finetune_only_last=False,
-          sort_by_length=True,
-          use_domain_interpolation=False,
-          domain_interpolation_min=0.1,
-          domain_interpolation_inc=0.1,
-          domain_interpolation_indomain_datasets=['indomain.en', 'indomain.fr'],
-          maxibatch_size=20, #How many minibatches to load at one time
-          objective="CE", #CE: cross-entropy; MRT: minimum risk training (see https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)
-          mrt_alpha=0.005,
-          mrt_samples=100,
-          mrt_reference=False,
-          mrt_loss="SENTENCEBLEU n=4", # loss function for minimum risk training
-          mrt_ml_mix=0, # interpolate mrt loss with ML loss
-          model_version=0.1, #store version used for training for compatibility
-    ):
-
-    # Model options
-    model_options = locals().copy()
-
-
-    if model_options['dim_per_factor'] == None:
-        if factors == 1:
-            model_options['dim_per_factor'] = [model_options['dim_word']]
-        else:
-            sys.stderr.write('Error: if using factored input, you must specify \'dim_per_factor\'\n')
-            sys.exit(1)
-
-    assert(len(dictionaries) == factors + 1) # one dictionary per source factor + 1 for target factor
-    assert(len(model_options['dim_per_factor']) == factors) # each factor embedding has its own dimensionality
-    assert(sum(model_options['dim_per_factor']) == model_options['dim_word']) # dimensionality of factor embeddings sums up to total dimensionality of input embedding vector
-
-    # load dictionaries and invert them
-    worddicts = [None] * len(dictionaries)
-    worddicts_r = [None] * len(dictionaries)
-    for ii, dd in enumerate(dictionaries):
-        worddicts[ii] = load_dict(dd)
-        worddicts_r[ii] = dict()
-        for kk, vv in worddicts[ii].iteritems():
-            worddicts_r[ii][vv] = kk
-
-    if n_words_src is None:
-        n_words_src = len(worddicts[0])
-        model_options['n_words_src'] = n_words_src
-    if n_words is None:
-        n_words = len(worddicts[1])
-        model_options['n_words'] = n_words
-
-    if model_options['objective'] == 'MRT':
-        # in CE mode parameters are updated once per batch; in MRT mode parameters are updated once
-        # per pair of train sentences (== per batch of samples), so we set batch_size to 1 to make
-        # model saving, validation, etc trigger after the same number of updates as before
-        print 'Running in MRT mode, minibatch size set to 1 sentence'
-        batch_size = 1
-
-    print 'Loading data'
-    domain_interpolation_cur = None
-    if use_domain_interpolation:
-        print 'Using domain interpolation with initial ratio %s, increase rate %s' % (domain_interpolation_min, domain_interpolation_inc)
-        domain_interpolation_cur = domain_interpolation_min
-        train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
-                         dictionaries[:-1], dictionaries[1],
-                         n_words_source=n_words_src, n_words_target=n_words,
-                         batch_size=batch_size,
-                         maxlen=maxlen,
-                         shuffle_each_epoch=shuffle_each_epoch,
-                         sort_by_length=sort_by_length,
-                         indomain_source=domain_interpolation_indomain_datasets[0],
-                         indomain_target=domain_interpolation_indomain_datasets[1],
-                         interpolation_rate=domain_interpolation_cur,
-                         maxibatch_size=maxibatch_size)
-    else:
-        train = TextIterator(datasets[0], datasets[1],
-                         dictionaries[:-1], dictionaries[-1],
-                         n_words_source=n_words_src, n_words_target=n_words,
-                         batch_size=batch_size,
-                         maxlen=maxlen,
-                         skip_empty=True,
-                         shuffle_each_epoch=shuffle_each_epoch,
-                         sort_by_length=sort_by_length,
-                         maxibatch_size=maxibatch_size)
-
-    if valid_datasets and validFreq:
-        valid = TextIterator(valid_datasets[0], valid_datasets[1],
-                            dictionaries[:-1], dictionaries[-1],
-                            n_words_source=n_words_src, n_words_target=n_words,
-                            batch_size=valid_batch_size,
-                            maxlen=maxlen)
-    else:
-        valid = None
-
-    comp_start = time.time()
-
-    print 'Building model'
-    params = init_params(model_options)
-    # reload parameters
-    if reload_ and os.path.exists(saveto):
-        print 'Reloading model parameters'
-        params = load_params(saveto, params)
-
-    tparams = init_theano_params(params)
-
-    trng, use_noise, \
-        x, x_mask, y, y_mask, \
-        opt_ret, \
-        cost = \
-        build_model(tparams, model_options)
-
-    inps = [x, x_mask, y, y_mask]
-
-    if validFreq or sampleFreq:
-        print 'Building sampler'
-        f_init, f_next = build_sampler(tparams, model_options, use_noise, trng)
-    if model_options['objective'] == 'MRT':
-        print 'Building MRT sampler'
-        f_sampler = build_full_sampler(tparams, model_options, use_noise, trng)
-
-    # before any regularizer
-    print 'Building f_log_probs...',
-    f_log_probs = theano.function(inps, cost, profile=profile)
-    print 'Done'
-
-    if model_options['objective'] == 'CE':
-        cost = cost.mean()
-    elif model_options['objective'] == 'MRT':
-        #MRT objective function
-        cost, loss = mrt_cost(cost, y_mask, model_options)
-        inps += [loss]
-    else:
-        sys.stderr.write('Error: objective must be one of ["CE", "MRT"]\n')
-        sys.exit(1)
-
-    # apply L2 regularization on weights
-    if decay_c > 0.:
-        decay_c = theano.shared(numpy.float32(decay_c), name='decay_c')
-        weight_decay = 0.
-        for kk, vv in tparams.iteritems():
-            weight_decay += (vv ** 2).sum()
-        weight_decay *= decay_c
-        cost += weight_decay
-
-    # regularize the alpha weights
-    if alpha_c > 0. and not model_options['decoder'].endswith('simple'):
-        alpha_c = theano.shared(numpy.float32(alpha_c), name='alpha_c')
-        alpha_reg = alpha_c * (
-            (tensor.cast(y_mask.sum(0)//x_mask.sum(0), 'float32')[:, None] -
-             opt_ret['dec_alphas'].sum(0))**2).sum(1).mean()
-        cost += alpha_reg
-
-     # apply L2 regularisation to loaded model (map training)
-    if map_decay_c > 0:
-        map_decay_c = theano.shared(numpy.float32(map_decay_c), name="map_decay_c")
-        weight_map_decay = 0.
-        for kk, vv in tparams.iteritems():
-            init_value = theano.shared(vv.get_value(), name= kk + "_init")
-            weight_map_decay += ((vv -init_value) ** 2).sum()
-        weight_map_decay *= map_decay_c
-        cost += weight_map_decay
-
-    # allow finetuning with fixed embeddings
-    if finetune:
-        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if not key.startswith('Wemb')])
-    else:
-        updated_params = tparams
-
-    # allow finetuning of only last layer (becomes a linear model training problem)
-    if finetune_only_last:
-        updated_params = OrderedDict([(key,value) for (key,value) in tparams.iteritems() if key in ['ff_logit_W', 'ff_logit_b']])
-    else:
-        updated_params = tparams
-
-    print 'Computing gradient...',
-    grads = tensor.grad(cost, wrt=itemlist(updated_params))
-    print 'Done'
-
-    # apply gradient clipping here
-    if clip_c > 0.:
-        g2 = 0.
-        for g in grads:
-            g2 += (g**2).sum()
-        new_grads = []
-        for g in grads:
-            new_grads.append(tensor.switch(g2 > (clip_c**2),
-                                           g / tensor.sqrt(g2) * clip_c,
-                                           g))
-        grads = new_grads
-
-    # compile the optimizer, the actual computational graph is compiled here
-    lr = tensor.scalar(name='lr')
-
-    print 'Building optimizers...',
-    f_grad_shared, f_update = eval(optimizer)(lr, updated_params, grads, inps, cost, profile=profile)
-    print 'Done'
-
-    print 'Total compilation time: {0:.1f}s'.format(time.time() - comp_start)
-
-    print 'Optimization'
-
-    best_p = None
-    bad_counter = 0
-    uidx = 0
-    estop = False
-    history_errs = []
-    # reload history
-    if reload_ and os.path.exists(saveto):
-        rmodel = numpy.load(saveto)
-        history_errs = list(rmodel['history_errs'])
-        if 'uidx' in rmodel:
-            uidx = rmodel['uidx']
-
-    #save model options
-    json.dump(model_options, open('%s.json' % saveto, 'wb'), indent=2)
-
-    if validFreq == -1:
-        validFreq = len(train[0])/batch_size
-    if saveFreq == -1:
-        saveFreq = len(train[0])/batch_size
-    if sampleFreq == -1:
-        sampleFreq = len(train[0])/batch_size
-
-    valid_err = None
-
-    last_disp_samples = 0
-    ud_start = time.time()
-    p_validation = None
-    for eidx in xrange(max_epochs):
-        n_samples = 0
-
-        for x, y in train:
-            n_samples += len(x)
-            last_disp_samples += len(x)
+        logging.info('no validation set loaded')
+        valid_text_iterator = None
+    logging.info('Done')
+    return text_iterator, valid_text_iterator
+
+def load_dictionaries(config):
+    source_to_num = load_dict(config.source_vocab)
+    target_to_num = load_dict(config.target_vocab)
+    num_to_source = reverse_dict(source_to_num)
+    num_to_target = reverse_dict(target_to_num)
+    return source_to_num, target_to_num, num_to_source, num_to_target
+
+def read_all_lines(config, path):
+    source_to_num, _, _, _ = load_dictionaries(config)
+    lines = map(lambda l: l.strip().split(), open(path, 'r').readlines())
+    fn = lambda w: [source_to_num[w] if w in source_to_num else 1] # extra [ ] brackets for factor dimension
+    lines = map(lambda l: map(lambda w: fn(w), l), lines)
+    lines = numpy.array(lines)
+    lengths = numpy.array(map(lambda l: len(l), lines))
+    lengths = numpy.array(lengths)
+    idxs = lengths.argsort()
+    lines = lines[idxs]
+
+    #merge into batches
+    batches = []
+    for i in range(0, len(lines), config.valid_batch_size):
+        batch = lines[i:i+config.valid_batch_size]
+        batches.append(batch)
+
+    return batches, idxs
+
+
+def train(config, sess):
+    model, saver = create_model(config, sess)
+
+    x,x_mask,y,y_mask = model.get_score_inputs()
+    apply_grads = model.get_apply_grads()
+    t = model.get_global_step()
+    loss_per_sentence = model.get_loss()
+    mean_loss = model.get_mean_loss()
+
+    if config.summaryFreq:
+        writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
+    tf.summary.scalar(name='mean_cost', tensor=mean_loss)
+    tf.summary.scalar(name='t', tensor=t)
+    merged = tf.summary.merge_all()
+
+    text_iterator, valid_text_iterator = load_data(config)
+    source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
+    total_loss = 0.
+    n_sents, n_words = 0, 0
+    last_time = time.time()
+    uidx = sess.run(t)
+    logging.info("Initial uidx={}".format(uidx))
+    STOP = False
+    for eidx in xrange(config.max_epochs):
+        logging.info('Starting epoch {0}'.format(eidx))
+        for source_sents, target_sents in text_iterator:
+            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
+            if x_in is None:
+                logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
+                continue
+            (seqLen, batch_size) = x_in.shape
+            inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
+            out = [t, apply_grads, mean_loss]
+            if config.summaryFreq and uidx % config.summaryFreq == 0:
+                out += [merged]
+            out = sess.run(out, feed_dict=inn)
+            mean_loss_out = out[2]
+            total_loss += mean_loss_out*batch_size
+            n_sents += batch_size
+            n_words += int(numpy.sum(y_mask_in))
             uidx += 1
-            use_noise.set_value(1.)
 
-            #ensure consistency in number of factors
-            if len(x) and len(x[0]) and len(x[0][0]) != factors:
-                sys.stderr.write('Error: mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
-                sys.exit(1)
+            if config.summaryFreq and uidx % config.summaryFreq == 0:
+                writer.add_summary(out[3], out[0])
 
+            if config.dispFreq and uidx % config.dispFreq == 0:
+                duration = time.time() - last_time
+                disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
+                logging.info(disp_time, '{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, eidx, uidx, total_loss/n_words, n_words/duration, n_sents/duration))
+                last_time = time.time()
+                total_loss = 0.
+                n_sents = 0
+                n_words = 0
 
-            if model_options['objective'] == 'CE':
-                x, x_mask, y, y_mask = prepare_data(x, y, maxlen=maxlen,
-                                                    n_words_src=n_words_src,
-                                                    n_words=n_words)
+            if config.saveFreq and uidx % config.saveFreq == 0:
+                saver.save(sess, save_path=config.saveto, global_step=uidx)
 
-                if x is None:
-                    print 'Minibatch with zero sample under length ', maxlen
-                    uidx -= 1
-                    continue
+            if config.sampleFreq and uidx % config.sampleFreq == 0:
+                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:, :10]
+                samples = model.sample(sess, x_small, x_mask_small)
+                assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
+                for xx, yy, ss in zip(x_small.T, y_small.T, samples):
+                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
+                    logging.info('SAMPLE: {0}'.format(seqs2words(ss, num_to_target)))
 
-                # compute cost, grads and copy grads to shared variables
-                cost = f_grad_shared(x, x_mask, y, y_mask)
+            if config.beamFreq and uidx % config.beamFreq == 0:
+                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
+                samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
+                # samples is a list with shape batch x beam x len
+                assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
+                for xx, yy, ss in zip(x_small.T, y_small.T, samples):
+                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
+                    for i, (sample, cost) in enumerate(ss):
+                        logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seqs2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
 
-                # do the update on parameters
-                f_update(lrate)
+            if config.validFreq and uidx % config.validFreq == 0:
+                validate(sess, valid_text_iterator, model)
 
-            elif model_options['objective'] == 'MRT':
-                assert maxlen is not None and maxlen > 0
-
-                xy_pairs = [(x_i, y_i) for (x_i, y_i) in zip(x, y) if len(x_i) < maxlen and len(y_i) < maxlen]
-                if not xy_pairs:
-                    uidx -= 1
-                    continue
-
-                for x_s, y_s in xy_pairs:
-
-                    # create k samples
-                    use_noise.set_value(0.)
-                    samples, _ = f_sampler([x_s], model_options['mrt_samples'], maxlen)
-                    use_noise.set_value(1.)
-
-                    samples = [numpy.trim_zeros(item) for item in zip(*samples)]
-
-                    # remove duplicate samples
-                    samples.sort()
-                    samples = [s for s, _ in itertools.groupby(samples)]
-
-                    # add gold translation [always in first position]
-                    if model_options['mrt_reference'] or model_options['mrt_ml_mix']:
-                        samples = [y_s] + [s for s in samples if s != y_s]
-
-                    # create mini-batch with masking
-                    x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
-                                                                    maxlen=None, n_words_src=n_words_src,
-                                                                    n_words=n_words)
-
-                    # map integers to words (for character-level metrics)
-                    samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
-                    y_s = seqs2words(y_s, worddicts_r[-1])
-
-                    #scorers expect tokenized hypotheses/references
-                    y_s = y_s.split(" ")
-                    samples = [sample.split(" ") for sample in samples]
-
-                    # get negative smoothed BLEU for samples
-                    scorer = ScorerProvider().get(model_options['mrt_loss'])
-                    scorer.set_reference(y_s)
-                    loss = 1-numpy.array(scorer.score_matrix(samples), dtype='float32')
-
-                    # compute cost, grads and copy grads to shared variables
-                    cost = f_grad_shared(x, x_mask, y, y_mask, loss)
-                    # do the update on parameters
-                    f_update(lrate)
-
-            # check for bad numbers, usually we remove non-finite elements
-            # and continue training - but not done here
-            if numpy.isnan(cost) or numpy.isinf(cost):
-                print 'NaN detected'
-                return 1., 1., 1.
-
-            # verbose
-            if numpy.mod(uidx, dispFreq) == 0:
-                ud = time.time() - ud_start
-                wps = (last_disp_samples) / float(ud)
-                print 'Epoch ', eidx, 'Update ', uidx, 'Cost ', cost, 'UD ', ud, "{0:.2f} sentences/s".format(wps)
-                ud_start = time.time()
-                last_disp_samples = 0
-
-            # save the best model so far, in addition, save the latest model
-            # into a separate file with the iteration number for external eval
-            if numpy.mod(uidx, saveFreq) == 0:
-                print 'Saving the best model...',
-                if best_p is not None:
-                    params = best_p
-                else:
-                    params = unzip_from_theano(tparams)
-                numpy.savez(saveto, history_errs=history_errs, uidx=uidx, **params)
-                print 'Done'
-
-                # save with uidx
-                if not overwrite:
-                    print 'Saving the model at iteration {}...'.format(uidx),
-                    saveto_uidx = '{}.iter{}.npz'.format(
-                        os.path.splitext(saveto)[0], uidx)
-                    numpy.savez(saveto_uidx, history_errs=history_errs,
-                                uidx=uidx, **unzip_from_theano(tparams))
-                    print 'Done'
-
-
-            # generate some samples with the model and display them
-            if sampleFreq and numpy.mod(uidx, sampleFreq) == 0:
-                # FIXME: random selection?
-                for jj in xrange(numpy.minimum(5, x.shape[2])):
-                    stochastic = True
-                    x_current = x[:, :, jj][:, :, None]
-
-                    # remove padding
-                    x_current = x_current[:,:x_mask[:, jj].sum(),:]
-
-                    sample, score, sample_word_probs, alignment, hyp_graph = gen_sample([f_init], [f_next],
-                                               x_current,
-                                               trng=trng, k=1,
-                                               maxlen=30,
-                                               stochastic=stochastic,
-                                               argmax=False,
-                                               suppress_unk=False,
-                                               return_hyp_graph=False)
-                    print 'Source ', jj, ': ',
-                    for pos in range(x.shape[1]):
-                        if x[0, pos, jj] == 0:
-                            break
-                        for factor in range(factors):
-                            vv = x[factor, pos, jj]
-                            if vv in worddicts_r[factor]:
-                                sys.stdout.write(worddicts_r[factor][vv])
-                            else:
-                                sys.stdout.write('UNK')
-                            if factor+1 < factors:
-                                sys.stdout.write('|')
-                            else:
-                                sys.stdout.write(' ')
-                    print
-                    print 'Truth ', jj, ' : ',
-                    for vv in y[:, jj]:
-                        if vv == 0:
-                            break
-                        if vv in worddicts_r[-1]:
-                            print worddicts_r[-1][vv],
-                        else:
-                            print 'UNK',
-                    print
-                    print 'Sample ', jj, ': ',
-                    if stochastic:
-                        ss = sample[0]
-                    else:
-                        score = score / numpy.array([len(s) for s in sample])
-                        ss = sample[score.argmin()]
-                    for vv in ss:
-                        if vv == 0:
-                            break
-                        if vv in worddicts_r[-1]:
-                            print worddicts_r[-1][vv],
-                        else:
-                            print 'UNK',
-                    print
-
-            # validate model on validation set and early stop if necessary
-            if valid and validFreq and numpy.mod(uidx, validFreq) == 0:
-                use_noise.set_value(0.)
-                valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
-                                        model_options, valid)
-                valid_err = valid_errs.mean()
-                history_errs.append(valid_err)
-
-                if uidx == 0 or valid_err <= numpy.array(history_errs).min():
-                    best_p = unzip_from_theano(tparams)
-                    bad_counter = 0
-                if len(history_errs) > patience and valid_err >= \
-                        numpy.array(history_errs)[:-patience].min():
-                    bad_counter += 1
-                    if bad_counter > patience:
-                        if use_domain_interpolation and (domain_interpolation_cur < 1.0):
-                            domain_interpolation_cur = min(domain_interpolation_cur + domain_interpolation_inc, 1.0)
-                            print 'No progress on the validation set, increasing domain interpolation rate to %s and resuming from best params' % domain_interpolation_cur
-                            train.adjust_domain_interpolation_rate(domain_interpolation_cur)
-                            if best_p is not None:
-                                zip_to_theano(best_p, tparams)
-                            bad_counter = 0
-                        else:
-                            print 'Early Stop!'
-                            estop = True
-                            break
-
-                if numpy.isnan(valid_err):
-                    ipdb.set_trace()
-
-                print 'Valid ', valid_err
-
-                if external_validation_script:
-                    print "Calling external validation script"
-                    if p_validation is not None and p_validation.poll() is None:
-                        print "Waiting for previous validation run to finish"
-                        print "If this takes too long, consider increasing validation interval, reducing validation set size, or speeding up validation by using multiple processes"
-                        valid_wait_start = time.time()
-                        p_validation.wait()
-                        print "Waited for {0:.1f} seconds".format(time.time()-valid_wait_start)
-                    print 'Saving  model...',
-                    params = unzip_from_theano(tparams)
-                    numpy.savez(saveto +'.dev', history_errs=history_errs, uidx=uidx, **params)
-                    json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
-                    print 'Done'
-                    p_validation = Popen([external_validation_script])
-
-            # finish after this many updates
-            if uidx >= finish_after:
-                print 'Finishing after %d iterations!' % uidx
-                estop = True
+            if config.finish_after and uidx % config.finish_after == 0:
+                logging.info("Maximum number of updates reached")
+                STOP=True
                 break
-
-        print 'Seen %d samples' % n_samples
-
-        if estop:
+        if STOP:
             break
 
-    if best_p is not None:
-        zip_to_theano(best_p, tparams)
+def translate(config, sess):
+    model, saver = create_model(config, sess)
+    start_time = time.time()
+    _, _, _, num_to_target = load_dictionaries(config)
+    logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
-    if valid:
-        use_noise.set_value(0.)
-        valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
-                                        model_options, valid)
-        valid_err = valid_errs.mean()
+    n_sent = 0
+    batches, idxs = read_all_lines(config, config.valid_source_dataset)
+    in_queue, out_queue = Queue(), Queue()
+    model._get_beam_search_outputs(config.beam_size)
+    
+    def translate_worker(in_queue, out_queue, model, sess, config):
+        while True:
+            job = in_queue.get()
+            if job is None:
+                break
+            idx, x = job
+            y_dummy = numpy.zeros(shape=(len(x),1))
+            x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
+            try:
+                samples = model.beam_search(sess, x, x_mask, config.beam_size)
+                out_queue.put((idx, samples))
+            except:
+                in_queue.put(job)
 
-        print 'Valid ', valid_err
+    threads = [None] * config.n_threads
+    for i in xrange(config.n_threads):
+        threads[i] = Thread(
+                        target=translate_worker,
+                        args=(in_queue, out_queue, model, sess, config))
+        threads[i].deamon = True
+        threads[i].start()
 
-    if best_p is not None:
-        params = copy.copy(best_p)
-    else:
-        params = unzip_from_theano(tparams)
-    numpy.savez(saveto, zipped_params=best_p,
-                history_errs=history_errs,
-                uidx=uidx,
-                **params)
+    for i, batch in enumerate(batches):
+        in_queue.put((i,batch))
+    outputs = [None]*len(batches)
+    for _ in range(len(batches)):
+        i, samples = out_queue.get()
+        outputs[i] = list(samples)
+        n_sent += len(samples)
+        logging.info('Translated {} sents'.format(n_sent))
+    for _ in range(config.n_threads):
+        in_queue.put(None)
+    outputs = [beam for batch in outputs for beam in batch]
+    outputs = numpy.array(outputs, dtype=numpy.object)
+    outputs = outputs[idxs.argsort()]
 
-    return valid_err
+    for beam in outputs:
+        if config.normalize:
+            beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
+        beam = sorted(beam, key=lambda (sent, cost): cost)
+        if config.n_best:
+            for sent, cost in beam:
+                print seqs2words(sent, num_to_target), '[%f]' % cost
+        else:
+            best_hypo, cost = beam[0]
+            print seqs2words(best_hypo, num_to_target)
+    duration = time.time() - start_time
+    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
 
 
-if __name__ == '__main__':
+def validate(sess, valid_text_iterator, model):
+    costs = []
+    total_loss = 0.
+    total_seen = 0
+    x,x_mask,y,y_mask = model.get_score_inputs()
+    loss_per_sentence = model.get_loss()
+    for x_v, y_v in valid_text_iterator:
+        x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
+        feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
+        loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
+        total_loss += loss_per_sentence_out.sum()
+        total_seen += x_v_in.shape[1]
+        costs += list(loss_per_sentence_out)
+        logging.info( "Seen " + total_seen)
+    logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(total_loss/total_seen, total_loss, total_seen))
+    return costs
+
+def validate_helper(config, sess):
+    model, saver = create_model(config, sess)
+    valid_text_iterator = TextIterator(
+                        source=config.valid_source_dataset,
+                        target=config.valid_target_dataset,
+                        source_dicts=[config.source_vocab],
+                        target_dict=config.target_vocab,
+                        batch_size=config.valid_batch_size,
+                        maxlen=config.validation_maxlen,
+                        n_words_source=config.source_vocab_size,
+                        n_words_target=config.target_vocab_size,
+                        shuffle_each_epoch=False,
+                        sort_by_length=False, #TODO
+                        maxibatch_size=config.maxibatch_size)
+    costs = validate(sess, valid_text_iterator, model)
+    lines = open(config.valid_target_dataset).readlines()
+    for cost, line in zip(costs, lines):
+        logging.info(cost + ' ' + line.strip())
+
+
+
+def parse_args():
     parser = argparse.ArgumentParser()
 
     data = parser.add_argument_group('data sets; model loading and saving')
-    data.add_argument('--datasets', type=str, required=True, metavar='PATH', nargs=2,
-                         help="parallel training corpus (source and target)")
+
+    data.add_argument('--source_dataset', type=str, metavar='PATH', 
+                         help="parallel training corpus (source)")
+    data.add_argument('--target_dataset', type=str, metavar='PATH', 
+                         help="parallel training corpus (target)")
+    # parallel training corpus (source and target). Hidden option for backward compatibility
+    data.add_argument('--datasets', type=str, metavar='PATH', nargs=2,
+                         help=argparse.SUPPRESS)
     data.add_argument('--dictionaries', type=str, required=True, metavar='PATH', nargs="+",
                          help="network vocabularies (one per source factor, plus target vocabulary)")
-    data.add_argument('--model', type=str, default='model.npz', metavar='PATH', dest='saveto',
-                         help="model file name (default: %(default)s)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
-    data.add_argument('--reload', action='store_true',  dest='reload_',
-                         help="load existing model (if '--model' points to existing model)")
-    data.add_argument('--overwrite', action='store_true',
-                         help="write all models to same file")
+    data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
+                         help="model file name (default: %(default)s)")
+    data.add_argument('--reload', type=str, default=None, metavar='PATH',
+                         help="load existing model from this path")
+    data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
+                         help="directory for saving summaries")
+    data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
+                         help="Save summaries after INT updates (default: %(default)s)")
 
     network = parser.add_argument_group('network parameters')
-    network.add_argument('--dim_word', type=int, default=512, metavar='INT',
+    network.add_argument('--embedding_size', '--dim_word', type=int, default=512, metavar='INT',
                          help="embedding layer size (default: %(default)s)")
-    network.add_argument('--dim', type=int, default=1000, metavar='INT',
-                         help="hidden layer size (default: %(default)s)")
-    network.add_argument('--n_words_src', type=int, default=None, metavar='INT',
+    network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
+                         help="hidden state size (default: %(default)s)")
+    network.add_argument('--source_vocab_size', '--n_words_src', type=int, default=-1, metavar='INT',
                          help="source vocabulary size (default: %(default)s)")
-    network.add_argument('--n_words', type=int, default=None, metavar='INT',
+    network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
 
-    network.add_argument('--factors', type=int, default=1, metavar='INT',
-                         help="number of input factors (default: %(default)s)")
-    network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
-                         help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
-    network.add_argument('--use_dropout', action="store_true",
-                         help="use dropout layer (default: %(default)s)")
-    network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
-                         help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
-                         help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
-                         help="dropout source words (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
-                         help="dropout target words (0: no dropout) (default: %(default)s)")
-    #network.add_argument('--encoder', type=str, default='gru',
-                         #choices=['gru'],
-                         #help='encoder recurrent layer')
-    #network.add_argument('--decoder', type=str, default='gru_cond',
-                         #choices=['gru_cond'],
-                         #help='decoder recurrent layer')
-
     training = parser.add_argument_group('training parameters')
-    training.add_argument('--maxlen', type=int, default=100, metavar='INT',
-                         help="maximum sequence length (default: %(default)s)")
-    training.add_argument('--optimizer', type=str, default="adam",
-                         choices=['adam', 'adadelta', 'rmsprop', 'sgd'],
-                         help="optimizer (default: %(default)s)")
+    training.add_argument('--maxlen', type=int, default=50, metavar='INT',
+                         help="maximum sequence length for training (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
     training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
                          help="maximum number of updates (minibatches) (default: %(default)s)")
-    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
-                         help="L2 regularization penalty (default: %(default)s)")
-    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
-                         help="L2 regularization penalty towards original weights (default: %(default)s)")
-    training.add_argument('--alpha_c', type=float, default=0, metavar='FLOAT',
-                         help="alignment regularization (default: %(default)s)")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
-    training.add_argument('--lrate', type=float, default=0.0001, metavar='FLOAT',
+    training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
                          help="learning rate (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
+    training.add_argument('--keep_train_set_in_memory', action="store_true", 
+                         help="Keep training dataset lines stores in RAM during training")
     training.add_argument('--no_sort_by_length', action="store_false", dest="sort_by_length",
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--objective', choices=['CE', 'MRT'],
-                         help='training objective. CE: cross-entropy minimization (default); MRT: Minimum Risk Training (https://www.aclweb.org/anthology/P/P16/P16-1159.pdf)')
-
-    finetune = training.add_mutually_exclusive_group()
-    finetune.add_argument('--finetune', action="store_true",
-                        help="train with fixed embedding layer")
-    finetune.add_argument('--finetune_only_last', action="store_true",
-                        help="train with all layers except output layer fixed")
+    training.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
+                         help="Set to use layer normalization in encoder and decoder")
+    training.add_argument('--optimizer', type=str, default="adam",
+                         choices=['adam'],
+                         help="optimizer (default: %(default)s)")
 
     validation = parser.add_argument_group('validation parameters')
+    validation.add_argument('--valid_source_dataset', type=str, default=None, metavar='PATH', 
+                         help="source validation corpus (default: %(default)s)")
+    validation.add_argument('--valid_target_dataset', type=str, default=None, metavar='PATH',
+                         help="target validation corpus (default: %(default)s)")
+    # parallel validation corpus (source and target). Hidden option for backward compatibility
     validation.add_argument('--valid_datasets', type=str, default=None, metavar='PATH', nargs=2,
-                         help="parallel validation corpus (source and target) (default: %(default)s)")
+                         help=argparse.SUPPRESS)
     validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
                          help="validation minibatch size (default: %(default)s)")
     validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
                          help="validation frequency (default: %(default)s)")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
-    validation.add_argument('--external_validation_script', type=str, default=None, metavar='PATH',
-                         help="location of validation script (to run your favorite metric for validation) (default: %(default)s)")
+    validation.add_argument('--run_validation', action='store_true',
+                         help="Compute validation score on validation dataset")
+    validation.add_argument('--validation_maxlen', type=int, default=999999, metavar='INT',
+                         help="Sequences longer than this will not be used for validation (default: %(default)s)")
 
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
                          help="display loss after INT updates (default: %(default)s)")
     display.add_argument('--sampleFreq', type=int, default=10000, metavar='INT',
                          help="display some samples after INT updates (default: %(default)s)")
+    display.add_argument('--beamFreq', type=int, default=10000, metavar='INT',
+                         help="display some beam_search samples after INT updates (default: %(default)s)")
+    display.add_argument('--beam_size', type=int, default=12, metavar='INT',
+                         help="size of the beam (default: %(default)s)")
 
-    mrt = parser.add_argument_group('minimum risk training parameters')
-    mrt.add_argument('--mrt_alpha', type=float, default=0.005, metavar='FLOAT',
-                         help="MRT alpha (default: %(default)s)")
-    mrt.add_argument('--mrt_samples', type=int, default=100, metavar='INT',
-                         help="samples per source sentence (default: %(default)s)")
-    mrt.add_argument('--mrt_loss', type=str, default='SENTENCEBLEU n=4', metavar='STR',
-                         help='loss used in MRT (default: %(default)s)')
-    mrt.add_argument('--mrt_reference', action="store_true",
-                         help='add reference to MRT samples.')
-    mrt.add_argument('--mrt_ml_mix', type=float, default=0, metavar='FLOAT',
-                     help="Mix in ML objective in MRT training with this scaling factor (default: %(default)s)")
+    translate = parser.add_argument_group('translate parameters')
+    translate.add_argument('--translate_valid', action='store_true', dest='translate_valid',
+                            help='Translate source dataset instead of training')
+    translate.add_argument('--no_normalize', action='store_false', dest='normalize',
+                            help="Cost of sentences will not be normalized by length")
+    translate.add_argument('--n_best', action='store_true', dest='n_best',
+                            help="Print full beam")
+    translate.add_argument('--n_threads', type=int, default=5, metavar='INT',
+                         help="Number of threads to use for beam search (default: %(default)s)")
+    translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
+                         help="Maximum length of translation output sentence (default: %(default)s)")
+    config = parser.parse_args()
 
-    args = parser.parse_args()
 
-    train(**vars(args))
+    # allow "--datasets" for backward compatibility
+    if config.datasets:
+        if config.source_dataset or config.target_dataset:
+            logging.error('argument clash: --datasets is mutually exclusive with --source_dataset and --target_dataset')
+            sys.exit(1)
+        else:
+            config.source_dataset = config.datasets[0]
+            config.target_dataset = config.datasets[1]
+    elif not config.source_dataset:
+        logging.error('--source_dataset is required')
+        sys.exit(1)
+    elif not config.target_dataset:
+        logging.error('--target_dataset is required')
+        sys.exit(1)
+
+    # allow "--valid_datasets" for backward compatibility
+    if config.valid_datasets:
+        if config.valid_source_dataset or config.valid_target_dataset:
+            logging.error('argument clash: --valid_datasets is mutually exclusive with --valid_source_dataset and --valid_target_dataset')
+            sys.exit(1)
+        else:
+            config.valid_source_dataset = config.valid_datasets[0]
+            config.valid_target_dataset = config.valid_datasets[1]
+
+    # put check in place until factors are implemented
+    if len(config.dictionaries) != 2:
+        logging.error('exactly two dictionaries need to be provided')
+    config.source_vocab = config.dictionaries[0]
+    config.target_vocab = config.dictionaries[-1]
+
+    return config
+
+if __name__ == "__main__":
+
+    # set up logging
+    level = logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
+    config = parse_args()
+    logging.info(config)
+    with tf.Session() as sess:
+        if config.translate_valid:
+            translate(config, sess)
+        elif config.run_validation:
+            validate_helper(config, sess)
+        else:
+            train(config, sess)

@@ -6,7 +6,7 @@
 # For a setup that preprocesses and trains a larger data set,
 # check https://github.com/rsennrich/wmt16-scripts/tree/master/sample
 
-../nematus/tf_nmt.py \
+../nematus/nmt.py \
   --model models/model.npz \
   --datasets data/corpus.en data/corpus.de \
   --dictionaries data/vocab.en.json data/vocab.de.json \

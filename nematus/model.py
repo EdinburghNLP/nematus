@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tf_layers import *
+from layers import *
 import numpy
 
 class Decoder(object):
