@@ -652,24 +652,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
                theano.scan_module.until(tensor.all(tensor.eq(next_sample, 0))) # stop when all outputs are 0 (EOS)
 
 
-    decoder_prefixes = ['decoder']
-    if options['dec_depth'] > 1:
-        for level in range(2, options['dec_depth'] + 1):
-            decoder_prefixes.append(pp('decoder', level))
-
     shared_vars = []
-    for prefix in decoder_prefixes:
-        shared_vars.extend([tparams[pp(prefix, 'U')],
-                   tparams[pp(prefix, 'Wc')],
-                   tparams[pp(prefix, 'W_comb_att')],
-                   tparams[pp(prefix, 'U_att')],
-                   tparams[pp(prefix, 'c_tt')],
-                   tparams[pp(prefix, 'Ux')],
-                   tparams[pp(prefix, 'Wcx')],
-                   tparams[pp(prefix, 'U_nl')],
-                   tparams[pp(prefix, 'Ux_nl')],
-                   tparams[pp(prefix, 'b_nl')],
-                   tparams[pp(prefix, 'bx_nl')]])
 
     n_steps = tensor.iscalar("n_steps")
     n_steps.tag.test_value = 50
