@@ -56,31 +56,6 @@ def init_theano_params(params):
         tparams[kk] = theano.shared(params[kk], name=kk)
     return tparams
 
-# # load language model options (deep fusion)
-# def load_options_lm(options):
-#    path = options['deep_fusion_lm']
-#    try:
-#       hp = pkl.load(open(path + '.pkl'))
-#    except IOError:
-#       hp = pkl.load(open(path + '.npz' + '.pkl'))
-#    options['lm_dim'] = hp['dim']
-#    options['lm_dim_word'] = hp['dim_word']
-#    options['lm_encoder'] = hp['encoder']
-#    return options
-
-# # load language model parameters (deep fusion)
-# def load_params_lm(path, params, with_prefix='lm_'):
-#     try:
-#        pp = numpy.load(path)
-#     except IOError:
-#        pp = numpy.load(path + '.npz')
-#     new_params = OrderedDict()
-#     for kk, vv, in pp.iteritems():
-#        new_params['lm_'+kk] = vv.astype(floatX, copy=False)
-
-#     params.update(new_params)
-#     return params
-
 # load language model parameters and options (deep fusion)
 def load_params_lm(options, params, with_prefix='lm_'):
     path = options['deep_fusion_lm']
