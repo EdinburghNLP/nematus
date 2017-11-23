@@ -172,11 +172,7 @@ def init_params(options):
                                 nin=options['dim'], nout=options['dim_word'],
                                 ortho=False)
 
-    if options['deep_fusion_lm']:
-        params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
-                                       nin=options['lm_dim'],
-                                       nout=options['dim_word'], ortho=False)      
-    else:
+    if not options['deep_fusion_lm']:
         params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
                                     nin=options['dim_word'],
                                     nout=options['dim_word'], ortho=False)
@@ -193,6 +189,12 @@ def init_params(options):
 
     return params
 
+# initialize LM parameters (deep fusion)
+def init_params_lm(options, params):
+    params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
+                                   nin=options['lm_dim'],
+                                   nout=options['dim_word'], ortho=False)      
+    return params
 
 # bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
 def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
@@ -1275,10 +1277,6 @@ def train(dim_word=512,  # word vector dimensionality
 
     logging.info('Building model')
 
-    # language model option (deep fusion)
-    if model_options['deep_fusion_lm']:
-        model_options = load_options_lm(model_options)
-
     params = init_params(model_options)
 
     optimizer_params = {}
@@ -1302,10 +1300,12 @@ def train(dim_word=512,  # word vector dimensionality
         logging.info('Loading prior model parameters')
         params, model_options = load_params(prior_model, params, model_options, with_prefix='prior_')
 
-    # language model parameters (deep fusion)
+    # language model parameters and options
+    # and parameter initialization (deep fusion)
     if deep_fusion_lm:
         logging.info('Loading language model parameters')
-        params = load_params_lm(deep_fusion_lm, params)
+        params, model_options = load_params_lm(model_options, params)
+        params = init_params_lm(model_options, params)
 
     tparams = init_theano_params(params)
 
