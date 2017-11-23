@@ -171,9 +171,16 @@ def init_params(options):
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
                                 nin=options['dim'], nout=options['dim_word'],
                                 ortho=False)
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
-                                nin=options['dim_word'],
-                                nout=options['dim_word'], ortho=False)
+
+    if options['deep_fusion_lm']:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
+                                       nin=options['lm_dim'],
+                                       nout=options['dim_word'], ortho=False)      
+    else:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
+                                    nin=options['dim_word'],
+                                    nout=options['dim_word'], ortho=False)
+
     params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
                                 nin=ctxdim, nout=options['dim_word'],
                                 ortho=False)
@@ -417,14 +424,52 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         else:
             ret_state = ret_state[0]
 
+    # language model encoder (deep fusion)
+    if options['deep_fusion_lm']:
+        lm_emb = get_layer_constr('embedding')(tparams, y, prefix='lm_')
+
+        if sampling:
+            lm_emb = tensor.switch(y[:, None] < 0,
+                tensor.zeros((1, options['dim_word'])),
+                lm_emb)
+            lm_init_state = tensor.unbroadcast(tensor.alloc(0., 1, options['lm_dim']), 0)
+
+        else:
+            lm_emb_shifted = tensor.zeros_like(lm_emb)
+            lm_emb_shifted = tensor.set_subtensor(lm_emb_shifted[1:], lm_emb[:-1])
+            lm_emb = lm_emb_shifted
+            lm_init_state = None
+
+        lm_dropout = dropout_constr(options={'use_dropout':False}, use_noise=False, trng=None, sampling=False)
+
+
+        lm_proj = get_layer_constr(options['lm_encoder'])(tparams, lm_emb, options, lm_dropout,
+                                                          prefix='lm_encoder',
+                                                          mask=y_mask,
+                                                          one_step=one_step,
+                                                          init_state=lm_init_state,
+                                                          profile=profile)
+
+        # don't pass LSTM cell state to next layer
+        if options['lm_encoder'].startswith('lstm'):
+            lm_next_state = get_slice(lm_next_state, 0, options['lm_dim'])
+
+        lm_next_state = lm_proj[0]
+
     # hidden layer taking RNN state, previous word embedding and context vector as input
     # (this counts as the first layer in our deep output, which is always on)
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_logit_lstm', activ='linear')
-    logit_prev = get_layer_constr('ff')(tparams, emb, options, dropout,
-                                    dropout_probability=options['dropout_embedding'],
-                                    prefix='ff_logit_prev', activ='linear')
+    # current lm encoder state instead of previous word embedding
+    if options['deep_fusion_lm']:
+        logit_prev = get_layer_constr('ff')(tparams, lm_next_state, options, dropout,
+                                            dropout_probability=options['dropout_hidden'],
+                                            prefix='ff_logit_lm', activ='linear')
+    else:
+        logit_prev = get_layer_constr('ff')(tparams, emb, options, dropout,
+                                        dropout_probability=options['dropout_embedding'],
+                                        prefix='ff_logit_prev', activ='linear')
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
@@ -1042,6 +1087,7 @@ def train(dim_word=512,  # word vector dimensionality
           batch_size=16,
           valid_batch_size=16,
           saveto='model.npz',
+          deep_fusion_lm=None,
           validFreq=10000,
           saveFreq=30000,   # save the parameters after every saveFreq updates
           sampleFreq=10000,   # generate some samples after every sampleFreq
@@ -1228,6 +1274,11 @@ def train(dim_word=512,  # word vector dimensionality
     comp_start = time.time()
 
     logging.info('Building model')
+
+    # language model option (deep fusion)
+    if model_options['deep_fusion_lm']:
+        model_options = load_options_lm(model_options)
+
     params = init_params(model_options)
 
     optimizer_params = {}
@@ -1249,7 +1300,12 @@ def train(dim_word=512,  # word vector dimensionality
     # load prior model if specified
     if prior_model:
         logging.info('Loading prior model parameters')
-        params = load_params(prior_model, params, with_prefix='prior_')
+        params, model_options = load_params(prior_model, params, model_options, with_prefix='prior_')
+
+    # language model parameters (deep fusion)
+    if deep_fusion_lm:
+        logging.info('Loading language model parameters')
+        params = load_params_lm(deep_fusion_lm, params)
 
     tparams = init_theano_params(params)
 
@@ -1316,6 +1372,9 @@ def train(dim_word=512,  # word vector dimensionality
     # don't update prior model parameters
     if prior_model:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
+    # don't update deep fusion LM parameters
+    if deep_fusion_lm:
+        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('lm_')])
 
     logging.info('Computing gradient...')
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1725,6 +1784,8 @@ if __name__ == '__main__':
                          help="network vocabularies (one per source factor, plus target vocabulary)")
     data.add_argument('--model', type=str, default='model.npz', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
+    data.add_argument('--deep_fusion_lm', type=str, default=None, metavar='PATH', dest='deep_fusion_lm',
+                         help="deep fusion language model file name")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--reload', action='store_true',  dest='reload_',
