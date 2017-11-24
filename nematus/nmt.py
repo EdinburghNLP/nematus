@@ -864,6 +864,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
     return sample, sample_score, sample_word_probs, alignment, hyp_graph
 
+prepare_data = "DUMMY! (do we need this as a parameter for pred_probs() ?)"
 
 # calculate the log probablities on a given corpus using translation model
 def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalization_alpha=0.0, alignweights=False):
@@ -880,18 +881,25 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         n_done += len(x)
 
-        x, x_mask, y, y_mask = prepare_data(x, y,
+        #x, x_mask, y, y_mask = prepare_data(x, y,
+        #                                    n_words_src=options['n_words_src'],
+        #                                    n_words=options['n_words'],
+        #                                    n_factors=options['factors'])
+        batch = Batch(x, y, 
                                             n_words_src=options['n_words_src'],
                                             n_words=options['n_words'],
-                                            n_factors=options['factors'])
+                                            n_factors=options['factors'],
+                                            multi_sentences=options['contrastive_training'])
+        
 
+        f_log_pobs_args = [batch.x, batch.x_mask, batch.y, batch.y_mask]
         ### in optional save weights mode.
         if alignweights:
-            pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
+            pprobs, attention = f_log_probs(*f_log_pobs_args)
             for jdata in get_alignments(attention, x_mask, y_mask):
                 alignments_json.append(jdata)
         else:
-            pprobs = f_log_probs(x, x_mask, y, y_mask)
+            pprobs = f_log_probs(*f_log_pobs_args)
 
         # normalize scores according to output length
         if normalization_alpha:
@@ -1060,6 +1068,8 @@ def train(dim_word=512,  # word vector dimensionality
           weight_normalisation=False, # normalize weights
           multi_sentence_separator=None,
           contrastive_training=False, # contrastive training
+          contrastive_pairwise_loss_weight=1.0,
+          contrastive_pairwise_loss_margin=0.1
     ):
 
     # Model options
@@ -1182,7 +1192,8 @@ def train(dim_word=512,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          use_factor=(factors > 1),
-                         maxibatch_size=maxibatch_size)
+                         maxibatch_size=maxibatch_size,
+                         multi_sentence_separator=multi_sentence_separator)
 
     if valid_datasets and validFreq:
         valid = TextIterator(valid_datasets[0], valid_datasets[1],
@@ -1190,7 +1201,8 @@ def train(dim_word=512,  # word vector dimensionality
                             n_words_source=n_words_src, n_words_target=n_words,
                             batch_size=valid_batch_size,
                             use_factor=(factors>1),
-                            maxlen=maxlen)
+                            maxlen=maxlen,
+                            multi_sentence_separator=multi_sentence_separator)
     else:
         valid = None
 
@@ -1241,6 +1253,17 @@ def train(dim_word=512,  # word vector dimensionality
     logging.info('Building f_log_probs...')
     f_log_probs = theano.function(inps, cost, profile=profile)
     logging.info('Done')
+
+    if contrastive:
+        inps += [y_extra_ids]
+        n_all_samples = costs.shape[0]
+        n_extra_samples = y_extra_ids.shape[0]
+        n_main_samples = n_all_samples-n_extra_samples
+        main_costs = cost[:n_main_samples]
+        extra_costs = cost[n_main_samples:]
+        contrastive_penalties = contrastive_pairwise_loss_weight * tensor.relu(main_costs[y_extra_ids] - extra_costs + contrastive_pairwise_loss_margin)
+        main_costs = tensor.inc_subtensor(main_costs[y_extra_ids], contrastive_penalties)
+        cost = main_costs
 
     if model_options['objective'] == 'CE':
         cost = cost.mean()
@@ -1363,11 +1386,18 @@ def train(dim_word=512,  # word vector dimensionality
                 xlen = len(x)
                 n_samples += xlen
 
-                x, x_mask, y, y_mask, sample_weights = prepare_data(x, y, weights=sample_weights,
-                                                                    maxlen=maxlen,
-                                                                    n_factors=factors,
-                                                                    n_words_src=n_words_src,
-                                                                    n_words=n_words)
+                #x, x_mask, y, y_mask, sample_weights = prepare_data(x, y, weights=sample_weights,
+                #                                                    maxlen=maxlen,
+                #                                                    n_factors=factors,
+                #                                                    n_words_src=n_words_src,
+                #                                                    n_words=n_words)
+
+                batch = Batch(x, y, weights=sample_weights,
+                                    maxlen=maxlen,
+                                    n_factors=factors,
+                                    n_words_src=n_words_src,
+                                    n_words=n_words,
+                                    multi_sentences=contrastive)
 
                 if x is None:
                     logging.warning('Minibatch with zero sample under length %d' % maxlen)
@@ -1379,10 +1409,14 @@ def train(dim_word=512,  # word vector dimensionality
                 last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
 
                 # compute cost, grads and update parameters
+                f_update_args=[lrate, x, x_mask, y, y_mask]
+                if contrastive:
+                    f_update_args.append(batch.y_extra_ids)
                 if model_options['objective'] == 'RAML':
-                    cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
-                else:
-                    cost = f_update(lrate, x, x_mask, y, y_mask)
+                    f_update_args.append(sample_weights)
+
+                cost = f_update(*f_update_args)
+                 
 
                 cost_sum += cost
 
@@ -1400,14 +1434,17 @@ def train(dim_word=512,  # word vector dimensionality
                 for x_s, y_s in xy_pairs:
 
                     # add EOS and prepare factored data
-                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
+#                    x, _, _, _ = prepare_data([x_s], [y_s], maxlen=None,
+#                                              n_factors=factors,
+#                                              n_words_src=n_words_src, n_words=n_words)
+                    batch = Batch([x_s], [y_s], maxlen=None,
                                               n_factors=factors,
                                               n_words_src=n_words_src, n_words=n_words)
 
                     # draw independent samples to compute mean reward
                     if model_options['mrt_samples_meanloss']:
                         use_noise.set_value(0.)
-                        samples, _ = f_sampler(x, model_options['mrt_samples_meanloss'], maxlen)
+                        samples, _ = f_sampler(batch.x, model_options['mrt_samples_meanloss'], maxlen)
                         use_noise.set_value(1.)
 
                         samples = [numpy.trim_zeros(item) for item in zip(*samples)]
@@ -1429,7 +1466,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # create k samples
                     use_noise.set_value(0.)
-                    samples, _ = f_sampler(x, model_options['mrt_samples'], maxlen)
+                    samples, _ = f_sampler(batch.x, model_options['mrt_samples'], maxlen)
                     use_noise.set_value(1.)
 
                     samples = [numpy.trim_zeros(item) for item in zip(*samples)]
@@ -1443,7 +1480,13 @@ def train(dim_word=512,  # word vector dimensionality
                         samples = [y_s] + [s for s in samples if s != y_s]
 
                     # create mini-batch with masking
-                    x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
+                    #x, x_mask, y, y_mask = prepare_data([x_s for _ in xrange(len(samples))], samples,
+                    #                                                maxlen=None,
+                    #                                                n_factors=factors,
+                    #                                                n_words_src=n_words_src,
+                    #                                                n_words=n_words)
+
+                    batch = Batch([x_s for _ in xrange(len(samples))], samples,
                                                                     maxlen=None,
                                                                     n_factors=factors,
                                                                     n_words_src=n_words_src,
@@ -1451,7 +1494,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     cost_batches += 1
                     last_disp_samples += xlen
-                    last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+                    last_words += (numpy.sum(batch.x_mask) + numpy.sum(batch.y_mask))/2.0
 
                     # map integers to words (for character-level metrics)
                     samples = [seqs2words(sample, worddicts_r[-1]) for sample in samples]
@@ -1467,7 +1510,7 @@ def train(dim_word=512,  # word vector dimensionality
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
                     # compute cost, grads and update parameters
-                    cost = f_update(lrate, x, x_mask, y, y_mask, loss)
+                    cost = f_update(lrate, batch.x, batch.x_mask, batch.y, batch.y_mask, loss)
 
                     cost_sum += cost
 
@@ -1801,6 +1844,10 @@ if __name__ == '__main__':
                          help="separator string for multiple sentences (default: no multiple sentences allowed)")
     training.add_argument('--contrastive_training', action="store_true",
                          help='train with contrastive target sentences')
+    training.add_argument('--contrastive_pairwise_loss_weight', type=float, default=1.0, metavar='FLOAT',
+                         help="Pairwise loss weight for contrastive training (default: %(default)s)")
+    training.add_argument('--contrastive_pairwise_loss_margin', type=float, default=0.1, metavar='FLOAT',
+                         help="Pairwise loss margin for contrastive training (default: %(default)s)")
 
 
     validation = parser.add_argument_group('validation parameters')
