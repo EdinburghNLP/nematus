@@ -172,10 +172,9 @@ def init_params(options):
                                 nin=options['dim'], nout=options['dim_word'],
                                 ortho=False)
 
-    if not options['deep_fusion_lm']:
-        params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
-                                    nin=options['dim_word'],
-                                    nout=options['dim_word'], ortho=False)
+    params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
+                                nin=options['dim_word'],
+                                nout=options['dim_word'], ortho=False)
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
                                 nin=ctxdim, nout=options['dim_word'],
@@ -191,6 +190,7 @@ def init_params(options):
 
 # initialize LM parameters (deep fusion)
 def init_params_lm(options, params):
+    # readout for LM
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
                                    nin=options['lm_dim'],
                                    nout=options['dim_word'], ortho=False)      
@@ -463,19 +463,20 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_logit_lstm', activ='linear')
-    # current lm encoder state instead of previous word embedding
-    if options['deep_fusion_lm']:
-        logit_prev = get_layer_constr('ff')(tparams, lm_next_state, options, dropout,
-                                            dropout_probability=options['dropout_hidden'],
-                                            prefix='ff_logit_lm', activ='linear')
-    else:
-        logit_prev = get_layer_constr('ff')(tparams, emb, options, dropout,
-                                        dropout_probability=options['dropout_embedding'],
-                                        prefix='ff_logit_prev', activ='linear')
+    logit_prev = get_layer_constr('ff')(tparams, emb, options, dropout,
+                                    dropout_probability=options['dropout_embedding'],
+                                    prefix='ff_logit_prev', activ='linear')
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
-    logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+    if options['deep_fusion_lm']:
+        # add current lm encoder state to last layer
+        logit_lm = get_layer_constr('ff')(tparams, lm_next_state, options, dropout,
+                                          dropout_probability=options['dropout_hidden'],
+                                          prefix='ff_logit_lm', activ='linear')
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx+logit_lm)
+    else:
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
     # last layer
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
