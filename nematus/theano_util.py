@@ -32,7 +32,8 @@ def zip_to_theano(params, tparams):
         tparams[kk].set_value(vv)
 
 
-# pull parameters from Theano shared variablesdef unzip_from_theano(zipped, excluding_prefix=None):
+# pull parameters from Theano shared variables
+def unzip_from_theano(zipped, excluding_prefix=None):
     new_params = OrderedDict()
     for kk, vv in zipped.iteritems():
         if excluding_prefix and (kk.startswith(excluding_prefix)):
