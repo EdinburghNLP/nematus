@@ -10,7 +10,7 @@ mkdir -p models
 
 ../nematus/nmt.py \
   --model models/model.npz \
-  --datasets data/corpus.en data/corpus.de \
+  --datasets data/corpus.en data/corpus_with_contrastive.de \
   --dictionaries data/vocab.en.json data/vocab.de.json \
   --dim_word 256 \
   --dim 512 \
