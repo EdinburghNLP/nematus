@@ -40,6 +40,7 @@ class TextIterator:
         self.maxlen = maxlen
         self.skip_empty = skip_empty
         self.use_factor = use_factor
+        self.multi_sentence_separator = multi_sentence_separator
 
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
@@ -92,12 +93,12 @@ class TextIterator:
 
         if len(self.source_buffer) == 0:
             for ss in self.source:
-                if multi_sentence_separator == None:
+                if self.multi_sentence_separator == None:
                     ss = [ss.split()]
                     tt = [self.target.readline().split()]
                 else:
-                    ss = ss.split(multi_sentence_separator).split()
-                    tt = self.target.readline().split(multi_sentence_separator).split()
+                    ss = [sss.split() for sss in ss.split(self.multi_sentence_separator)]
+                    tt = [ttt.split() for ttt in self.target.readline().split(self.multi_sentence_separator)]
                 
                 if self.skip_empty and (len(ss[0]) == 0 or len(tt[0]) == 0):
                     continue
@@ -161,7 +162,7 @@ class TextIterator:
                         target_sent_word_ids = [w_id if w_id < self.n_words_target else 1 for w_id in target_sent_word_ids]
                     target_multi_sent_word_ids.append(target_sent_word_ids)
 
-                if multi_sentence_separator == None:
+                if self.multi_sentence_separator == None:
                     source.append(source_multi_sent_word_ids[0])
                     target.append(target_multi_sent_word_ids[0])
                 else:

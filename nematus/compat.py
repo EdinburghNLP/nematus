@@ -72,7 +72,6 @@ def fill_options(options):
         options['multi_sentence_separator'] = None
     if not 'contrastive_training' in options:
         options['contrastive_training'] = False
-
     if not 'contrastive_pairwise_loss_weight' in options:
         options['contrastive_pairwise_loss_weight'] = 1.0
     if not 'contrastive_pairwise_loss_margin' in options:

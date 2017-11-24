@@ -901,9 +901,13 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         else:
             pprobs = f_log_probs(*f_log_pobs_args)
 
+        if options['contrastive_training']:
+            # discard contrastive examples
+            pprobs = pprobs[:-len(batch.y_extra_ids)]
+
         # normalize scores according to output length
         if normalization_alpha:
-            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_mask.T])
+            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in batch.y_mask.T])
             pprobs /= adjusted_lengths
 
         for pp in pprobs:
@@ -1254,14 +1258,15 @@ def train(dim_word=512,  # word vector dimensionality
     f_log_probs = theano.function(inps, cost, profile=profile)
     logging.info('Done')
 
-    if contrastive:
+    if contrastive_training:
+        y_extra_ids = tensor.vector(name='y_extra_ids', dtype='int64')
         inps += [y_extra_ids]
-        n_all_samples = costs.shape[0]
+        n_all_samples = cost.shape[0]
         n_extra_samples = y_extra_ids.shape[0]
         n_main_samples = n_all_samples-n_extra_samples
         main_costs = cost[:n_main_samples]
         extra_costs = cost[n_main_samples:]
-        contrastive_penalties = contrastive_pairwise_loss_weight * tensor.relu(main_costs[y_extra_ids] - extra_costs + contrastive_pairwise_loss_margin)
+        contrastive_penalties = contrastive_pairwise_loss_weight * tensor.nnet.relu(main_costs[y_extra_ids] - extra_costs + contrastive_pairwise_loss_margin)
         main_costs = tensor.inc_subtensor(main_costs[y_extra_ids], contrastive_penalties)
         cost = main_costs
 
@@ -1370,7 +1375,8 @@ def train(dim_word=512,  # word vector dimensionality
             use_noise.set_value(1.)
 
             #ensure consistency in number of factors
-            if len(x) and len(x[0]) and len(x[0][0]) != factors:
+            n_x_factors = len(x[0][0]) if not contrastive_training else len(x[0][0][0])
+            if len(x) and len(x[0]) and n_x_factors != factors:
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(factors, len(x[0][0])))
                 sys.exit(1)
 
@@ -1397,20 +1403,20 @@ def train(dim_word=512,  # word vector dimensionality
                                     n_factors=factors,
                                     n_words_src=n_words_src,
                                     n_words=n_words,
-                                    multi_sentences=contrastive)
+                                    multi_sentences=contrastive_training)
 
-                if x is None:
+                if batch.x is None:
                     logging.warning('Minibatch with zero sample under length %d' % maxlen)
                     training_progress.uidx -= 1
                     continue
                 
                 cost_batches += 1
                 last_disp_samples += xlen
-                last_words += (numpy.sum(x_mask) + numpy.sum(y_mask))/2.0
+                last_words += (numpy.sum(batch.x_mask) + numpy.sum(batch.y_mask))/2.0
 
                 # compute cost, grads and update parameters
-                f_update_args=[lrate, x, x_mask, y, y_mask]
-                if contrastive:
+                f_update_args=[lrate, batch.x, batch.x_mask, batch.y, batch.y_mask]
+                if contrastive_training:
                     f_update_args.append(batch.y_extra_ids)
                 if model_options['objective'] == 'RAML':
                     f_update_args.append(sample_weights)
