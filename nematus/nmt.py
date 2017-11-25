@@ -191,8 +191,7 @@ def init_params(options):
 # initialize LM parameters (deep fusion)
 def init_params_lm(options, params):
     # LM controller mechanism
-    #prefix = 'fusion_lm' toto change!
-    prefix = 'lm'
+    prefix = 'fusion_lm'
     v_g = norm_weight(options['lm_dim'], 1)
     params[pp(prefix, 'v_g')] = v_g
     # bias initialization
@@ -468,8 +467,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         lm_next_state = lm_proj[0]
 
         # controller mechanism
-        #prefix = 'fusion_lm' toto change !
-        prefix = 'lm'
+        prefix = 'fusion_lm'
         #lm_next_state = lm_next_state.reshape([lm_next_state[0], ])
 
         lm_gate = tensor.dot(lm_next_state, tparams[pp(prefix, 'v_g')])+tparams[pp(prefix, 'b_g')]
