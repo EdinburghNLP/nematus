@@ -190,6 +190,15 @@ def init_params(options):
 
 # initialize LM parameters (deep fusion)
 def init_params_lm(options, params):
+    # LM controller mechanism
+    #prefix = 'fusion_lm' toto change!
+    prefix = 'lm'
+    v_g = norm_weight(options['lm_dim'], 1)
+    params[pp(prefix, 'v_g')] = v_g
+    # bias initialization
+    b_g = -1 * numpy.ones((1,)).astype(floatX)
+    params[pp(prefix, 'b_g')] = b_g
+
     # readout for LM
     params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
                                    nin=options['lm_dim'],
@@ -458,6 +467,37 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
         lm_next_state = lm_proj[0]
 
+        # controller mechanism
+        #prefix = 'fusion_lm' toto change !
+        prefix = 'lm'
+        #lm_next_state = lm_next_state.reshape([lm_next_state[0], ])
+
+        lm_gate = tensor.dot(lm_next_state, tparams[pp(prefix, 'v_g')])+tparams[pp(prefix, 'b_g')]
+        lm_gate = tensor.nnet.sigmoid(lm_gate)
+
+
+        # Find something for 1 step !!!!!! So far, the following returns a bug.
+        # Check dimension with 1 step (sampling) !
+        if one_step:
+            lm_gate = tensor.tile(lm_gate, (1, options['lm_dim']))
+        else:
+            lm_gate = tensor.tile(lm_gate, (1, 1, options['lm_dim']))
+
+        lm_next_state = lm_next_state * lm_gate            
+
+        
+
+
+        toto_dec = lm_gate #[:,:,None]
+        toto_lm = lm_next_state
+
+
+
+
+
+
+
+
     # hidden layer taking RNN state, previous word embedding and context vector as input
     # (this counts as the first layer in our deep output, which is always on)
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
@@ -484,7 +524,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                             dropout_probability=options['dropout_hidden'],
                             prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
-    return logit, opt_ret, ret_state
+    return logit, opt_ret, ret_state, toto_dec, toto_lm
 
 # build a training model
 def build_model(tparams, options):
@@ -521,7 +561,7 @@ def build_model(tparams, options):
     if options['dec_depth'] > 1:
         init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
 
-    logit, opt_ret, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
+    logit, opt_ret, _, toto_dec, toto_lm = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
 
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
@@ -536,7 +576,7 @@ def build_model(tparams, options):
 
     #print "Print out in build_model()"
     #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
+    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost, toto_dec, toto_lm
 
 
 # build a sampler
@@ -573,7 +613,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if theano.config.compute_test_value != 'off':
         init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype(floatX)
 
-    logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
+    logit, opt_ret, ret_state, toto_dec, toto_lm = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
 
     # compute the softmax probability
     next_probs = tensor.nnet.softmax(logit)
@@ -585,7 +625,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # sampled word for the next target, next hidden state to be used
     logging.info('Building f_next..')
     inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, ret_state]
+    outs = [next_probs, next_sample, ret_state, toto_dec, toto_lm]
 
     if return_alignment:
         outs.append(opt_ret['dec_alphas'])
@@ -789,7 +829,8 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             ret = f_next[i](*inps)
 
             # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+            next_p[i], next_w_tmp, next_state[i], toto_dec, toto_lm = ret[0], ret[1], ret[2], ret[3], ret[4] # toto_dec : remove 2 lasts !!!
+            #print "sampling coucou", toto_dec, toto_lm
             if return_alignment:
                 dec_alphas[i] = ret[3]
 
@@ -968,11 +1009,11 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         ### in optional save weights mode.
         if alignweights:
-            pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
+            pprobs, attention, toto_dec, toto_lm = f_log_probs(x, x_mask, y, y_mask)
             for jdata in get_alignments(attention, x_mask, y_mask):
                 alignments_json.append(jdata)
         else:
-            pprobs = f_log_probs(x, x_mask, y, y_mask)
+            pprobs, toto_dec, toto_lm = f_log_probs(x, x_mask, y, y_mask)
 
         # normalize scores according to output length
         if normalization_alpha:
@@ -984,7 +1025,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         logging.debug('%d samples computed' % (n_done))
 
-    return numpy.array(probs), alignments_json
+    return numpy.array(probs), alignments_json, toto_dec, toto_lm
 
 
 def augment_raml_data(x, y, tgt_worddict, options):
@@ -1313,7 +1354,8 @@ def train(dim_word=512,  # word vector dimensionality
     trng, use_noise, \
         x, x_mask, y, y_mask, \
         opt_ret, \
-        cost = \
+        cost, \
+        toto_dec, toto_lm = \
         build_model(tparams, model_options)
 
     inps = [x, x_mask, y, y_mask]
@@ -1327,7 +1369,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     # before any regularizer
     logging.info('Building f_log_probs...')
-    f_log_probs = theano.function(inps, cost, profile=profile)
+    f_log_probs = theano.function(inps, [cost, toto_dec, toto_lm], profile=profile)
     logging.info('Done')
 
     if model_options['objective'] == 'CE':
@@ -1398,7 +1440,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     logging.info('Building optimizers...')
     f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
-                                                                 grads, inps, cost,
+                                                                 grads, inps, [cost, toto_dec, toto_lm],
                                                                  profile=profile,
                                                                  optimizer_params=optimizer_params)
     logging.info('Done')
@@ -1471,10 +1513,10 @@ def train(dim_word=512,  # word vector dimensionality
 
                 # compute cost, grads and update parameters
                 if model_options['objective'] == 'RAML':
-                    cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
+                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
                 else:
-                    cost = f_update(lrate, x, x_mask, y, y_mask)
-
+                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask)
+                #print 'coucou', toto_dec, toto_lm
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
@@ -1558,8 +1600,7 @@ def train(dim_word=512,  # word vector dimensionality
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
                     # compute cost, grads and update parameters
-                    cost = f_update(lrate, x, x_mask, y, y_mask, loss)
-
+                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask, loss)
                     cost_sum += cost
 
             # check for bad numbers, usually we remove non-finite elements
@@ -1634,6 +1675,7 @@ def train(dim_word=512,  # word vector dimensionality
                                                argmax=False,
                                                suppress_unk=False,
                                                return_hyp_graph=False)
+                    #print 'sample coucou', toto_dec.shape, toto_lm.shape
                     print 'Source ', jj, ': ',
                     for pos in range(x.shape[1]):
                         if x[0, pos, jj] == 0:
@@ -1676,7 +1718,7 @@ def train(dim_word=512,  # word vector dimensionality
             # validate model on validation set and early stop if necessary
             if valid is not None and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
                 use_noise.set_value(0.)
-                valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
+                valid_errs, alignment, toto_dec, toto_lm = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
                 valid_err = valid_errs.mean()
                 training_progress.history_errs.append(float(valid_err))
@@ -1756,8 +1798,8 @@ def train(dim_word=512,  # word vector dimensionality
 
     if valid is not None:
         use_noise.set_value(0.)
-        valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
-                                        model_options, valid)
+        valid_errs, alignment, toto_dec, toto_lm = pred_probs(f_log_probs, toto_dec,
+                                                              model_options, valid)
         valid_err = valid_errs.mean()
 
         logging.info('Valid {}'.format(valid_err))
