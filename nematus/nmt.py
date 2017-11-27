@@ -461,17 +461,11 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                                           profile=profile)
 
         lm_next_state = lm_proj[0]
-        lm_ret_state  = lm_proj[0]
+        lm_ret_state = lm_proj[0]
 
         # don't pass LSTM cell state to next layer
         if options['lm_encoder'].startswith('lstm'):
             lm_next_state = get_slice(lm_next_state, 0, options['lm_dim'])
-
-        # we return state of each layer
-        if sampling:
-            lm_ret_state = lm_next_state
-        else:
-            lm_ret_state = None
 
         # controller mechanism
         prefix = 'fusion_lm'
