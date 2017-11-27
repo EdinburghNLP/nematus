@@ -602,7 +602,7 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
 
     lm_init_state = None
     if options['deep_fusion_lm']:
-        lm_init_state = tensor.dmatrix('lm_init_state')
+        lm_init_state = tensor.matrix('lm_init_state', dtype=floatX)
 
     logit, opt_ret, ret_state, lm_ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True, lm_init_state=lm_init_state)
 
