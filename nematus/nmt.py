@@ -318,7 +318,7 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
 
 
 # RNN decoder (including embedding and feedforward layer before output)
-def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=False, pctx_=None, shared_vars=None):
+def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=False, pctx_=None, shared_vars=None, lm_init_state=None):
     opt_ret = dict()
 
     # tell RNN whether to advance just one step at a time (for sampling),
@@ -440,15 +440,15 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
         if sampling:
             lm_emb = tensor.switch(y[:, None] < 0,
-                tensor.zeros((1, options['dim_word'])),
-                lm_emb)
-            lm_init_state = tensor.unbroadcast(tensor.alloc(0., 1, options['lm_dim']), 0)
+                                   tensor.zeros((1, options['dim_word'])),
+                                   lm_emb)
+            if not lm_init_state:
+                lm_init_state = tensor.unbroadcast(tensor.alloc(0., 1, options['lm_dim']), 0)
 
         else:
             lm_emb_shifted = tensor.zeros_like(lm_emb)
             lm_emb_shifted = tensor.set_subtensor(lm_emb_shifted[1:], lm_emb[:-1])
             lm_emb = lm_emb_shifted
-            lm_init_state = None
 
         lm_dropout = dropout_constr(options={'use_dropout':False}, use_noise=False, trng=None, sampling=False)
 
@@ -460,41 +460,30 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                                           init_state=lm_init_state,
                                                           profile=profile)
 
+        lm_next_state = lm_proj[0]
+        lm_ret_state  = lm_proj[0]
+
         # don't pass LSTM cell state to next layer
         if options['lm_encoder'].startswith('lstm'):
             lm_next_state = get_slice(lm_next_state, 0, options['lm_dim'])
 
-        lm_next_state = lm_proj[0]
+        # we return state of each layer
+        if sampling:
+            lm_ret_state = lm_next_state
+        else:
+            lm_ret_state = None
 
         # controller mechanism
         prefix = 'fusion_lm'
-        #lm_next_state = lm_next_state.reshape([lm_next_state[0], ])
-
         lm_gate = tensor.dot(lm_next_state, tparams[pp(prefix, 'v_g')])+tparams[pp(prefix, 'b_g')]
         lm_gate = tensor.nnet.sigmoid(lm_gate)
 
-
-        # Find something for 1 step !!!!!! So far, the following returns a bug.
-        # Check dimension with 1 step (sampling) !
         if one_step:
             lm_gate = tensor.tile(lm_gate, (1, options['lm_dim']))
         else:
             lm_gate = tensor.tile(lm_gate, (1, 1, options['lm_dim']))
 
         lm_next_state = lm_next_state * lm_gate            
-
-        
-
-
-        toto_dec = lm_gate #[:,:,None]
-        toto_lm = lm_next_state
-
-
-
-
-
-
-
 
     # hidden layer taking RNN state, previous word embedding and context vector as input
     # (this counts as the first layer in our deep output, which is always on)
@@ -522,7 +511,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                             dropout_probability=options['dropout_hidden'],
                             prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
-    return logit, opt_ret, ret_state, toto_dec, toto_lm
+    return logit, opt_ret, ret_state, lm_ret_state
 
 # build a training model
 def build_model(tparams, options):
@@ -559,7 +548,7 @@ def build_model(tparams, options):
     if options['dec_depth'] > 1:
         init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
 
-    logit, opt_ret, _, toto_dec, toto_lm = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
+    logit, opt_ret, _, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
 
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
@@ -574,7 +563,7 @@ def build_model(tparams, options):
 
     #print "Print out in build_model()"
     #print opt_ret
-    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost, toto_dec, toto_lm
+    return trng, use_noise, x, x_mask, y, y_mask, opt_ret, cost
 
 
 # build a sampler
@@ -611,7 +600,11 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if theano.config.compute_test_value != 'off':
         init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype(floatX)
 
-    logit, opt_ret, ret_state, toto_dec, toto_lm = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
+    lm_init_state = None
+    if options['deep_fusion_lm']:
+        lm_init_state = tensor.dmatrix('lm_init_state')
+
+    logit, opt_ret, ret_state, lm_ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True, lm_init_state=lm_init_state)
 
     # compute the softmax probability
     next_probs = tensor.nnet.softmax(logit)
@@ -622,8 +615,8 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
     logging.info('Building f_next..')
-    inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, ret_state, toto_dec, toto_lm]
+    inps = [y, ctx, init_state, lm_init_state]
+    outs = [next_probs, next_sample, ret_state, lm_ret_state]
 
     if return_alignment:
         outs.append(opt_ret['dec_alphas'])
@@ -717,7 +710,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
     def decoder_step(y, init_state, ctx, pctx_, *shared_vars):
 
-        logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=None, sampling=True, pctx_=pctx_, shared_vars=shared_vars)
+        logit, opt_ret, ret_state, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=None, sampling=True, pctx_=pctx_, shared_vars=shared_vars)
 
         # compute the softmax probability
         next_probs = tensor.nnet.softmax(logit)
@@ -801,6 +794,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # for each model in the ensemble
     num_models = len(f_init)
     next_state = [None]*num_models
+    lm_next_state = [None]*num_models
     ctx0 = [None]*num_models
     next_p = [None]*num_models
     dec_alphas = [None]*num_models
@@ -812,7 +806,10 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         ret[0] = numpy.transpose(ret[0], (1,0,2))
 
         next_state[i] = numpy.tile( ret[0] , (live_k, 1, 1))
+        lm_next_state[i] = numpy.tile( numpy.zeros((1, 1024)).astype(floatX) , (live_k, 1))
+
         ctx0[i] = ret[1]
+
     next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
     # x is a sequence of word ids followed by 0, eos id
@@ -823,12 +820,12 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             # for theano function, go from (batch_size, layers, dim) to (layers, batch_size, dim)
             next_state[i] = numpy.transpose(next_state[i], (1,0,2))
 
-            inps = [next_w, ctx, next_state[i]]
+            inps = [next_w, ctx, next_state[i], lm_next_state[i]]
             ret = f_next[i](*inps)
 
             # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], next_w_tmp, next_state[i], toto_dec, toto_lm = ret[0], ret[1], ret[2], ret[3], ret[4] # toto_dec : remove 2 lasts !!!
-            #print "sampling coucou", toto_dec, toto_lm
+            next_p[i], next_w_tmp, next_state[i], lm_next_state[i] = ret[0], ret[1], ret[2], ret[3]
+
             if return_alignment:
                 dec_alphas[i] = ret[3]
 
@@ -856,19 +853,23 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
 
                 hyp_states=[]
+                hyp_lm_states=[]
                 for ti in xrange(live_k):
                     hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                    hyp_lm_states.append([copy.copy(lm_next_state[i][ti]) for i in xrange(num_models)])
                     hyp_scores[ti]=cand_scores[ti][nws[ti]]
                     word_probs[ti].append(probs[ti][nws[ti]])
 
                 new_hyp_states=[]
+                new_hyp_lm_states=[]
                 new_hyp_samples=[]
                 new_hyp_scores=[]
                 new_word_probs=[]
-                for hyp_sample,hyp_state, hyp_score, hyp_word_prob in zip(hyp_samples,hyp_states,hyp_scores, word_probs):
+                for hyp_sample, hyp_state, hyp_lm_state, hyp_score, hyp_word_prob in zip(hyp_samples, hyp_states, hyp_lm_states ,hyp_scores, word_probs):
                     if hyp_sample[-1]  > 0:
                         new_hyp_samples.append(copy.copy(hyp_sample))
                         new_hyp_states.append(copy.copy(hyp_state))
+                        new_hyp_lm_states.append(copy.copy(hyp_lm_state))
                         new_hyp_scores.append(hyp_score)
                         new_word_probs.append(hyp_word_prob)
                     else:
@@ -878,6 +879,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
                 hyp_samples=new_hyp_samples
                 hyp_states=new_hyp_states
+                hyp_lm_states=new_hyp_lm_states
                 hyp_scores=new_hyp_scores
                 word_probs=new_word_probs
 
@@ -887,6 +889,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
                 next_w = numpy.array([w[-1] for w in hyp_samples])
                 next_state = [numpy.array(state) for state in zip(*hyp_states)]
+                lm_next_state = [numpy.array(state) for state in zip(*hyp_lm_states)]
         else:
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
             probs = sum(next_p)/num_models
@@ -908,6 +911,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             new_hyp_scores = numpy.zeros(k-dead_k).astype(floatX)
             new_word_probs = []
             new_hyp_states = []
+            new_hyp_lm_states = []
             if return_alignment:
                 # holds the history of attention weights for each time step for each of the surviving hypothesis
                 # dimensions (live_k * target_words * source_hidden_units]
@@ -920,6 +924,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                 new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
                 new_hyp_scores[idx] = copy.copy(costs[idx])
                 new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                new_hyp_lm_states.append([copy.copy(lm_next_state[i][ti]) for i in xrange(num_models)])
                 if return_alignment:
                     # get history of attention weights for the current hypothesis
                     new_hyp_alignment[idx] = copy.copy(hyp_alignment[ti])
@@ -932,6 +937,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             hyp_samples = []
             hyp_scores = []
             hyp_states = []
+            hyp_lm_states = []
             word_probs = []
             if return_alignment:
                 hyp_alignment = []
@@ -955,6 +961,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     hyp_samples.append(copy.copy(new_hyp_samples[idx]))
                     hyp_scores.append(new_hyp_scores[idx])
                     hyp_states.append(copy.copy(new_hyp_states[idx]))
+                    hyp_lm_states.append(copy.copy(new_hyp_lm_states[idx]))
                     word_probs.append(new_word_probs[idx])
                     if return_alignment:
                         hyp_alignment.append(new_hyp_alignment[idx])
@@ -969,6 +976,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
             next_w = numpy.array([w[-1] for w in hyp_samples])
             next_state = [numpy.array(state) for state in zip(*hyp_states)]
+            lm_next_state = [numpy.array(state) for state in zip(*hyp_lm_states)]
 
     # dump every remaining one
     if not argmax and live_k > 0:
@@ -1007,11 +1015,11 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         ### in optional save weights mode.
         if alignweights:
-            pprobs, attention, toto_dec, toto_lm = f_log_probs(x, x_mask, y, y_mask)
+            pprobs, attention = f_log_probs(x, x_mask, y, y_mask)
             for jdata in get_alignments(attention, x_mask, y_mask):
                 alignments_json.append(jdata)
         else:
-            pprobs, toto_dec, toto_lm = f_log_probs(x, x_mask, y, y_mask)
+            pprobs = f_log_probs(x, x_mask, y, y_mask)
 
         # normalize scores according to output length
         if normalization_alpha:
@@ -1023,7 +1031,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
         logging.debug('%d samples computed' % (n_done))
 
-    return numpy.array(probs), alignments_json, toto_dec, toto_lm
+    return numpy.array(probs), alignments_json
 
 
 def augment_raml_data(x, y, tgt_worddict, options):
@@ -1352,8 +1360,7 @@ def train(dim_word=512,  # word vector dimensionality
     trng, use_noise, \
         x, x_mask, y, y_mask, \
         opt_ret, \
-        cost, \
-        toto_dec, toto_lm = \
+        cost = \
         build_model(tparams, model_options)
 
     inps = [x, x_mask, y, y_mask]
@@ -1367,7 +1374,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     # before any regularizer
     logging.info('Building f_log_probs...')
-    f_log_probs = theano.function(inps, [cost, toto_dec, toto_lm], profile=profile)
+    f_log_probs = theano.function(inps, cost, profile=profile)
     logging.info('Done')
 
     if model_options['objective'] == 'CE':
@@ -1438,7 +1445,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     logging.info('Building optimizers...')
     f_update, optimizer_tparams = eval(optimizer)(lr, updated_params,
-                                                                 grads, inps, [cost, toto_dec, toto_lm],
+                                                                 grads, inps, cost,
                                                                  profile=profile,
                                                                  optimizer_params=optimizer_params)
     logging.info('Done')
@@ -1511,10 +1518,9 @@ def train(dim_word=512,  # word vector dimensionality
 
                 # compute cost, grads and update parameters
                 if model_options['objective'] == 'RAML':
-                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
+                    cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
                 else:
-                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask)
-                #print 'coucou', toto_dec, toto_lm
+                    cost = f_update(lrate, x, x_mask, y, y_mask)
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
@@ -1598,7 +1604,7 @@ def train(dim_word=512,  # word vector dimensionality
                     loss = mean_loss - numpy.array(scorer.score_matrix(samples), dtype=floatX)
 
                     # compute cost, grads and update parameters
-                    cost, toto_dec, toto_lm = f_update(lrate, x, x_mask, y, y_mask, loss)
+                    cost = f_update(lrate, x, x_mask, y, y_mask, loss)
                     cost_sum += cost
 
             # check for bad numbers, usually we remove non-finite elements
@@ -1673,7 +1679,6 @@ def train(dim_word=512,  # word vector dimensionality
                                                argmax=False,
                                                suppress_unk=False,
                                                return_hyp_graph=False)
-                    #print 'sample coucou', toto_dec.shape, toto_lm.shape
                     print 'Source ', jj, ': ',
                     for pos in range(x.shape[1]):
                         if x[0, pos, jj] == 0:
@@ -1716,7 +1721,7 @@ def train(dim_word=512,  # word vector dimensionality
             # validate model on validation set and early stop if necessary
             if valid is not None and validFreq and numpy.mod(training_progress.uidx, validFreq) == 0:
                 use_noise.set_value(0.)
-                valid_errs, alignment, toto_dec, toto_lm = pred_probs(f_log_probs, prepare_data,
+                valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
                                         model_options, valid)
                 valid_err = valid_errs.mean()
                 training_progress.history_errs.append(float(valid_err))
@@ -1796,8 +1801,7 @@ def train(dim_word=512,  # word vector dimensionality
 
     if valid is not None:
         use_noise.set_value(0.)
-        valid_errs, alignment, toto_dec, toto_lm = pred_probs(f_log_probs, toto_dec,
-                                                              model_options, valid)
+        valid_errs, alignment = pred_probs(f_log_probs, model_options, valid)
         valid_err = valid_errs.mean()
 
         logging.info('Valid {}'.format(valid_err))
