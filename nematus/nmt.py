@@ -435,6 +435,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
             ret_state = ret_state[0]
 
     # language model encoder (deep fusion)
+    lm_ret_state = None
     if options['deep_fusion_lm']:
         lm_emb = get_layer_constr('embedding')(tparams, y, prefix='lm_')
 
@@ -443,7 +444,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                    tensor.zeros((1, options['dim_word'])),
                                    lm_emb)
             if not lm_init_state:
-                lm_init_state = tensor.unbroadcast(tensor.alloc(0., 1, options['lm_dim']), 0)
+                lm_init_state = tensor.zeros((1, options['lm_dim']))
 
         else:
             lm_emb_shifted = tensor.zeros_like(lm_emb)
@@ -451,7 +452,6 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
             lm_emb = lm_emb_shifted
 
         lm_dropout = dropout_constr(options={'use_dropout':False}, use_noise=False, trng=None, sampling=False)
-
 
         lm_proj = get_layer_constr(options['lm_encoder'])(tparams, lm_emb, options, lm_dropout,
                                                           prefix='lm_encoder',
@@ -609,8 +609,12 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
     logging.info('Building f_next..')
-    inps = [y, ctx, init_state, lm_init_state]
-    outs = [next_probs, next_sample, ret_state, lm_ret_state]
+    if options['deep_fusion_lm']:
+        inps = [y, ctx, init_state, lm_init_state]
+        outs = [next_probs, next_sample, ret_state, lm_ret_state]
+    else:
+        inps = [y, ctx, init_state]
+        outs = [next_probs, next_sample, ret_state]
 
     if return_alignment:
         outs.append(opt_ret['dec_alphas'])
@@ -750,7 +754,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
-def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
+def gen_sample(f_init, f_next, x, model_options=None, trng=None, k=1, maxlen=30,
                stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
                return_hyp_graph=False):
 
@@ -800,8 +804,11 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         ret[0] = numpy.transpose(ret[0], (1,0,2))
 
         next_state[i] = numpy.tile( ret[0] , (live_k, 1, 1))
-        lm_next_state[i] = numpy.tile( numpy.zeros((1, 1024)).astype(floatX) , (live_k, 1))
 
+        if model_options and model_options['deep_fusion_lm']:
+            lm_dim = model_options['lm_dim']
+            lm_next_state[i] = numpy.tile( numpy.zeros((1, lm_dim)).astype(floatX) , (live_k, 1))
+            
         ctx0[i] = ret[1]
 
     next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
@@ -814,11 +821,18 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             # for theano function, go from (batch_size, layers, dim) to (layers, batch_size, dim)
             next_state[i] = numpy.transpose(next_state[i], (1,0,2))
 
-            inps = [next_w, ctx, next_state[i], lm_next_state[i]]
-            ret = f_next[i](*inps)
-
-            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], next_w_tmp, next_state[i], lm_next_state[i] = ret[0], ret[1], ret[2], ret[3]
+            if model_options and model_options['deep_fusion_lm']:
+                inps = [next_w, ctx, next_state[i], lm_next_state[i]]
+                ret = f_next[i](*inps)
+                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+                next_p[i], next_w_tmp, next_state[i], lm_next_state[i] = ret[0], ret[1], ret[2], ret[3]
+            else:
+                inps = [next_w, ctx, next_state[i]]
+                ret = f_next[i](*inps)
+                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+                next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+                # dummy LM states
+                lm_next_state[i] = [None]*live_k
 
             if return_alignment:
                 dec_alphas[i] = ret[3]
@@ -924,7 +938,6 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     new_hyp_alignment[idx] = copy.copy(hyp_alignment[ti])
                     # extend the history with current attention weights
                     new_hyp_alignment[idx].append(mean_alignment[ti])
-
 
             # check the finished samples
             new_live_k = 0
@@ -1667,6 +1680,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     sample, score, sample_word_probs, alignment, hyp_graph = gen_sample([f_init], [f_next],
                                                x_current,
+                                               model_options,
                                                trng=trng, k=1,
                                                maxlen=30,
                                                stochastic=stochastic,

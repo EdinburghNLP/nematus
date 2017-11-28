@@ -360,6 +360,7 @@ class Translator(object):
         return gen_sample(fs_init, fs_next,
                           numpy.array(seq).T.reshape(
                               [len(seq[0]), len(seq), 1]),
+                          self._options[0],
                           trng=trng, k=k, maxlen=maxlen,
                           stochastic=False, argmax=False,
                           return_alignment=return_alignment,
