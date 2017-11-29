@@ -43,7 +43,7 @@ class TextIterator:
                 ss = self.source.readline()
                 if ss == "":
                     raise IOError
-                ss = ss.decode('utf-8').strip().split()
+                ss = ss.strip().split()
                 ss = [self.source_dict[w] if w in self.source_dict else 1
                       for w in ss]
                 if self.n_words_source > 0:
