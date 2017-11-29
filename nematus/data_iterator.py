@@ -99,13 +99,11 @@ class TextIterator:
                 else:
                     ss = [sss.split() for sss in ss.split(self.multi_sentence_separator)]
                     tt = [ttt.split() for ttt in self.target.readline().split(self.multi_sentence_separator)]
-                
-                if self.skip_empty and (len(ss[0]) == 0 or len(tt[0]) == 0):
+
+                if self.skip_empty and any(len(sss) == 0 for sss in ss) or any(len(ttt) == 0 for ttt in tt):
                     continue
-                if len(ss) > self.maxlen or len(tt) > self.maxlen:
+                if any(len(sss) > self.maxlen for sss in ss) or any(len(ttt) > self.maxlen for ttt in tt):
                     continue
-                ss = [ss[0]] + [e for e in ss[1:] if (len(e) > 0) and (len(e) <= self.maxlen)]
-                tt = [tt[0]] + [e for e in tt[1:] if (len(e) > 0) and (len(e) <= self.maxlen)]
 
                 self.source_buffer.append(ss)
                 self.target_buffer.append(tt)
