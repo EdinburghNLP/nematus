@@ -69,6 +69,8 @@ def load_params_lm(options, params, with_prefix='lm_'):
        
     new_params = OrderedDict()
     for kk, vv in pp.iteritems():
+       if kk == 'zipped_params':
+          continue
        new_params['lm_'+kk] = vv.astype(floatX, copy=False)
           
     params.update(new_params)
