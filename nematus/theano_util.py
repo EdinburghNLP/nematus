@@ -68,7 +68,7 @@ def load_params_lm(options, params, with_prefix='lm_'):
        hp = pkl.load(open(path + '.npz' + '.pkl'))
        
     new_params = OrderedDict()
-    for kk, vv, in pp.iteritems():
+    for kk, vv in pp.iteritems():
        new_params['lm_'+kk] = vv.astype(floatX, copy=False)
           
     params.update(new_params)
