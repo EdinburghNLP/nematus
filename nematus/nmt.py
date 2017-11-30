@@ -195,7 +195,8 @@ def init_params_lm(options, params):
     v_g = norm_weight(options['lm_dim'], 1)
     params[pp(prefix, 'v_g')] = v_g
     # bias initialization
-    b_g = -1 * numpy.ones((1,)).astype(floatX)
+    #b_g = -1 * numpy.ones((1,)).astype(floatX)
+    b_g = numpy.zeros((1,)).astype(floatX)
     params[pp(prefix, 'b_g')] = b_g
 
     # readout for LM
