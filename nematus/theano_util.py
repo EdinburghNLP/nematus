@@ -62,10 +62,8 @@ def load_params_lm(options, params, with_prefix='lm_'):
     path = options['deep_fusion_lm']
     try:
        pp = numpy.load(path)
-       hp = pkl.load(open(path + '.pkl'))
     except IOError:
        pp = numpy.load(path + '.npz')
-       hp = pkl.load(open(path + '.npz' + '.pkl'))
        
     new_params = OrderedDict()
     for kk, vv in pp.iteritems():
@@ -74,10 +72,7 @@ def load_params_lm(options, params, with_prefix='lm_'):
        new_params['lm_'+kk] = vv.astype(floatX, copy=False)
           
     params.update(new_params)
-    options['lm_dim'] = hp['dim']
-    options['lm_dim_word'] = hp['dim_word']
-    options['lm_encoder'] = hp['encoder']
-    return params, options
+    return params
 
 # load parameters
 def load_params(path, params, with_prefix=''):
