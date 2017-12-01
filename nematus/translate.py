@@ -140,7 +140,10 @@ class Translator(object):
         """
         options = []
         for model in self._models:
-            options.append(load_config(model))
+            m = load_config(model)
+            if not 'concatenate_lm_decoder' in m:
+                m['concatenate_lm_decoder'] = False
+            options.append(m)
             # backward compatibility
             fill_options(options[-1])
 
