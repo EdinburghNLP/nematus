@@ -168,9 +168,14 @@ def init_params(options):
                                             recurrence_transition_depth=options['dec_high_recurrence_transition_depth'])
 
     # readout
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
-                                nin=options['dim'], nout=options['dim_word'],
-                                ortho=False)
+    if options['deep_fusion_lm'] and options['concatenate_lm_decoder']:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
+                                       nin=(options['dim']+options['lm_dim']), nout=options['dim_word'],
+                                       ortho=False)        
+    else:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
+                                       nin=options['dim'], nout=options['dim_word'],
+                                       ortho=False)
 
     params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
                                 nin=options['dim_word'],
@@ -200,9 +205,10 @@ def init_params_lm(options, params):
     params[pp(prefix, 'b_g')] = b_g
 
     # readout for LM
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
-                                   nin=options['lm_dim'],
-                                   nout=options['dim_word'], ortho=False)      
+    if not options['concatenate_lm_decoder']:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
+                                       nin=options['lm_dim'],
+                                       nout=options['dim_word'], ortho=False)      
     return params
 
 # bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
@@ -482,6 +488,9 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
 
     # hidden layer taking RNN state, previous word embedding and context vector as input
     # (this counts as the first layer in our deep output, which is always on)
+    if options['deep_fusion_lm'] and options['concatenate_lm_decoder']:
+        next_state = concatenate([lm_next_state, next_state], axis=next_state.ndim-1)
+
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_logit_lstm', activ='linear')
@@ -491,7 +500,8 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
-    if options['deep_fusion_lm']:
+
+    if options['deep_fusion_lm'] and not options['concatenate_lm_decoder']:
         # add current lm encoder state to last layer
         logit_lm = get_layer_constr('ff')(tparams, lm_next_state, options, dropout,
                                           dropout_probability=options['dropout_hidden'],
@@ -1146,6 +1156,7 @@ def train(dim_word=512,  # word vector dimensionality
           valid_batch_size=16,
           saveto='model.npz',
           deep_fusion_lm=None,
+          concatenate_lm_decoder=False,
           validFreq=10000,
           saveFreq=30000,   # save the parameters after every saveFreq updates
           sampleFreq=10000,   # generate some samples after every sampleFreq
@@ -1199,6 +1210,16 @@ def train(dim_word=512,  # word vector dimensionality
 
     # Model options
     model_options = OrderedDict(sorted(locals().copy().items()))
+    # load LM options (deep fusion LM)
+    if model_options['concatenate_lm_decoder'] and not model_options['deep_fusion_lm']:
+        logging.error('Error: option \'concatenate_lm_decoder\' is enabled and no language model is given.\n')
+        sys.exit(1)        
+    if model_options['deep_fusion_lm']:
+        path = model_options['deep_fusion_lm']
+        hp = pkl.load(open(path + '.pkl'))
+        model_options['lm_dim'] = hp['dim']
+        model_options['lm_dim_word'] = hp['dim_word']
+        model_options['lm_encoder'] = hp['encoder']
 
     if model_options['dim_per_factor'] == None:
         if factors == 1:
@@ -1360,7 +1381,8 @@ def train(dim_word=512,  # word vector dimensionality
     # parameter initialization (deep fusion)
     if deep_fusion_lm:
         logging.info('Loading language model parameters')
-        params, model_options = load_params_lm(model_options, params)
+        #params, model_options = load_params_lm(model_options, params)
+        params = load_params_lm(model_options, params)
         params = init_params_lm(model_options, params)
 
     tparams = init_theano_params(params)
@@ -1840,6 +1862,8 @@ if __name__ == '__main__':
                          help="model file name (default: %(default)s)")
     data.add_argument('--deep_fusion_lm', type=str, default=None, metavar='PATH', dest='deep_fusion_lm',
                          help="deep fusion language model file name")
+    data.add_argument('--concatenate_lm_decoder', action="store_true", dest="concatenate_lm_decoder",
+                         help="concatenate LM state and decoder state (deep fusion)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--reload', action='store_true',  dest='reload_',
