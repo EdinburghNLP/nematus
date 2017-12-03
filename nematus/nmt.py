@@ -1832,7 +1832,8 @@ def train(dim_word=512,  # word vector dimensionality
 
     if valid is not None:
         use_noise.set_value(0.)
-        valid_errs, alignment = pred_probs(f_log_probs, model_options, valid)
+        valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
+                                           model_options, valid)
         valid_err = valid_errs.mean()
 
         logging.info('Valid {}'.format(valid_err))
