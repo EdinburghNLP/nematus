@@ -78,9 +78,9 @@ def load_dictionaries(config):
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
 
-def read_all_lines(config, path):
+def read_all_lines(config, sentences):
     source_to_num, _, _, _ = load_dictionaries(config)
-    lines = map(lambda l: l.strip().split(), open(path, 'r').readlines())
+    lines = map(lambda l: l.strip().split(), sentences)
     fn = lambda w: [source_to_num[w] if w in source_to_num else 1] # extra [ ] brackets for factor dimension
     lines = map(lambda l: map(lambda w: fn(w), l), lines)
     lines = numpy.array(lines)
@@ -112,6 +112,10 @@ def train(config, sess):
     tf.summary.scalar(name='mean_cost', tensor=mean_loss)
     tf.summary.scalar(name='t', tensor=t)
     merged = tf.summary.merge_all()
+
+    #save model options
+    config = OrderedDict(sorted(config.items()))
+    json.dump(config, open('%s.json' % saveto, 'wb'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
     source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
@@ -192,7 +196,7 @@ def translate(config, sess):
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
     n_sent = 0
-    batches, idxs = read_all_lines(config, config.valid_source_dataset)
+    batches, idxs = read_all_lines(config, open(config.valid_source_dataset, 'r').readlines())
     in_queue, out_queue = Queue(), Queue()
     model._get_beam_search_outputs(config.beam_size)
     
@@ -416,6 +420,7 @@ def parse_args():
     # put check in place until factors are implemented
     if len(config.dictionaries) != 2:
         logging.error('exactly two dictionaries need to be provided')
+        sys.exit(1)
     config.source_vocab = config.dictionaries[0]
     config.target_vocab = config.dictionaries[-1]
 

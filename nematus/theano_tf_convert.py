@@ -61,12 +61,18 @@ class FakeConfig(object):
         self.maxlen = None
         self.learning_rate = 0.0001
         self.clip_c = 1
+        self.translation_maxlen = 200
+        self.optimizer = 'adam'
+
+        # disable layer normalization for now TODO: make this compatible between theano and TF versions
+        self.use_layer_norm = False
+
 
 
 def theano_to_tensorflow_model(in_path, out_path):
     import numpy as np
     import tensorflow as tf
-    from tf_nmt import create_model
+    from nmt import create_model
     saved_model = np.load(in_path)
 
     # Create fake config
@@ -96,7 +102,7 @@ def theano_to_tensorflow_model(in_path, out_path):
 def tensorflow_to_theano_model(in_path, out_path):
     import numpy as np
     import tensorflow as tf
-    from tf_nmt import create_model
+    from nmt import create_model
     keys, values = zip(*th2tf.items())
     with tf.Session() as sess:
         new_saver = tf.train.import_meta_graph(in_path + '.meta')

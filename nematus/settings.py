@@ -6,6 +6,7 @@ Parses console arguments.
 import sys
 import argparse
 import uuid
+import logging
 from abc import ABCMeta
 
 class BaseSettings(object):
@@ -29,8 +30,6 @@ class BaseSettings(object):
                                   help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
         self._parser.add_argument('-p', dest='num_processes', type=int, default=1,
                                   help="Number of processes (default: %(default)s))")
-        self._parser.add_argument('--device-list', '-dl', type=str, nargs='*', required=False, metavar="DEVICE",
-                                  help="User specified device list for multi-thread decoding (default: [])")
         self._parser.add_argument('-v', dest='verbose', action="store_true", help="verbose mode.")
 
     def _set_console_arguments(self):
@@ -78,30 +77,12 @@ class TranslationSettings(BaseSettings):
             self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                                       default=sys.stdout, metavar='PATH',
                                       help="Output file (default: standard output)")
-            self._parser.add_argument('--output_alignment', '-a', type=argparse.FileType('w'),
-                                      default=None, metavar='PATH',
-                                      help="Output file for alignment weights (default: standard output)")
 
-        self._parser.add_argument('--json_alignment', action="store_true",
-                                  help="Output alignment in json format")
         self._parser.add_argument('--n-best', action="store_true",
                                   help="Write n-best list (of size k)")
-        self._parser.add_argument('--suppress-unk', action="store_true",
-                                  help="Suppress hypotheses containing UNK.")
-        self._parser.add_argument('--print-word-probabilities', '-wp', dest="get_word_probs",
-                                  action="store_true", help="Print probabilities of each word")
-        self._parser.add_argument('--search_graph', '-sg', dest='search_graph_filename',
-                                  help="Output file for search graph visualisation. File format is determined by file name, e.g., PDF for `search_graph.pdf`")
-        self._parser.add_argument("--max-ratio", "-mr", default=0.0, type=float,
-                                  help="If non-zero, target should be no longer than this ratio of source (default: %(default)s).")
 
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
-        self.get_alignment = False
-        if self._from_console_arguments and self.output_alignment:
-            self.get_alignment = True
-        self.get_search_graph = True if self.search_graph_filename else False
-
 
 class ServerSettings(BaseSettings):
     """
@@ -135,8 +116,6 @@ class ScorerBaseSettings(BaseSettings):
                                   help="Minibatch size (default: %(default)s))")
         self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
                                   help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
-        self._parser.add_argument('--walign', '-w', dest='alignweights', required = False, action="store_true",
-                                  help="Whether to store the alignment weights or not. If specified, weights will be saved in <target>.alignment.json")
         if self._from_console_arguments: # don't open files if no console arguments are parsed
             self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                                       default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")

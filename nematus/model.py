@@ -1,6 +1,11 @@
+import sys
+import logging
+
+import numpy
+
 import tensorflow as tf
 from layers import *
-import numpy
+
 
 class Decoder(object):
     def __init__(self, config, context, x_mask):
@@ -365,6 +370,9 @@ class StandardModel(object):
 
         if config.optimizer == 'adam':
             self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+        else:
+            logging.error('No valid optimizer defined: {0}'.format(config.optimizer))
+            sys.exit(1)
 
         self.t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
         grad_vars = self.optimizer.compute_gradients(self.mean_loss)

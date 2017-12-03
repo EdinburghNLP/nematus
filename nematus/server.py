@@ -38,7 +38,6 @@ class NematusServer(object):
         self._debug = server_settings.verbose
         self._models = server_settings.models
         self._num_processes = server_settings.num_processes
-        self._device_list = server_settings.device_list
         self._status = self.STATUS_LOADING
         # start webserver
         self._server = Bottle()
