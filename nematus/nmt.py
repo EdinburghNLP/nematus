@@ -250,7 +250,7 @@ def translate(config, sess):
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
 
 
-def validate(sess, valid_text_iterator, model):
+def validate(sess, valid_text_iterator, model, normalization_alpha=0):
     costs = []
     total_loss = 0.
     total_seen = 0
@@ -260,10 +260,16 @@ def validate(sess, valid_text_iterator, model):
         x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
         feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
+
+        # normalize scores according to output length
+        if normalization_alpha:
+            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_v_mask_in.T])
+            loss_per_sentence_out /= adjusted_lengths
+
         total_loss += loss_per_sentence_out.sum()
         total_seen += x_v_in.shape[1]
         costs += list(loss_per_sentence_out)
-        logging.info( "Seen " + total_seen)
+        logging.info( "Seen {0}".format(total_seen))
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(total_loss/total_seen, total_loss, total_seen))
     return costs
 
@@ -284,7 +290,7 @@ def validate_helper(config, sess):
     costs = validate(sess, valid_text_iterator, model)
     lines = open(config.valid_target_dataset).readlines()
     for cost, line in zip(costs, lines):
-        logging.info(cost + ' ' + line.strip())
+        logging.info("{0} {1}".format(cost,ine.strip()))
 
 
 

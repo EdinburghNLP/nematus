@@ -17,66 +17,35 @@ from util import load_config
 from alignment_util import combine_source_target_text_1to1
 from compat import fill_options
 
-from theano_util import (floatX, numpy_floatX, load_params, init_theano_params)
-from nmt import (pred_probs, build_model, prepare_data)
+from nmt import create_model, validate
 from settings import ScorerSettings
 
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-import theano
+import tensorflow as tf
 
-def load_scorer(model, option, alignweights=None):
+def score_model(source_file, target_file, scorer_settings, options):
 
-    # load model parameters and set theano shared variables
-    param_list = numpy.load(model).files
-    param_list = dict.fromkeys([key for key in param_list if not key.startswith('adam_')], 0)
-    params = load_params(model, param_list)
-    tparams = init_theano_params(params)
+    scores = []
+    for option in options:
+        with tf.Session() as sess:
+            model, saver = create_model(option, sess)
 
-    trng, use_noise, \
-        x, x_mask, y, y_mask, \
-        opt_ret, \
-        cost = \
-        build_model(tparams, option)
-    inps = [x, x_mask, y, y_mask]
-    use_noise.set_value(0.)
+            valid_text_iterator = TextIterator(
+                        source=source_file.name,
+                        target=target_file.name,
+                        source_dicts=[option.source_vocab],
+                        target_dict=option.target_vocab,
+                        batch_size=scorer_settings.b,
+                        maxlen=float('inf'),
+                        n_words_source=option.source_vocab_size,
+                        n_words_target=option.target_vocab_size,
+                        sort_by_length=False)
 
-    if alignweights:
-        logging.debug("Save weight mode ON, alignment matrix will be saved.")
-        outputs = [cost, opt_ret['dec_alphas']]
-        f_log_probs = theano.function(inps, outputs)
-    else:
-        f_log_probs = theano.function(inps, cost)
-
-    return f_log_probs
-
-def rescore_model(source_file, target_file, output_file, scorer_settings, options):
-
-    trng = RandomStreams(1234)
-
-    def _score(pairs, alignweights=False):
-        # sample given an input sequence and obtain scores
-        scores = []
-        alignments = []
-        for i, model in enumerate(scorer_settings.models):
-            f_log_probs = load_scorer(model, options[i], alignweights=alignweights)
-            score, alignment = pred_probs(f_log_probs, prepare_data, options[i], pairs, normalization_alpha=scorer_settings.normalization_alpha, alignweights =alignweights)
+            score = validate(sess, valid_text_iterator, model, normalization_alpha=scorer_settings.normalization_alpha)
             scores.append(score)
-            alignments.append(alignment)
 
-        return scores, alignments
+    return scores
 
-    pairs = TextIterator(source_file.name,
-                         target_file.name,
-                         options[0]['dictionaries'][:-1],
-                         options[0]['dictionaries'][-1],
-                         n_words_source=options[0]['n_words_src'],
-                         n_words_target=options[0]['n_words'],
-                         batch_size=scorer_settings.b,
-                         maxlen=float('inf'),
-                         use_factor=(options[0]['factors'] > 1),
-                         sort_by_length=False) #TODO: sorting by length could be more efficient, but we'd want to resort after
-
-    scores, alignments = _score(pairs, scorer_settings.alignweights)
+def write_scores(source_file, target_file, scores, output_file, scorer_settings):
 
     source_file.seek(0)
     target_file.seek(0)
@@ -89,21 +58,6 @@ def rescore_model(source_file, target_file, output_file, scorer_settings, option
             output_file.write('{0} '.format(line.strip()))
         output_file.write('{0}\n'.format(score_str))
 
-    # optionally save attention weights
-    if scorer_settings.alignweights:
-        temp_name = output_file.name + ".json"
-        with tempfile.NamedTemporaryFile(prefix=temp_name) as align_OUT:
-            for line in alignments:
-                if type(line)==list:
-                    for l in line:
-                        align_OUT.write(l + "\n")
-                else:
-                    align_OUT.write(line + "\n")
-            # combining the actual source and target words.
-            combine_source_target_text_1to1(source_file,
-                                            target_file,
-                                            output_file.name,
-                                            align_OUT)
 
 def main(source_file, target_file, output_file, scorer_settings):
     # load model model_options
@@ -111,7 +65,11 @@ def main(source_file, target_file, output_file, scorer_settings):
     for model in scorer_settings.models:
         options.append(load_config(model))
         fill_options(options[-1])
-    rescore_model(source_file, target_file, output_file, scorer_settings, options)
+        options[-1]['reload'] = model
+        options[-1] = argparse.Namespace(**options[-1])
+
+    scores = score_model(source_file, target_file, scorer_settings, options)
+    write_scores(source_file, target_file, scores, output_file, scorer_settings)
 
 if __name__ == "__main__":
     scorer_settings = ScorerSettings(from_console_arguments=True)
