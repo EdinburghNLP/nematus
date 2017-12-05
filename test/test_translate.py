@@ -4,6 +4,7 @@
 import sys
 import os
 import unittest
+import logging
 
 sys.path.append(os.path.abspath('../nematus'))
 from translate import main as translate
@@ -25,17 +26,11 @@ class TestTranslate(unittest.TestCase):
         load_wmt16_model('en','de')
 
     def outputEqual(self, output1, output2):
-        """given two translation outputs, check that output string is identical,
-        and probabilities are equal within rounding error.
+        """given two translation outputs, check that output string is identical
         """
         for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
-            if not i % 2:
-                self.assertEqual(line, line2)
-            else:
-                probs = map(float, line.split())
-                probs2 = map(float, line.split())
-                for p, p2 in zip(probs, probs2):
-                    self.assertAlmostEqual(p, p2, 5)
+            self.assertEqual(line, line2)
+
 
     def get_settings(self):
         """
@@ -47,7 +42,6 @@ class TestTranslate(unittest.TestCase):
         translation_settings.beam_width = 12
         translation_settings.normalization_alpha = 1.0
         translation_settings.suppress_unk = True
-        translation_settings.get_word_probs = True
 
         return translation_settings
 
@@ -64,7 +58,7 @@ class TestTranslate(unittest.TestCase):
                   )
 
         os.chdir('../..')
-        self.outputEqual('en-de/ref','en-de/out')
+        self.outputEqual('en-de/ref2','en-de/out')
 
 
 if __name__ == '__main__':

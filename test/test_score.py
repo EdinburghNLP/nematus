@@ -4,11 +4,15 @@
 import sys
 import os
 import unittest
+import logging
 
 sys.path.append(os.path.abspath('../nematus'))
 from score import main as score
 from settings import ScorerSettings
 from test_utils import load_wmt16_model
+
+level = logging.DEBUG
+logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
 class TestScore(unittest.TestCase):
     """
@@ -20,7 +24,6 @@ class TestScore(unittest.TestCase):
         Download pre-trained models
         """
         load_wmt16_model('en','de')
-        load_wmt16_model('en','ro')
 
     @staticmethod
     def get_settings():
@@ -43,15 +46,6 @@ class TestScore(unittest.TestCase):
         score(open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), scorer_settings)
         os.chdir('../..')
         self.scoreEqual('en-de/ref_score', 'en-de/out_score')
-
-    # English-Romanian WMT16 system, dropout
-    def test_enro(self):
-        scorer_settings = self.get_settings()
-        os.chdir('models/en-ro/')
-        score(open('../../en-ro/in'), open('../../en-ro/references'), open('../../en-ro/out_score','w'), scorer_settings)
-        os.chdir('../..')
-        self.scoreEqual('en-ro/ref_score', 'en-ro/out_score')
-
 
 if __name__ == '__main__':
     unittest.main()
