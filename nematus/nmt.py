@@ -765,7 +765,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
-def gen_sample(f_init, f_next, x, model_options=None, trng=None, k=1, maxlen=30,
+def gen_sample(f_init, f_next, x, model_options=[None], trng=None, k=1, maxlen=30,
                stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
                return_hyp_graph=False):
 
@@ -816,7 +816,7 @@ def gen_sample(f_init, f_next, x, model_options=None, trng=None, k=1, maxlen=30,
 
         next_state[i] = numpy.tile( ret[0] , (live_k, 1, 1))
 
-        if model_options and model_options['deep_fusion_lm']:
+        if 'deep_fusion_lm' in model_options and model_options['deep_fusion_lm']:
             lm_dim = model_options['lm_dim']
             lm_next_state[i] = numpy.tile( numpy.zeros((1, lm_dim)).astype(floatX) , (live_k, 1))
             
@@ -832,7 +832,7 @@ def gen_sample(f_init, f_next, x, model_options=None, trng=None, k=1, maxlen=30,
             # for theano function, go from (batch_size, layers, dim) to (layers, batch_size, dim)
             next_state[i] = numpy.transpose(next_state[i], (1,0,2))
 
-            if model_options and model_options['deep_fusion_lm']:
+            if 'deep_fusion_lm' in model_options and model_options['deep_fusion_lm']:
                 inps = [next_w, ctx, next_state[i], lm_next_state[i]]
                 ret = f_next[i](*inps)
                 # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
@@ -1212,7 +1212,7 @@ def train(dim_word=512,  # word vector dimensionality
     model_options = OrderedDict(sorted(locals().copy().items()))
     # load LM options (deep fusion LM)
     if model_options['concatenate_lm_decoder'] and not model_options['deep_fusion_lm']:
-        logging.error('Error: option \'concatenate_lm_decoder\' is enabled and no language model is given.\n')
+        logging.error('Error: option \'concatenate_lm_decoder\' is enabled and no language model is provided.\n')
         sys.exit(1)        
     if model_options['deep_fusion_lm']:
         path = model_options['deep_fusion_lm']
