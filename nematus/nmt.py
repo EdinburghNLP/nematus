@@ -168,12 +168,19 @@ def init_params(options):
                                             recurrence_transition_depth=options['dec_high_recurrence_transition_depth'])
 
     # readout
-    params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
-                                nin=options['dim'], nout=options['dim_word'],
-                                ortho=False)
+    if options['deep_fusion_lm'] and options['concatenate_lm_decoder']:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
+                                       nin=(options['dim']+options['lm_dim']), nout=options['dim_word'],
+                                       ortho=False)        
+    else:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lstm',
+                                       nin=options['dim'], nout=options['dim_word'],
+                                       ortho=False)
+
     params = get_layer_param('ff')(options, params, prefix='ff_logit_prev',
                                 nin=options['dim_word'],
                                 nout=options['dim_word'], ortho=False)
+
     params = get_layer_param('ff')(options, params, prefix='ff_logit_ctx',
                                 nin=ctxdim, nout=options['dim_word'],
                                 ortho=False)
@@ -186,6 +193,23 @@ def init_params(options):
 
     return params
 
+# initialize LM parameters (deep fusion)
+def init_params_lm(options, params):
+    # LM controller mechanism
+    prefix = 'fusion_lm'
+    v_g = norm_weight(options['lm_dim'], 1)
+    params[pp(prefix, 'v_g')] = v_g
+    # bias initialization
+    b_g = -1 * numpy.ones((1,)).astype(floatX)
+    #b_g = numpy.zeros((1,)).astype(floatX)
+    params[pp(prefix, 'b_g')] = b_g
+
+    # readout for LM
+    if not options['concatenate_lm_decoder']:
+        params = get_layer_param('ff')(options, params, prefix='ff_logit_lm',
+                                       nin=options['lm_dim'],
+                                       nout=options['dim_word'], ortho=False)      
+    return params
 
 # bidirectional RNN encoder: take input x (optionally with mask), and produce sequence of context vectors (ctx)
 def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
@@ -301,7 +325,7 @@ def build_encoder(tparams, options, dropout, x_mask=None, sampling=False):
 
 
 # RNN decoder (including embedding and feedforward layer before output)
-def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=False, pctx_=None, shared_vars=None):
+def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=False, pctx_=None, shared_vars=None, lm_init_state=None):
     opt_ret = dict()
 
     # tell RNN whether to advance just one step at a time (for sampling),
@@ -417,8 +441,56 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
         else:
             ret_state = ret_state[0]
 
+    # language model encoder (deep fusion)
+    lm_ret_state = None
+    if options['deep_fusion_lm']:
+        lm_emb = get_layer_constr('embedding')(tparams, y, prefix='lm_')
+
+        if sampling:
+            lm_emb = tensor.switch(y[:, None] < 0,
+                                   tensor.zeros((1, options['dim_word'])),
+                                   lm_emb)
+            if not lm_init_state:
+                lm_init_state = tensor.zeros((1, options['lm_dim']))
+
+        else:
+            lm_emb_shifted = tensor.zeros_like(lm_emb)
+            lm_emb_shifted = tensor.set_subtensor(lm_emb_shifted[1:], lm_emb[:-1])
+            lm_emb = lm_emb_shifted
+
+        lm_dropout = dropout_constr(options={'use_dropout':False}, use_noise=False, trng=None, sampling=False)
+
+        lm_proj = get_layer_constr(options['lm_encoder'])(tparams, lm_emb, options, lm_dropout,
+                                                          prefix='lm_encoder',
+                                                          mask=y_mask,
+                                                          one_step=one_step,
+                                                          init_state=lm_init_state,
+                                                          profile=profile)
+
+        lm_next_state = lm_proj[0]
+        lm_ret_state = lm_proj[0]
+
+        # don't pass LSTM cell state to next layer
+        if options['lm_encoder'].startswith('lstm'):
+            lm_next_state = get_slice(lm_next_state, 0, options['lm_dim'])
+
+        # controller mechanism
+        prefix = 'fusion_lm'
+        lm_gate = tensor.dot(lm_next_state, tparams[pp(prefix, 'v_g')])+tparams[pp(prefix, 'b_g')]
+        lm_gate = tensor.nnet.sigmoid(lm_gate)
+
+        if one_step:
+            lm_gate = tensor.tile(lm_gate, (1, options['lm_dim']))
+        else:
+            lm_gate = tensor.tile(lm_gate, (1, 1, options['lm_dim']))
+
+        lm_next_state = lm_next_state * lm_gate            
+
     # hidden layer taking RNN state, previous word embedding and context vector as input
     # (this counts as the first layer in our deep output, which is always on)
+    if options['deep_fusion_lm'] and options['concatenate_lm_decoder']:
+        next_state = concatenate([lm_next_state, next_state], axis=next_state.ndim-1)
+
     logit_lstm = get_layer_constr('ff')(tparams, next_state, options, dropout,
                                     dropout_probability=options['dropout_hidden'],
                                     prefix='ff_logit_lstm', activ='linear')
@@ -428,7 +500,15 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
     logit_ctx = get_layer_constr('ff')(tparams, ctxs, options, dropout,
                                    dropout_probability=options['dropout_hidden'],
                                    prefix='ff_logit_ctx', activ='linear')
-    logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
+
+    if options['deep_fusion_lm'] and not options['concatenate_lm_decoder']:
+        # add current lm encoder state to last layer
+        logit_lm = get_layer_constr('ff')(tparams, lm_next_state, options, dropout,
+                                          dropout_probability=options['dropout_hidden'],
+                                          prefix='ff_logit_lm', activ='linear')
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx+logit_lm)
+    else:
+        logit = tensor.tanh(logit_lstm+logit_prev+logit_ctx)
 
     # last layer
     logit_W = tparams['Wemb' + decoder_embedding_suffix].T if options['tie_decoder_embeddings'] else None
@@ -436,7 +516,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                             dropout_probability=options['dropout_hidden'],
                             prefix='ff_logit', activ='linear', W=logit_W, followed_by_softmax=True)
 
-    return logit, opt_ret, ret_state
+    return logit, opt_ret, ret_state, lm_ret_state
 
 # build a training model
 def build_model(tparams, options):
@@ -473,7 +553,7 @@ def build_model(tparams, options):
     if options['dec_depth'] > 1:
         init_state = tensor.tile(init_state, (options['dec_depth'], 1, 1))
 
-    logit, opt_ret, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
+    logit, opt_ret, _, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=y_mask, sampling=False)
 
     logit_shp = logit.shape
     probs = tensor.nnet.softmax(logit.reshape([logit_shp[0]*logit_shp[1],
@@ -525,7 +605,11 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     if theano.config.compute_test_value != 'off':
         init_state.tag.test_value = numpy.random.rand(*init_state_old.tag.test_value.shape).astype(floatX)
 
-    logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True)
+    lm_init_state = None
+    if options['deep_fusion_lm']:
+        lm_init_state = tensor.matrix('lm_init_state', dtype=floatX)
+
+    logit, opt_ret, ret_state, lm_ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_mask=None, sampling=True, lm_init_state=lm_init_state)
 
     # compute the softmax probability
     next_probs = tensor.nnet.softmax(logit)
@@ -536,8 +620,12 @@ def build_sampler(tparams, options, use_noise, trng, return_alignment=False):
     # compile a function to do the whole thing above, next word probability,
     # sampled word for the next target, next hidden state to be used
     logging.info('Building f_next..')
-    inps = [y, ctx, init_state]
-    outs = [next_probs, next_sample, ret_state]
+    if options['deep_fusion_lm']:
+        inps = [y, ctx, init_state, lm_init_state]
+        outs = [next_probs, next_sample, ret_state, lm_ret_state]
+    else:
+        inps = [y, ctx, init_state]
+        outs = [next_probs, next_sample, ret_state]
 
     if return_alignment:
         outs.append(opt_ret['dec_alphas'])
@@ -631,7 +719,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
     def decoder_step(y, init_state, ctx, pctx_, *shared_vars):
 
-        logit, opt_ret, ret_state = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=None, sampling=True, pctx_=pctx_, shared_vars=shared_vars)
+        logit, opt_ret, ret_state, _ = build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=x_mask, y_mask=None, sampling=True, pctx_=pctx_, shared_vars=shared_vars)
 
         # compute the softmax probability
         next_probs = tensor.nnet.softmax(logit)
@@ -677,7 +765,7 @@ def build_full_sampler(tparams, options, use_noise, trng, greedy=False):
 
 # generate sample, either with stochastic sampling or beam search. Note that,
 # this function iteratively calls f_init and f_next functions.
-def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
+def gen_sample(f_init, f_next, x, model_options=[None], trng=None, k=1, maxlen=30,
                stochastic=True, argmax=False, return_alignment=False, suppress_unk=False,
                return_hyp_graph=False):
 
@@ -715,6 +803,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
     # for each model in the ensemble
     num_models = len(f_init)
     next_state = [None]*num_models
+    lm_next_state = [None]*num_models
     ctx0 = [None]*num_models
     next_p = [None]*num_models
     dec_alphas = [None]*num_models
@@ -726,7 +815,13 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
         ret[0] = numpy.transpose(ret[0], (1,0,2))
 
         next_state[i] = numpy.tile( ret[0] , (live_k, 1, 1))
+
+        if 'deep_fusion_lm' in model_options and model_options['deep_fusion_lm']:
+            lm_dim = model_options['lm_dim']
+            lm_next_state[i] = numpy.tile( numpy.zeros((1, lm_dim)).astype(floatX) , (live_k, 1))
+            
         ctx0[i] = ret[1]
+
     next_w = -1 * numpy.ones((live_k,)).astype('int64')  # bos indicator
 
     # x is a sequence of word ids followed by 0, eos id
@@ -737,11 +832,19 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             # for theano function, go from (batch_size, layers, dim) to (layers, batch_size, dim)
             next_state[i] = numpy.transpose(next_state[i], (1,0,2))
 
-            inps = [next_w, ctx, next_state[i]]
-            ret = f_next[i](*inps)
+            if 'deep_fusion_lm' in model_options and model_options['deep_fusion_lm']:
+                inps = [next_w, ctx, next_state[i], lm_next_state[i]]
+                ret = f_next[i](*inps)
+                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+                next_p[i], next_w_tmp, next_state[i], lm_next_state[i] = ret[0], ret[1], ret[2], ret[3]
+            else:
+                inps = [next_w, ctx, next_state[i]]
+                ret = f_next[i](*inps)
+                # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
+                next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
+                # dummy LM states
+                lm_next_state[i] = [None]*live_k
 
-            # dimension of dec_alpha (k-beam-size, number-of-input-hidden-units)
-            next_p[i], next_w_tmp, next_state[i] = ret[0], ret[1], ret[2]
             if return_alignment:
                 dec_alphas[i] = ret[3]
 
@@ -769,19 +872,23 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
 
                 hyp_states=[]
+                hyp_lm_states=[]
                 for ti in xrange(live_k):
                     hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                    hyp_lm_states.append([copy.copy(lm_next_state[i][ti]) for i in xrange(num_models)])
                     hyp_scores[ti]=cand_scores[ti][nws[ti]]
                     word_probs[ti].append(probs[ti][nws[ti]])
 
                 new_hyp_states=[]
+                new_hyp_lm_states=[]
                 new_hyp_samples=[]
                 new_hyp_scores=[]
                 new_word_probs=[]
-                for hyp_sample,hyp_state, hyp_score, hyp_word_prob in zip(hyp_samples,hyp_states,hyp_scores, word_probs):
+                for hyp_sample, hyp_state, hyp_lm_state, hyp_score, hyp_word_prob in zip(hyp_samples, hyp_states, hyp_lm_states ,hyp_scores, word_probs):
                     if hyp_sample[-1]  > 0:
                         new_hyp_samples.append(copy.copy(hyp_sample))
                         new_hyp_states.append(copy.copy(hyp_state))
+                        new_hyp_lm_states.append(copy.copy(hyp_lm_state))
                         new_hyp_scores.append(hyp_score)
                         new_word_probs.append(hyp_word_prob)
                     else:
@@ -791,6 +898,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
                 hyp_samples=new_hyp_samples
                 hyp_states=new_hyp_states
+                hyp_lm_states=new_hyp_lm_states
                 hyp_scores=new_hyp_scores
                 word_probs=new_word_probs
 
@@ -800,6 +908,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
                 next_w = numpy.array([w[-1] for w in hyp_samples])
                 next_state = [numpy.array(state) for state in zip(*hyp_states)]
+                lm_next_state = [numpy.array(state) for state in zip(*hyp_lm_states)]
         else:
             cand_scores = hyp_scores[:, None] - sum(numpy.log(next_p))
             probs = sum(next_p)/num_models
@@ -821,6 +930,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
             new_hyp_scores = numpy.zeros(k-dead_k).astype(floatX)
             new_word_probs = []
             new_hyp_states = []
+            new_hyp_lm_states = []
             if return_alignment:
                 # holds the history of attention weights for each time step for each of the surviving hypothesis
                 # dimensions (live_k * target_words * source_hidden_units]
@@ -833,18 +943,19 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                 new_word_probs.append(word_probs[ti] + [probs_flat[ranks_flat[idx]].tolist()])
                 new_hyp_scores[idx] = copy.copy(costs[idx])
                 new_hyp_states.append([copy.copy(next_state[i][ti]) for i in xrange(num_models)])
+                new_hyp_lm_states.append([copy.copy(lm_next_state[i][ti]) for i in xrange(num_models)])
                 if return_alignment:
                     # get history of attention weights for the current hypothesis
                     new_hyp_alignment[idx] = copy.copy(hyp_alignment[ti])
                     # extend the history with current attention weights
                     new_hyp_alignment[idx].append(mean_alignment[ti])
 
-
             # check the finished samples
             new_live_k = 0
             hyp_samples = []
             hyp_scores = []
             hyp_states = []
+            hyp_lm_states = []
             word_probs = []
             if return_alignment:
                 hyp_alignment = []
@@ -868,6 +979,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
                     hyp_samples.append(copy.copy(new_hyp_samples[idx]))
                     hyp_scores.append(new_hyp_scores[idx])
                     hyp_states.append(copy.copy(new_hyp_states[idx]))
+                    hyp_lm_states.append(copy.copy(new_hyp_lm_states[idx]))
                     word_probs.append(new_word_probs[idx])
                     if return_alignment:
                         hyp_alignment.append(new_hyp_alignment[idx])
@@ -882,6 +994,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
             next_w = numpy.array([w[-1] for w in hyp_samples])
             next_state = [numpy.array(state) for state in zip(*hyp_states)]
+            lm_next_state = [numpy.array(state) for state in zip(*hyp_lm_states)]
 
     # dump every remaining one
     if not argmax and live_k > 0:
@@ -1042,6 +1155,8 @@ def train(dim_word=512,  # word vector dimensionality
           batch_size=16,
           valid_batch_size=16,
           saveto='model.npz',
+          deep_fusion_lm=None,
+          concatenate_lm_decoder=False,
           validFreq=10000,
           saveFreq=30000,   # save the parameters after every saveFreq updates
           sampleFreq=10000,   # generate some samples after every sampleFreq
@@ -1095,6 +1210,19 @@ def train(dim_word=512,  # word vector dimensionality
 
     # Model options
     model_options = OrderedDict(sorted(locals().copy().items()))
+    # load LM options (deep fusion LM)
+    if model_options['concatenate_lm_decoder'] and not model_options['deep_fusion_lm']:
+        logging.error('Error: option \'concatenate_lm_decoder\' is enabled and no language model is provided.\n')
+        sys.exit(1)        
+    if model_options['deep_fusion_lm']:
+        path = model_options['deep_fusion_lm']
+        try:
+            hp = pkl.load(open(path))
+        except IOError:    
+            hp = pkl.load(open(path + '.pkl'))
+        model_options['lm_dim'] = hp['dim']
+        model_options['lm_dim_word'] = hp['dim_word']
+        model_options['lm_encoder'] = hp['encoder']
 
     if model_options['dim_per_factor'] == None:
         if factors == 1:
@@ -1228,6 +1356,7 @@ def train(dim_word=512,  # word vector dimensionality
     comp_start = time.time()
 
     logging.info('Building model')
+
     params = init_params(model_options)
 
     optimizer_params = {}
@@ -1249,7 +1378,15 @@ def train(dim_word=512,  # word vector dimensionality
     # load prior model if specified
     if prior_model:
         logging.info('Loading prior model parameters')
-        params = load_params(prior_model, params, with_prefix='prior_')
+        params, model_options = load_params(prior_model, params, model_options, with_prefix='prior_')
+
+    # language model parameters and
+    # parameter initialization (deep fusion)
+    if deep_fusion_lm:
+        logging.info('Loading language model parameters')
+        #params, model_options = load_params_lm(model_options, params)
+        params = load_params_lm(model_options, params)
+        params = init_params_lm(model_options, params)
 
     tparams = init_theano_params(params)
 
@@ -1316,6 +1453,9 @@ def train(dim_word=512,  # word vector dimensionality
     # don't update prior model parameters
     if prior_model:
         updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('prior_')])
+    # don't update deep fusion LM parameters
+    if deep_fusion_lm:
+        updated_params = OrderedDict([(key,value) for (key,value) in updated_params.iteritems() if not key.startswith('lm_')])
 
     logging.info('Computing gradient...')
     grads = tensor.grad(cost, wrt=itemlist(updated_params))
@@ -1414,7 +1554,6 @@ def train(dim_word=512,  # word vector dimensionality
                     cost = f_update(lrate, x, x_mask, y, y_mask, sample_weights)
                 else:
                     cost = f_update(lrate, x, x_mask, y, y_mask)
-
                 cost_sum += cost
 
             elif model_options['objective'] == 'MRT':
@@ -1499,7 +1638,6 @@ def train(dim_word=512,  # word vector dimensionality
 
                     # compute cost, grads and update parameters
                     cost = f_update(lrate, x, x_mask, y, y_mask, loss)
-
                     cost_sum += cost
 
             # check for bad numbers, usually we remove non-finite elements
@@ -1568,6 +1706,7 @@ def train(dim_word=512,  # word vector dimensionality
 
                     sample, score, sample_word_probs, alignment, hyp_graph = gen_sample([f_init], [f_next],
                                                x_current,
+                                               model_options,
                                                trng=trng, k=1,
                                                maxlen=30,
                                                stochastic=stochastic,
@@ -1697,7 +1836,7 @@ def train(dim_word=512,  # word vector dimensionality
     if valid is not None:
         use_noise.set_value(0.)
         valid_errs, alignment = pred_probs(f_log_probs, prepare_data,
-                                        model_options, valid)
+                                           model_options, valid)
         valid_err = valid_errs.mean()
 
         logging.info('Valid {}'.format(valid_err))
@@ -1725,6 +1864,8 @@ if __name__ == '__main__':
                          help="network vocabularies (one per source factor, plus target vocabulary)")
     data.add_argument('--model', type=str, default='model.npz', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
+    data.add_argument('--deep_fusion_lm', type=str, default=None, metavar='PATH', dest='deep_fusion_lm',
+                         help="deep fusion language model file name")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--reload', action='store_true',  dest='reload_',
@@ -1791,6 +1932,8 @@ if __name__ == '__main__':
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond', 'lstm'],
                          help='decoder recurrent layer after first one (default: %(default)s)')
+    network.add_argument('--concatenate_lm_decoder', action="store_true", dest="concatenate_lm_decoder",
+                         help="concatenate LM state and decoder state (deep fusion)")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',

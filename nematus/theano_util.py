@@ -57,6 +57,30 @@ def init_theano_params(params):
         tparams[kk] = theano.shared(params[kk], name=kk)
     return tparams
 
+# load language model parameters and options (deep fusion)
+def load_params_lm(options, params, with_prefix='lm_'):
+    path = options['deep_fusion_lm']
+    try:
+       pp = numpy.load(path)
+    except IOError:
+       pp = numpy.load(path + '.npz')
+       
+    new_params = OrderedDict()
+    drop = ['zipped_params',
+            'ff_logit_lstm_b',
+            'ff_logit_W',
+            'ff_logit_lstm_W',
+            'ff_logit_prev_W',
+            'ff_logit_b',
+            'ff_logit_prev_b',
+            'history_errs']
+    for kk, vv in pp.iteritems():
+       if kk in drop:
+          continue
+       new_params['lm_'+kk] = vv.astype(floatX, copy=False)
+          
+    params.update(new_params)
+    return params
 
 # load parameters
 def load_params(path, params, with_prefix=''):

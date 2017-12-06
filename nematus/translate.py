@@ -140,7 +140,10 @@ class Translator(object):
         """
         options = []
         for model in self._models:
-            options.append(load_config(model))
+            m = load_config(model)
+            if not 'concatenate_lm_decoder' in m:
+                m['concatenate_lm_decoder'] = False
+            options.append(m)
             # backward compatibility
             fill_options(options[-1])
 
@@ -360,6 +363,7 @@ class Translator(object):
         return gen_sample(fs_init, fs_next,
                           numpy.array(seq).T.reshape(
                               [len(seq[0]), len(seq), 1]),
+                          self._options[0],
                           trng=trng, k=k, maxlen=maxlen,
                           stochastic=False, argmax=False,
                           return_alignment=return_alignment,
