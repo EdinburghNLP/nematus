@@ -127,6 +127,7 @@ execute nematus/nmt.py to train a model.
 | --datasets PATH PATH |  parallel training corpus (source and target) |
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
 | --model PATH         |  model file name (default: model.npz) |
+| --deep_fusion_lm PATH | deep fusion language model file name (default: None) |
 | --saveFreq INT       |  save frequency (default: 30000) |
 | --reload             |  load existing model (if '--model' points to existing model) |
 | --overwrite          |  write all models to same file |
@@ -159,6 +160,7 @@ execute nematus/nmt.py to train a model.
 | --enc_recurrence_transition_depth | number of GRU transition operations applied in an encoder layer (default: 1) |
 | --dec_base_recurrence_transition_depth | number of GRU transition operations applied in first decoder layer (default: 2) |
 | --dec_high_recurrence_transition_depth | number of GRU transition operations applied in decoder layers after the first (default: 1) |
+| --concatenate_lm_decoder  | concatenate LM state and decoder state (deep fusion) |
 
 #### training parameters
 | parameter            | description |
