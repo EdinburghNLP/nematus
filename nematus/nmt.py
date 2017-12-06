@@ -1216,7 +1216,10 @@ def train(dim_word=512,  # word vector dimensionality
         sys.exit(1)        
     if model_options['deep_fusion_lm']:
         path = model_options['deep_fusion_lm']
-        hp = pkl.load(open(path + '.pkl'))
+        try:
+            hp = pkl.load(open(path))
+        except IOError:    
+            hp = pkl.load(open(path + '.pkl'))
         model_options['lm_dim'] = hp['dim']
         model_options['lm_dim_word'] = hp['dim_word']
         model_options['lm_encoder'] = hp['encoder']
@@ -1863,8 +1866,6 @@ if __name__ == '__main__':
                          help="model file name (default: %(default)s)")
     data.add_argument('--deep_fusion_lm', type=str, default=None, metavar='PATH', dest='deep_fusion_lm',
                          help="deep fusion language model file name")
-    data.add_argument('--concatenate_lm_decoder', action="store_true", dest="concatenate_lm_decoder",
-                         help="concatenate LM state and decoder state (deep fusion)")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--reload', action='store_true',  dest='reload_',
@@ -1931,6 +1932,8 @@ if __name__ == '__main__':
     network.add_argument('--decoder_deep', type=str, default='gru',
                          choices=['gru', 'gru_cond', 'lstm'],
                          help='decoder recurrent layer after first one (default: %(default)s)')
+    network.add_argument('--concatenate_lm_decoder', action="store_true", dest="concatenate_lm_decoder",
+                         help="concatenate LM state and decoder state (deep fusion)")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
