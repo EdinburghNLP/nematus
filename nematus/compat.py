@@ -67,3 +67,6 @@ def fill_options(options):
             options['dec_high_recurrence_transition_depth'] = 2
         else:
             options['dec_high_recurrence_transition_depth'] = 1
+
+    if not 'deep_fusion_lm' in options:
+        options['deep_fusion_lm'] = False
