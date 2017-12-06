@@ -40,7 +40,7 @@ INSTALLATION
 
 Nematus requires the following packages:
 
- - Python >= 2.7
+ - Python 2.7
  - numpy
  - Theano >= 0.7 (and its dependencies).
 
