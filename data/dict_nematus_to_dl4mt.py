@@ -4,9 +4,10 @@
 Convert Nematus vocabulary dictionary (json) to dl4mt format
 (pickle).
 
-This is necessary to train a deep "fusion model" in Nematus.
+This is necessary to train a "deep fusion" model in Nematus.
 The MT and LM vocabularies are identical.
 """
+
 
 import sys
 import pickle
