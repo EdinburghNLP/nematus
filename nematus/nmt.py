@@ -1217,9 +1217,9 @@ def train(dim_word=512,  # word vector dimensionality
     if model_options['deep_fusion_lm']:
         path = model_options['deep_fusion_lm']
         try:
-            hp = pkl.load(open(path))
-        except IOError:    
             hp = pkl.load(open(path + '.pkl'))
+        except IOError:
+            hp = pkl.load(open(path + '.npz.pkl'))
         model_options['lm_dim'] = hp['dim']
         model_options['lm_dim_word'] = hp['dim_word']
         model_options['lm_encoder'] = hp['encoder']

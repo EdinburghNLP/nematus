@@ -17,7 +17,7 @@ this dictionary to DL4MT format (`data/dict_nematus_to_dl4mt.py`).
 Once the LM is trained, we can start the deep fusion
 model training. Here are the relevant arguments in Nematus:
 
-- `deep_fusion_lm`: path to the LM npz file. The system will also load the pickle file containing the LM options, which should be in the same directory.
+- `deep_fusion_lm`: path to the LM npz file. The system will also load the pickle (pkl) file containing the LM options, which should be in the same directory.
 - `concatenate_lm_decoder` [optional]: by default, the LM and decoder states are linearly projected and summed. Add this argument for a concatenation of both states instead.
 
 PUBLICATIONS
