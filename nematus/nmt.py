@@ -1073,7 +1073,8 @@ def train(dim_word=512,  # word vector dimensionality
           multi_sentence_separator=None,
           contrastive_training=False, # contrastive training
           contrastive_pairwise_loss_weight=1.0,
-          contrastive_pairwise_loss_margin=0.1
+          contrastive_pairwise_loss_margin=0.1,
+          contrastive_neglikelihood_loss_weight=0.0
     ):
 
     # Model options
@@ -1267,6 +1268,9 @@ def train(dim_word=512,  # word vector dimensionality
         main_costs = cost[:n_main_samples]
         extra_costs = cost[n_main_samples:]
         contrastive_penalties = contrastive_pairwise_loss_weight * tensor.nnet.relu(main_costs[y_extra_ids] - extra_costs + contrastive_pairwise_loss_margin)
+        if contrastive_neglikelihood_loss_weight > 0.0:
+            contrastive_penalties += contrastive_neglikelihood_loss_weight * (main_costs[y_extra_ids] - extra_costs)
+
         main_costs = tensor.inc_subtensor(main_costs[y_extra_ids], contrastive_penalties)
         cost = main_costs
 
@@ -1854,6 +1858,8 @@ if __name__ == '__main__':
                          help="Pairwise loss weight for contrastive training (default: %(default)s)")
     training.add_argument('--contrastive_pairwise_loss_margin', type=float, default=0.1, metavar='FLOAT',
                          help="Pairwise loss margin for contrastive training (default: %(default)s)")
+    training.add_argument('--contrastive_neglikelihood_loss_weight', type=float, default=0.0, metavar='FLOAT',
+                         help="Inverse log-likelihood loss weight for contrastive training (default: %(default)s)")
 
 
     validation = parser.add_argument_group('validation parameters')

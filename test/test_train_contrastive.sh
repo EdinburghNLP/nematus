@@ -24,4 +24,5 @@ mkdir -p models
   --dispFreq 500 \
   --finish_after 500 \
   --multi_sentence_separator CCCCC \
-  --contrastive_training
+  --contrastive_training \
+  --contrastive_neglikelihood_loss_weight 0.1

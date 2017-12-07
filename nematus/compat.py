@@ -76,3 +76,5 @@ def fill_options(options):
         options['contrastive_pairwise_loss_weight'] = 1.0
     if not 'contrastive_pairwise_loss_margin' in options:
         options['contrastive_pairwise_loss_margin'] = 0.1
+    if not 'contrastive_neglikelihood_loss_weight' in options:
+        options['contrastive_neglikelihood_loss_weight'] = 0.0
