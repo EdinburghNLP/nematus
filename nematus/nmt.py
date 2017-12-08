@@ -328,6 +328,8 @@ def parse_args():
                          help="source vocabulary size (default: %(default)s)")
     network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
+    network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
+                         help="Set to use layer normalization in encoder and decoder")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=50, metavar='INT',
@@ -350,8 +352,6 @@ def parse_args():
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
-                         help="Set to use layer normalization in encoder and decoder")
     training.add_argument('--optimizer', type=str, default="adam",
                          choices=['adam'],
                          help="optimizer (default: %(default)s)")

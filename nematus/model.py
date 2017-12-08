@@ -22,7 +22,8 @@ class Decoder(object):
                                             axis=1)
             self.init_state_layer = FeedForwardLayer(
                                         in_size=config.state_size * 2,
-                                        out_size=config.state_size)
+                                        out_size=config.state_size,
+                                        use_layer_norm=config.use_layer_norm)
             self.init_state = self.init_state_layer.forward(context_mean)
 
             self.translation_maxlen = config.translation_maxlen
@@ -230,17 +231,20 @@ class Predictor(object):
             self.prev_emb_to_hidden = FeedForwardLayer(
                                 in_size=config.embedding_size,
                                 out_size=config.embedding_size,
-                                non_linearity=lambda y: y)
+                                non_linearity=lambda y: y,
+                                use_layer_norm=config.use_layer_norm)
         with tf.name_scope("state_to_hidden"):
             self.state_to_hidden = FeedForwardLayer(
                                     in_size=config.state_size,
                                     out_size=config.embedding_size,
-                                    non_linearity=lambda y: y)
+                                    non_linearity=lambda y: y,
+                                    use_layer_norm=config.use_layer_norm)
         with tf.name_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = FeedForwardLayer(
                                     in_size=2*config.state_size,
                                     out_size=config.embedding_size,
-                                    non_linearity=lambda y: y)
+                                    non_linearity=lambda y: y,
+                                    use_layer_norm=config.use_layer_norm)
         with tf.name_scope("hidden_to_logits"):
             self.hidden_to_logits = FeedForwardLayer(
                             in_size=config.embedding_size,
