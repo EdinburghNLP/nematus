@@ -330,6 +330,8 @@ def parse_args():
                          help="target vocabulary size (default: %(default)s)")
     network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
+    network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
+                         help="tie the input embeddings of the decoder with the softmax output embeddings")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=50, metavar='INT',

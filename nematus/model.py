@@ -9,9 +9,6 @@ from layers import *
 
 class Decoder(object):
     def __init__(self, config, context, x_mask):
-        with tf.name_scope("next_word_predictor"):
-            self.predictor = Predictor(config)
-
         with tf.name_scope("initial_state_constructor"):
             context_sum = tf.reduce_sum(
                             context * tf.expand_dims(x_mask, axis=2),
@@ -53,6 +50,15 @@ class Decoder(object):
                             input_size=2*config.state_size,
                             state_size=config.state_size,
                             nematus_compat=True)
+        with tf.name_scope("next_word_predictor"):
+            W = None
+            if config.tie_decoder_embeddings:
+                W = self.y_emb_layer.get_embeddings()
+                W = tf.transpose(W)
+            self.predictor = Predictor(
+                                config,
+                                hidden_to_logits_W=W)
+
 
     def sample(self):
        batch_size = tf.shape(self.init_state)[0]
@@ -226,7 +232,7 @@ class Decoder(object):
         return logits
 
 class Predictor(object):
-    def __init__(self, config):
+    def __init__(self, config, hidden_to_logits_W=None):
         with tf.name_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = FeedForwardLayer(
                                 in_size=config.embedding_size,
@@ -249,7 +255,8 @@ class Predictor(object):
             self.hidden_to_logits = FeedForwardLayer(
                             in_size=config.embedding_size,
                             out_size=config.target_vocab_size,
-                            non_linearity=lambda y: y)
+                            non_linearity=lambda y: y,
+                            W=hidden_to_logits_W)
 
     def get_logits(self, y_embs, states, attended_states, multi_step=True):
         with tf.name_scope("prev_emb_to_hidden"):

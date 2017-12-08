@@ -51,6 +51,9 @@ class EmbeddingLayer(object):
         embs = tf.nn.embedding_lookup(self.embeddings, x)
         return embs
 
+    def get_embeddings(self):
+        return self.embeddings
+
 class RecurrentLayer(object):
     def __init__(self,
                  initial_state,
