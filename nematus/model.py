@@ -45,7 +45,8 @@ class Decoder(object):
                         context_state_size=2*config.state_size,
                         context_mask=x_mask,
                         state_size=config.state_size,
-                        hidden_size=2*config.state_size)
+                        hidden_size=2*config.state_size,
+                        use_layer_norm=config.use_layer_norm)
         self.grustep2 = GRUctor(
                             input_size=2*config.state_size,
                             state_size=config.state_size,
