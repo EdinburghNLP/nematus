@@ -9,15 +9,35 @@ th2tf = {
     'Wemb_dec' : 'decoder/y_embeddings_layer/embeddings:0',
     'decoder_U' : 'decoder/state_to_gates:0',
     'decoder_U_att' : 'decoder/hidden_to_score:0',
+    'decoder_U_lnb' : 'decoder/gates_state_norm/new_mean:0',
+    'decoder_U_lns' : 'decoder/gates_state_norm/new_std:0',
     'decoder_U_nl' : 'decoder/state_to_gates_1:0',
+    'decoder_U_nl_lnb' : 'decoder/gates_state_norm_1/new_mean:0',
+    'decoder_U_nl_lns' : 'decoder/gates_state_norm_1/new_std:0',
     'decoder_Ux' : 'decoder/state_to_proposal:0',
+    'decoder_Ux_lnb' : 'decoder/proposal_state_norm/new_mean:0',
+    'decoder_Ux_lns' : 'decoder/proposal_state_norm/new_std:0',
     'decoder_Ux_nl' : 'decoder/state_to_proposal_1:0',
+    'decoder_Ux_nl_lnb' : 'decoder/proposal_state_norm_1/new_mean:0',
+    'decoder_Ux_nl_lns' : 'decoder/proposal_state_norm_1/new_std:0',
     'decoder_W' : 'decoder/input_to_gates:0',
     'decoder_W_comb_att' : 'decoder/state_to_hidden:0',
+    'decoder_W_comb_att_lnb' : 'decoder/hidden_state_norm/new_mean:0',
+    'decoder_W_comb_att_lns' : 'decoder/hidden_state_norm/new_std:0',
+    'decoder_W_lnb' : 'decoder/gates_x_norm/new_mean:0',
+    'decoder_W_lns' : 'decoder/gates_x_norm/new_std:0',
     'decoder_Wc' : 'decoder/input_to_gates_1:0',
     'decoder_Wc_att' : 'decoder/context_to_hidden:0',
+    'decoder_Wc_att_lnb' : 'decoder/hidden_context_norm/new_mean:0',
+    'decoder_Wc_att_lns' : 'decoder/hidden_context_norm/new_std:0',
+    'decoder_Wc_lnb' : 'decoder/gates_x_norm_1/new_mean:0',
+    'decoder_Wc_lns' : 'decoder/gates_x_norm_1/new_std:0',
     'decoder_Wcx' : 'decoder/input_to_proposal_1:0',
+    'decoder_Wcx_lnb' : 'decoder/proposal_x_norm_1/new_mean:0',
+    'decoder_Wcx_lns' : 'decoder/proposal_x_norm_1/new_std:0',
     'decoder_Wx' : 'decoder/input_to_proposal:0',
+    'decoder_Wx_lnb' : 'decoder/proposal_x_norm/new_mean:0',
+    'decoder_Wx_lns' : 'decoder/proposal_x_norm/new_std:0',
     'decoder_b' : 'decoder/gates_bias:0',
     'decoder_b_att' : 'decoder/hidden_bias:0',
     'decoder_b_nl' : 'decoder/gates_bias_1:0',
@@ -25,27 +45,51 @@ th2tf = {
     'decoder_bx_nl' : 'decoder/proposal_bias_1:0',
     'decoder_c_tt' : None,
     'encoder_U' : 'encoder/forwardEncoder/state_to_gates:0',
+    'encoder_U_lnb' : 'encoder/forwardEncoder/gates_state_norm/new_mean:0',
+    'encoder_U_lns' : 'encoder/forwardEncoder/gates_state_norm/new_std:0',
     'encoder_Ux' : 'encoder/forwardEncoder/state_to_proposal:0',
+    'encoder_Ux_lnb' : 'encoder/forwardEncoder/proposal_state_norm/new_mean:0',
+    'encoder_Ux_lns' : 'encoder/forwardEncoder/proposal_state_norm/new_std:0',
     'encoder_W' : 'encoder/forwardEncoder/input_to_gates:0',
+    'encoder_W_lnb' : 'encoder/forwardEncoder/gates_x_norm/new_mean:0',
+    'encoder_W_lns' : 'encoder/forwardEncoder/gates_x_norm/new_std:0',
     'encoder_Wx' : 'encoder/forwardEncoder/input_to_proposal:0',
+    'encoder_Wx_lnb' : 'encoder/forwardEncoder/proposal_x_norm/new_mean:0',
+    'encoder_Wx_lns' : 'encoder/forwardEncoder/proposal_x_norm/new_std:0',
     'encoder_b' : 'encoder/forwardEncoder/gates_bias:0',
     'encoder_bx' : 'encoder/forwardEncoder/proposal_bias:0',
     'encoder_r_U' : 'encoder/backwardEncoder/state_to_gates:0',
+    'encoder_r_U_lnb' : 'encoder/backwardEncoder/gates_state_norm/new_mean:0',
+    'encoder_r_U_lns' : 'encoder/backwardEncoder/gates_state_norm/new_std:0',
     'encoder_r_Ux' : 'encoder/backwardEncoder/state_to_proposal:0',
+    'encoder_r_Ux_lnb' : 'encoder/backwardEncoder/proposal_state_norm/new_mean:0',
+    'encoder_r_Ux_lns' : 'encoder/backwardEncoder/proposal_state_norm/new_std:0',
     'encoder_r_W' : 'encoder/backwardEncoder/input_to_gates:0',
+    'encoder_r_W_lnb' : 'encoder/backwardEncoder/gates_x_norm/new_mean:0',
+    'encoder_r_W_lns' : 'encoder/backwardEncoder/gates_x_norm/new_std:0',
     'encoder_r_Wx' : 'encoder/backwardEncoder/input_to_proposal:0',
+    'encoder_r_Wx_lnb' : 'encoder/backwardEncoder/proposal_x_norm/new_mean:0',
+    'encoder_r_Wx_lns' : 'encoder/backwardEncoder/proposal_x_norm/new_std:0',
     'encoder_r_b' : 'encoder/backwardEncoder/gates_bias:0',
     'encoder_r_bx' : 'encoder/backwardEncoder/proposal_bias:0',
     'ff_logit_W' : 'decoder/next_word_predictor/hidden_to_logits/W:0',
     'ff_logit_b' : 'decoder/next_word_predictor/hidden_to_logits/b:0',
     'ff_logit_ctx_W' : 'decoder/next_word_predictor/attended_context_to_hidden/W:0',
     'ff_logit_ctx_b' : 'decoder/next_word_predictor/attended_context_to_hidden/b:0',
+    'ff_logit_ctx_ln_b' : 'decoder/next_word_predictor/attended_context_to_hidden/new_mean:0',
+    'ff_logit_ctx_ln_s' : 'decoder/next_word_predictor/attended_context_to_hidden/new_std:0',
     'ff_logit_lstm_W' : 'decoder/next_word_predictor/state_to_hidden/W:0',
     'ff_logit_lstm_b' : 'decoder/next_word_predictor/state_to_hidden/b:0',
+    'ff_logit_lstm_ln_b' : 'decoder/next_word_predictor/state_to_hidden/new_mean:0',
+    'ff_logit_lstm_ln_s' : 'decoder/next_word_predictor/state_to_hidden/new_std:0',
     'ff_logit_prev_W' : 'decoder/next_word_predictor/prev_emb_to_hidden/W:0',
     'ff_logit_prev_b' : 'decoder/next_word_predictor/prev_emb_to_hidden/b:0',
+    'ff_logit_prev_ln_b' : 'decoder/next_word_predictor/prev_emb_to_hidden/new_mean:0',
+    'ff_logit_prev_ln_s' : 'decoder/next_word_predictor/prev_emb_to_hidden/new_std:0',
     'ff_state_W' : 'decoder/initial_state_constructor/W:0',
     'ff_state_b' : 'decoder/initial_state_constructor/b:0',
+    'ff_state_ln_b' : 'decoder/initial_state_constructor/new_mean:0',
+    'ff_state_ln_s' : 'decoder/initial_state_constructor/new_std:0',
     'history_errs' : None,
     'uidx' : 'time:0'}
 
@@ -65,7 +109,8 @@ class FakeConfig(object):
         self.optimizer = 'adam'
 
         # disable layer normalization for now TODO: make this compatible between theano and TF versions
-        self.use_layer_norm = False
+        self.use_layer_norm = True
+        self.tie_decoder_embeddings = True
 
 
 
@@ -110,7 +155,11 @@ def tensorflow_to_theano_model(in_path, out_path):
         params = {}
         for th_name, tf_name in th2tf.items():
             if tf_name is not None:
-                v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))
+				try:
+					v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))
+				except:
+					print "Skipping {} because it was not found".format(tf_name)
+					continue
             else:
                 if th_name == 'history_errs':
                     v = []
