@@ -290,7 +290,7 @@ def validate_helper(config, sess):
     costs = validate(sess, valid_text_iterator, model)
     lines = open(config.valid_target_dataset).readlines()
     for cost, line in zip(costs, lines):
-        logging.info("{0} {1}".format(cost,ine.strip()))
+        logging.info("{0} {1}".format(cost,line.strip()))
 
 
 
