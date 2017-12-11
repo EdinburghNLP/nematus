@@ -23,6 +23,8 @@ def fill_options(options):
         options['dim_per_factor'] = [options['dim_word']]
     if not 'model_version' in options:
         options['model_version'] = 0
+    if not 'tie_decoder_embeddings' in options:
+        options['tie_decoder_embeddings'] = False
 
     # name changes in TF
     if not 'source_vocab_size' in options:
@@ -32,7 +34,10 @@ def fill_options(options):
     if not 'embedding_size' in options:
         options['embedding_size'] = options['dim_word']
     if not 'use_layer_norm' in options:
-        options['use_layer_norm'] = False
+        if 'layer_normalisation' in options:
+            options['use_layer_norm'] = options['layer_normalisation']
+        else:
+            options['use_layer_norm'] = False
     if not 'state_size' in options:
         options['state_size'] = options['dim']
     if not 'source_vocab' in options:
