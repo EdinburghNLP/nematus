@@ -137,6 +137,8 @@ def theano_to_tensorflow_model(in_path, out_path):
                 assert tf_name not in seen
                 seen.add(tf_name)
                 tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
+                if (sess.run(tf.shape(tf_var)) !=  saved_model[key].shape).any():
+                    print "mismatch for", tf_name, key, saved_model[key].shape, sess.run(tf.shape(tf_var))
                 assign_ops.append(tf.assign(tf_var, saved_model[key]))
             else:
                 print "Not saving", key, "because no TF equivalent"
