@@ -97,6 +97,7 @@ class GRUStep(object):
     def __init__(self, 
                  input_size, 
                  state_size,
+                 use_layer_norm=False,
                  nematus_compat=False):
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
@@ -124,16 +125,35 @@ class GRUStep(object):
                                     numpy.zeros((state_size,)).astype('float32'),
                                     name='proposal_bias')
         self.nematus_compat = nematus_compat
+        self.use_layer_norm = use_layer_norm
+
+        if self.use_layer_norm:
+            with tf.name_scope('gates_x_norm'):
+                self.gates_x_norm = LayerNormLayer(2*state_size)
+            with tf.name_scope('gates_state_norm'):
+                self.gates_state_norm = LayerNormLayer(2*state_size)
+            with tf.name_scope('proposal_x_norm'):
+                self.proposal_x_norm = LayerNormLayer(state_size)
+            with tf.name_scope('proposal_state_norm'):
+                self.proposal_state_norm = LayerNormLayer(state_size)
 
     def _get_gates_x(self, x, input_is_3d=False):
         if input_is_3d:
-            gates_x = matmul3d(x, self.input_to_gates) + self.gates_bias
+            gates_x = matmul3d(x, self.input_to_gates)
         else:
-            gates_x = tf.matmul(x, self.input_to_gates) + self.gates_bias
+            gates_x = tf.matmul(x, self.input_to_gates)
+        if not self.nematus_compat:
+            gates_x += self.gates_bias
+        if self.use_layer_norm:
+            gates_x = self.gates_x_norm.forward(gates_x, input_is_3d=input_is_3d)
         return gates_x
 
     def _get_gates_state(self, prev_state):
         gates_state = tf.matmul(prev_state, self.state_to_gates)
+        if self.nematus_compat:
+            gates_state += self.gates_bias
+        if self.use_layer_norm:
+            gates_state = self.gates_state_norm.forward(gates_state)
         return gates_state
 
     def _get_proposal_x(self,x, input_is_3d=False):
@@ -143,6 +163,8 @@ class GRUStep(object):
             proposal_x = tf.matmul(x, self.input_to_proposal)
         if not self.nematus_compat:
             proposal_x += self.proposal_bias
+        if self.use_layer_norm:
+            proposal_x = self.proposal_x_norm.forward(proposal_x, input_is_3d=input_is_3d)
         return proposal_x
 
     def _get_proposal_state(self, prev_state):
@@ -150,6 +172,8 @@ class GRUStep(object):
         # placing the bias here is unorthodox, but we're keeping this behavior for compatibility with dl4mt-tutorial
         if self.nematus_compat:
             proposal_state += self.proposal_bias
+        if self.use_layer_norm:
+            proposal_state = self.proposal_state_norm.forward(proposal_state)
         return proposal_state
 
     def precompute_from_x(self, x):
@@ -188,45 +212,6 @@ class GRUStep(object):
         new_state = update_gate*prev_state + (1-update_gate)*proposal
 
         return new_state
-
-class GRUStepWithNormalization(GRUStep):
-    def __init__(self, 
-                 input_size, 
-                 state_size,
-                 nematus_compat=False):
-        super(GRUStepWithNormalization, self).__init__(input_size, state_size, nematus_compat)
-        #NOTE: GRUStep initializes bias terms which are not used in this class
-        #instead norm layers are used
-        with tf.name_scope('gates_x_norm'):
-            self.gates_x_norm = LayerNormLayer(2*state_size)
-        with tf.name_scope('gates_state_norm'):
-            self.gates_state_norm = LayerNormLayer(2*state_size)
-        with tf.name_scope('proposal_x_norm'):
-            self.proposal_x_norm = LayerNormLayer(state_size)
-        with tf.name_scope('proposal_state_norm'):
-            self.proposal_state_norm = LayerNormLayer(state_size)
-
-    def _get_gates_x(self, x, input_is_3d=False):
-        if input_is_3d:
-            gates_x = matmul3d(x, self.input_to_gates) 
-        else:
-            gates_x = tf.matmul(x, self.input_to_gates)
-        return self.gates_x_norm.forward(gates_x, input_is_3d=input_is_3d)
-
-    def _get_gates_state(self, prev_state):
-        gates_state = tf.matmul(prev_state, self.state_to_gates)
-        return self.gates_state_norm.forward(gates_state)
-
-    def _get_proposal_x(self,x, input_is_3d=False):
-        if input_is_3d: 
-            proposal_x = matmul3d(x, self.input_to_proposal)
-        else:
-            proposal_x = tf.matmul(x, self.input_to_proposal)
-        return self.proposal_x_norm.forward(proposal_x, input_is_3d=input_is_3d)
-
-    def _get_proposal_state(self, prev_state):
-        proposal_state = tf.matmul(prev_state, self.state_to_proposal)
-        return self.proposal_state_norm.forward(proposal_state)
 
 class AttentionStep(object):
     def __init__(self,

@@ -33,13 +33,11 @@ class Decoder(object):
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)
 
-        if config.use_layer_norm:
-            GRUctor = GRUStepWithNormalization
-        else:
-            GRUctor = GRUStep
-        self.grustep1 = GRUctor(
+        self.grustep1 = GRUStep(
                             input_size=config.embedding_size,
-                            state_size=config.state_size)
+                            state_size=config.state_size,
+                            use_layer_norm=config.use_layer_norm,
+                            nematus_compat=False)
         self.attstep = AttentionStep(
                         context=context,
                         context_state_size=2*config.state_size,
@@ -47,9 +45,10 @@ class Decoder(object):
                         state_size=config.state_size,
                         hidden_size=2*config.state_size,
                         use_layer_norm=config.use_layer_norm)
-        self.grustep2 = GRUctor(
+        self.grustep2 = GRUStep(
                             input_size=2*config.state_size,
                             state_size=config.state_size,
+                            use_layer_norm=config.use_layer_norm,
                             nematus_compat=True)
         with tf.name_scope("next_word_predictor"):
             W = None
@@ -285,19 +284,19 @@ class Encoder(object):
                                 config.source_vocab_size,
                                 config.embedding_size)
 
-        if config.use_layer_norm:
-            GRUctor = GRUStepWithNormalization
-        else:
-            GRUctor = GRUStep
         with tf.name_scope("forwardEncoder"):
-            self.gru_forward = GRUctor(
+            self.gru_forward = GRUStep(
                                 input_size=config.embedding_size,
-                                state_size=config.state_size)
+                                state_size=config.state_size,
+                                use_layer_norm=config.use_layer_norm,
+                                nematus_compat=False)
 
         with tf.name_scope("backwardEncoder"):
-            self.gru_backward = GRUctor(
+            self.gru_backward = GRUStep(
                                     input_size=config.embedding_size,
-                                    state_size=config.state_size)
+                                    state_size=config.state_size,
+                                    use_layer_norm=config.use_layer_norm,
+                                    nematus_compat=False)
         self.state_size = config.state_size
 
     def get_context(self, x, x_mask):
