@@ -13,6 +13,7 @@ import tensorflow as tf
 from threading import Thread
 from Queue import Queue
 from datetime import datetime
+from collections import OrderedDict
 
 from layers import *
 from data_iterator import TextIterator
@@ -114,8 +115,8 @@ def train(config, sess):
     merged = tf.summary.merge_all()
 
     #save model options
-    config = OrderedDict(sorted(config.items()))
-    json.dump(config, open('%s.json' % saveto, 'wb'), indent=2)
+    config_as_dict = OrderedDict(sorted(vars(config).items()))
+    json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
     source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
@@ -150,7 +151,7 @@ def train(config, sess):
             if config.dispFreq and uidx % config.dispFreq == 0:
                 duration = time.time() - last_time
                 disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
-                logging.info(disp_time, '{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, eidx, uidx, total_loss/n_words, n_words/duration, n_sents/duration))
+                logging.info('{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, eidx, uidx, total_loss/n_words, n_words/duration, n_sents/duration))
                 last_time = time.time()
                 total_loss = 0.
                 n_sents = 0
@@ -399,7 +400,6 @@ def parse_args():
     translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
                          help="Maximum length of translation output sentence (default: %(default)s)")
     config = parser.parse_args()
-
 
     # allow "--datasets" for backward compatibility
     if config.datasets:
