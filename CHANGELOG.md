@@ -1,7 +1,7 @@
 CHANGELOG
 ---------
 
-v0.2 (dev)
+v0.2 (17/12/2017)
 ----------
 
  - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
@@ -13,6 +13,7 @@ v0.2 (dev)
  - sgdmomentum optimizer
  - learning rate annealing
  - LSTM cells
+ - deep fusion (https://arxiv.org/abs/1503.03535)
  - various bugfixes
 
 v0.1 (2/3/2017)
