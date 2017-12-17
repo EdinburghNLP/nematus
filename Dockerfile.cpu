@@ -8,14 +8,14 @@ RUN apt-get update && apt-get install -y \
 	python3 \
 	vim \
 	nano \
+	libopenblas-dev \
 	python-dev \
 	python-pip \
-	python-pygraphviz \
 	xml-twig-tools
 
 RUN pip install --upgrade pip
 
-RUN pip install numpy numexpr cython theano ipdb
+RUN pip install tensorflow
 
 RUN mkdir -p /path/to
 WORKDIR /path/to/

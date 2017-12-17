@@ -5,15 +5,14 @@ import setuptools
 
 setuptools.setup(
     name='nematus',
-    version='0.1dev',
+    version='0.3dev',
     description='Neural machine translation tools on top of Theano',
     long_description=open(os.path.join(os.path.dirname(
         os.path.abspath(__file__)), 'README.md')).read(),
     license='BSD 3-clause',
     url='http://github.com/rsennrich/nematus',
     install_requires=['numpy',
-                      'Theano',
-                      'ipdb'],
+                      'tensorflow'],
     dependency_links=['git+http://github.com/Theano/Theano.git#egg=Theano',],
     classifiers=['Development Status :: 3 - Alpha',
                  'Intended Audience :: Science/Research',
