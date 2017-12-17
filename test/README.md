@@ -1,20 +1,20 @@
 Testing Nematus
 ---------------
 
-To test translation, execute
+To test translation (on GPU 0), execute
 
-THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cpu python test_translate.py
+CUDA_VISIBLE_DEVICES=0 python test_translate.py
 
-To test scoring, execute
+To test scoring (on GPU 0), execute
 
-THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cpu python test_score.py
+CUDA_VISIBLE_DEVICES=0 python test_score.py
 
 more sample models (including scripts for pre- and postprocessing)
 are provided at: http://statmt.org/rsennrich/wmt16_systems/
 
-to test training, execute
+to test training (on GPU 0), execute
 
-THEANO_FLAGS=mode=FAST_RUN,floatX=float32,device=cpu ./test_train.sh
+CUDA_VISIBLE_DEVICES=0 ./test_train.sh
 
 note that the training script is just a toy setup to make sure the scripts run,
 and to allow for speed comparisons. For instructions to train a

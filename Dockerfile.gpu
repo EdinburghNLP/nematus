@@ -1,4 +1,4 @@
-FROM nvidia/cuda:7.5-cudnn5-devel
+FROM nvidia/cuda:9.0-cudnn7-devel
 MAINTAINER Tom Kocmi <kocmi@ufal.mff.cuni.cz>
 
 # Install git, wget, python-dev, pip and other dependencies
@@ -20,14 +20,10 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip
 RUN pip install -U setuptools
-RUN pip install numexpr cython ipdb
+RUN pip install tensorflow
 
 # Set CUDA_ROOT
 ENV CUDA_ROOT /usr/local/cuda/bin
-# Install bleeding-edge Theano
-RUN pip install --upgrade --no-deps theano
-# Set up .theanorc for CUDA
-RUN echo "[global]\ndevice=gpu\nfloatX=float32\noptimizer_including=cudnn\n[lib]\ncnmem=0.1\n[nvcc]\nfastmath=True" > /root/.theanorc
 
 
 RUN mkdir -p /path/to
