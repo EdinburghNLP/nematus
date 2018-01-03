@@ -271,8 +271,11 @@ sample models, and instructions on using them for translation, are provided in t
 NOTES
 -----
 
-Support for float16 may not be fully functional or efficient using depending on the Theano version and GPU model.
+- The pipe symbol "|" serves as a factor separator and should not otherwise appear in the text. See [the documentation on factors](doc/factored_neural_machine_translation.md) for more information. Using the Moses tokenizer also escapes pipe symbols.
+
+- Support for float16 may not be fully functional or efficient using depending on the Theano version and GPU model.
 If you use float16 for training, consider using a lower learning rate for increased numerical stability.
+
 
 PUBLICATIONS
 ------------
