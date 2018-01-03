@@ -385,7 +385,10 @@ class Translator(object):
 
             x = []
             for w in words:
-                w = [self._word_dicts[i][f] if f in self._word_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                if self._options[0]['factors'] > 1:
+                    w = [self._word_dicts[i][f] if f in self._word_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                else:
+                    w = [self._word_dicts[0][w] if w in self._word_dicts[0] else 1]
                 if len(w) != self._options[0]['factors']:
                     logging.warning('Expected {0} factors, but input word has {1}\n'.format(self._options[0]['factors'], len(w)))
                     for midx in xrange(self._num_processes):
