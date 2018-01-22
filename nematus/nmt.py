@@ -21,22 +21,31 @@ from data_iterator import TextIterator
 from model import *
 from util import *
 
-def create_model(config, sess):
+def create_model(config, sess, train=False):
     logging.info('Building model...')
     model = StandardModel(config)
+    saver = tf.train.Saver(max_to_keep=None)
 
     # compute reload model filename
     reload_filename = None
     if config.reload != None:
         if config.reload == 'latest_checkpoint':
             reload_filename = tf.train.latest_checkpoint(os.path.dirname(config.saveto))
-            assert (reload_filename == None) or (os.path.relpath(reload_filename).split('-')[0] == os.path.relpath(config.saveto)), "Mismatching model filename found in the same directory while reloading from the latest checkpoint"
+            assert (reload_filename == None) or (os.path.relpath(reload_filename).split('-')[0] == os.path.relpath(config.saveto)), \
+                   "Mismatching model filename found in the same directory while reloading from the latest checkpoint"
             logging.info('Latest checkpoint found in directory ' + os.path.abspath(os.path.dirname(config.saveto)))
         else:
             reload_filename = config.reload
+    if (reload_filename == None) and (config.prior_model != None):
+        logging.info('Initializing model parameters from prior')
+        reload_filename = config.prior_model
 
+    # load prior model
+    if train and config.prior_model != None:
+        load_prior(config, sess, saver)
+    
     # initialize model
-    saver = tf.train.Saver(max_to_keep=None)
+    
     if reload_filename == None:
         logging.info('Initializing model parameters from scratch...')
         init_op = tf.global_variables_initializer()
@@ -47,6 +56,22 @@ def create_model(config, sess):
     logging.info('Done')
 
     return model, saver 
+
+def load_prior(config, sess, saver):
+     logging.info('Loading prior model parameters from file ' + os.path.abspath(config.prior_model))
+     saver.restore(sess, os.path.abspath(config.prior_model))
+     
+     # fill prior variables with the loaded values
+     prior_variables = tf.get_collection_ref('prior_variables')
+     prior_variables_dict = dict([(v.name, v) for v in prior_variables])
+     assign_tensors = []
+     with tf.name_scope('prior'):
+         for v in tf.trainable_variables():
+             prior_name = 'loss/prior/'+v.name
+             prior_variable = prior_variables_dict[prior_name]
+             assign_tensors.append(prior_variable.assign(v))
+     tf.variables_initializer(prior_variables)
+     sess.run(assign_tensors)
 
 def load_data(config):
     logging.info('Reading data...')
@@ -112,18 +137,21 @@ def read_all_lines(config, sentences):
 
 
 def train(config, sess):
-    model, saver = create_model(config, sess)
+    assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
+    "MAP training requires a prior model file: Use command-line option --prior_model"
+
+    model, saver = create_model(config, sess, train=True)
 
     x,x_mask,y,y_mask = model.get_score_inputs()
     apply_grads = model.get_apply_grads()
     t = model.get_global_step()
     loss_per_sentence = model.get_loss()
-    mean_loss = model.get_mean_loss()
+    objective = model.get_objective()
 
     if config.summaryFreq:
         summary_dir = config.summary_dir if (config.summary_dir != None) else (os.path.abspath(os.path.dirname(config.saveto)))
         writer = tf.summary.FileWriter(summary_dir, sess.graph)
-    tf.summary.scalar(name='mean_cost', tensor=mean_loss)
+    tf.summary.scalar(name='mean_cost', tensor=objective)
     tf.summary.scalar(name='t', tensor=t)
     merged = tf.summary.merge_all()
 
@@ -149,18 +177,18 @@ def train(config, sess):
             write_summary_for_this_batch = config.summaryFreq and ((uidx % config.summaryFreq == 0) or (config.finish_after and uidx % config.finish_after == 0))
             (seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
-            out = [t, apply_grads, mean_loss]
+            out = [t, apply_grads, objective]
             if write_summary_for_this_batch:
                 out += [merged]
-            out = sess.run(out, feed_dict=inn)
-            mean_loss_out = out[2]
-            total_loss += mean_loss_out*batch_size
+            out_values = sess.run(out, feed_dict=inn)
+            objective_value = out_values[2]
+            total_loss += objective_value*batch_size
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
             uidx += 1
 
             if write_summary_for_this_batch:
-                writer.add_summary(out[3], out[0])
+                writer.add_summary(out_values[3], out_values[0])
 
             if config.dispFreq and uidx % config.dispFreq == 0:
                 duration = time.time() - last_time
@@ -358,6 +386,12 @@ def parse_args():
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
                          help="maximum number of updates (minibatches) (default: %(default)s)")
+    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
+                         help="L2 regularization penalty (default: %(default)s)")
+    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
+                         help="MAP-L2 regularization penalty towards original weights (default: %(default)s)")
+    training.add_argument('--prior_model', type=str, metavar='PATH',
+                         help="Prior model for MAP-L2 regularization. Unless using \"--reload\", this will also be used for initialization.")
     training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',

@@ -379,6 +379,22 @@ class StandardModel(object):
             self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
             self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keep_dims=False)
+            self.objective = self.mean_loss
+            
+            self.l2_loss = tf.constant(0.0, dtype=tf.float32)
+            if config.decay_c > 0.0:
+                self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]) * tf.constant(config.decay_c, dtype=tf.float32)
+                self.objective += self.l2_loss
+
+            self.map_l2_loss = tf.constant(0.0, dtype=tf.float32)
+            if config.map_decay_c > 0.0:
+                map_l2_acc = []
+                for v in tf.trainable_variables():
+                    prior_name = 'prior/'+v.name.split(':')[0]
+                    prior_v = tf.Variable(initial_value=v.initialized_value(), trainable=False, collections=['prior_variables'], name=prior_name, dtype=v.initialized_value().dtype)
+                    map_l2_acc.append(tf.nn.l2_loss(v - prior_v))
+                self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
+                self.objective += self.l2_loss
 
         if config.optimizer == 'adam':
             self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
@@ -405,6 +421,9 @@ class StandardModel(object):
 
     def get_mean_loss(self):
         return self.mean_loss
+
+    def get_objective(self):
+        return self.objective
 
     def get_global_step(self):
         return self.t
