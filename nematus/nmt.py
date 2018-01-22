@@ -25,13 +25,25 @@ def create_model(config, sess):
     logging.info('Building model...')
     model = StandardModel(config)
 
+    # compute reload model filename
+    reload_filename = None
+    if config.reload != None:
+        if config.reload == 'latest_checkpoint':
+            reload_filename = tf.train.latest_checkpoint(os.path.dirname(config.saveto))
+            assert (reload_filename == None) or (os.path.relpath(reload_filename).split('-')[0] == os.path.relpath(config.saveto)), "Mismatching model filename found in the same directory while reloading from the latest checkpoint"
+            logging.info('Latest checkpoint found in directory ' + os.path.abspath(os.path.dirname(config.saveto)))
+        else:
+            reload_filename = config.reload
+
     # initialize model
     saver = tf.train.Saver(max_to_keep=None)
-    if not config.reload:
+    if reload_filename == None:
+        logging.info('Initializing model parameters from scratch...')
         init_op = tf.global_variables_initializer()
         sess.run(init_op)
     else:
-        saver.restore(sess, os.path.abspath(config.reload))
+        logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
+        saver.restore(sess, os.path.abspath(reload_filename))
     logging.info('Done')
 
     return model, saver 
@@ -185,6 +197,7 @@ def train(config, sess):
 
             if config.finish_after and uidx % config.finish_after == 0:
                 logging.info("Maximum number of updates reached")
+                saver.save(sess, save_path=config.saveto, global_step=uidx)
                 STOP=True
                 break
         if STOP:
@@ -314,7 +327,7 @@ def parse_args():
     data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
-                         help="load existing model from this path")
+                         help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --saveto")
     data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
                          help="directory for saving summaries")
     data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
