@@ -121,7 +121,8 @@ def train(config, sess):
     mean_loss = model.get_mean_loss()
 
     if config.summaryFreq:
-        writer = tf.summary.FileWriter(config.summary_dir, sess.graph)
+        summary_dir = config.summary_dir if (config.summary_dir != None) else (os.path.abspath(os.path.dirname(config.saveto)))
+        writer = tf.summary.FileWriter(summary_dir, sess.graph)
     tf.summary.scalar(name='mean_cost', tensor=mean_loss)
     tf.summary.scalar(name='t', tensor=t)
     merged = tf.summary.merge_all()
@@ -145,10 +146,11 @@ def train(config, sess):
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
+            write_summary_for_this_batch = config.summaryFreq and ((uidx % config.summaryFreq == 0) or (config.finish_after and uidx % config.finish_after == 0))
             (seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
             out = [t, apply_grads, mean_loss]
-            if config.summaryFreq and uidx % config.summaryFreq == 0:
+            if write_summary_for_this_batch:
                 out += [merged]
             out = sess.run(out, feed_dict=inn)
             mean_loss_out = out[2]
@@ -157,7 +159,7 @@ def train(config, sess):
             n_words += int(numpy.sum(y_mask_in))
             uidx += 1
 
-            if config.summaryFreq and uidx % config.summaryFreq == 0:
+            if write_summary_for_this_batch:
                 writer.add_summary(out[3], out[0])
 
             if config.dispFreq and uidx % config.dispFreq == 0:
@@ -329,9 +331,9 @@ def parse_args():
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
                          help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --saveto")
     data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
-                         help="directory for saving summaries")
+                         help="directory for saving summaries (default: same directory as the --saveto file)")
     data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
-                         help="Save summaries after INT updates (default: %(default)s)")
+                         help="Save summaries after INT updates, if 0 do not save summaries (default: %(default)s)")
 
     network = parser.add_argument_group('network parameters')
     network.add_argument('--embedding_size', '--dim_word', type=int, default=512, metavar='INT',
