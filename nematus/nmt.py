@@ -1020,7 +1020,7 @@ def gen_sample(f_init, f_next, x, trng=None, k=1, maxlen=30,
 
 
 # calculate the log probablities on a given corpus using translation model
-def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, normalization_alpha=0.0, alignweights=False):
+def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=False, normalization_alpha=0.0, alignweights=False):
     probs = []
     n_done = 0
 
@@ -1056,7 +1056,8 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
             probs.append(pp)
 
         if verbose:
-            print logging.debug('%d samples computed' % (n_done))
+            #print logging.debug('%d samples computed' % (n_done))
+            print '%d samples computed' % (n_done)
 
     return numpy.array(probs), alignments_json
 

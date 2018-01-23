@@ -1092,7 +1092,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             if main_activation == 'crelu': # Notice that this goes after the post activation input
                 h2 = tensor.dot(h2_pos, wn(pp(prefix, 'Ux_nl_post_pos'+suffix))) + tensor.dot(h2_neg, wn(pp(prefix, 'Ux_nl_post_neg'+suffix)))
                 if options['layer_normalisation']:
-                    h2 = layer_norm(h2, tparams[pp(prefix, 'Ux_nl_post_lnb'+suffix)], tparams[pp(prefix, 'Ux_nl_post_lns'+suffix)])
+                    h2 = layer_norm(h2, tparams[pp(prefix, 'Ux_nl_post%s_lnb' % suffix)], tparams[pp(prefix, 'Ux_nl_post%s_lns' % suffix)])
 
             h2 = u2 * h2_prev + (1. - u2) * h2
             h2 = m_[:, None] * h2 + (1. - m_)[:, None] * h2_prev
