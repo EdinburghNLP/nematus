@@ -1816,7 +1816,11 @@ def train(dim_word=512,  # word vector dimensionality
                     save(params, optimizer_params, training_progress, saveto+'.dev')
                     json.dump(model_options, open('%s.dev.npz.json' % saveto, 'wb'), indent=2)
                     logging.info('Done')
-                    p_validation = Popen([external_validation_script])
+                    env = os.environ
+                    # hack to ignore Theano's one-process-per-GPU check
+                    if 'THEANO_GPU_IS_ALREADY_ACTIVE' in env:
+                        del env['THEANO_GPU_IS_ALREADY_ACTIVE']
+                    p_validation = Popen([external_validation_script], env=env)
 
             # finish after this many updates
             if training_progress.uidx >= finish_after:
