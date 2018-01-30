@@ -98,82 +98,94 @@ class GRUStep(object):
                  input_size, 
                  state_size,
                  use_layer_norm=False,
-                 nematus_compat=False):
-        self.state_to_gates = tf.Variable(
-                                numpy.concatenate(
-                                    [ortho_weight(state_size),
-                                     ortho_weight(state_size)],
-                                    axis=1), 
-                                name='state_to_gates')
-        self.input_to_gates = tf.Variable(
-                                numpy.concatenate(
-                                    [norm_weight(input_size, state_size),
-                                     norm_weight(input_size, state_size)],
-                                    axis=1), 
-                                name='input_to_gates')
-        self.gates_bias = tf.Variable(
-                            numpy.zeros((2*state_size,)).astype('float32'),
-                            name='gates_bias')
-
-        self.state_to_proposal = tf.Variable(
-                                    ortho_weight(state_size),
-                                    name = 'state_to_proposal')
-        self.input_to_proposal = tf.Variable(
-                                    norm_weight(input_size, state_size),
-                                    name = 'input_to_proposal')
-        self.proposal_bias = tf.Variable(
-                                    numpy.zeros((state_size,)).astype('float32'),
-                                    name='proposal_bias')
+                 nematus_compat=False, deep_layers = deep_layers):
+        self.deep_layers = deep_layers
+        self.state_to_gates = []
+        self.input_to_gates=[]
+        self.gates_bias=[]
+        self.state_to_proposal=[]
+        self.input_to_proposal=[]
+        self.proposal_bias=[]
+        self.gates_x_norm=[]
+        self.gates_state_norm=[]
+        self.proposal_x_norm=[]
+        self.proposal_state_norm=[]
         self.nematus_compat = nematus_compat
         self.use_layer_norm = use_layer_norm
+        for i in range(0, self.deep_layers):
+            self.state_to_gates[i] = tf.Variable(
+                                    numpy.concatenate(
+                                        [ortho_weight(state_size),
+                                        ortho_weight(state_size)],
+                                        axis=1), 
+                                    name=('state_to_gates_%s' % i))
+            self.input_to_gates[i] = tf.Variable(
+                                    numpy.concatenate(
+                                        [norm_weight(input_size, state_size),
+                                        norm_weight(input_size, state_size)],
+                                        axis=1), 
+                                    name=('input_to_gates_%s' % i))
+            self.gates_bias[i] = tf.Variable(
+                                numpy.zeros((2*state_size,)).astype('float32'),
+                                name=('gates_bias_%s' % i))
 
-        if self.use_layer_norm:
-            with tf.name_scope('gates_x_norm'):
-                self.gates_x_norm = LayerNormLayer(2*state_size)
-            with tf.name_scope('gates_state_norm'):
-                self.gates_state_norm = LayerNormLayer(2*state_size)
-            with tf.name_scope('proposal_x_norm'):
-                self.proposal_x_norm = LayerNormLayer(state_size)
-            with tf.name_scope('proposal_state_norm'):
-                self.proposal_state_norm = LayerNormLayer(state_size)
-
-    def _get_gates_x(self, x, input_is_3d=False):
+            self.state_to_proposal[i] = tf.Variable(
+                                        ortho_weight(state_size),
+                                        name = ('state_to_proposal_%s' % i))
+            self.input_to_proposal[i] = tf.Variable(
+                                        norm_weight(input_size, state_size),
+                                        name = ('input_to_proposal_%s' % i))
+            self.proposal_bias[i] = tf.Variable(
+                                        numpy.zeros((state_size,)).astype('float32'),
+                                        name=('proposal_bias_%s' % i))
+            ## Yet to do layer normalization ##
+            if self.use_layer_norm:
+                with tf.name_scope('gates_x_norm'):
+                    self.gates_x_norm[i] = LayerNormLayer(2*state_size)
+                with tf.name_scope('gates_state_norm'):
+                    self.gates_state_norm[i] = LayerNormLayer(2*state_size)
+                with tf.name_scope('proposal_x_norm'):
+                    self.proposal_x_norm[i] = LayerNormLayer(state_size)
+                with tf.name_scope('proposal_state_norm'):
+                    self.proposal_state_norm[i] = LayerNormLayer(state_size)
+            ## Yet to do layer normalization ##
+    def _get_gates_x(self, x, i, input_is_3d=False):
         if input_is_3d:
-            gates_x = matmul3d(x, self.input_to_gates)
+            gates_x = matmul3d(x, self.input_to_gates[i])
         else:
-            gates_x = tf.matmul(x, self.input_to_gates)
+            gates_x = tf.matmul(x, self.input_to_gates[i])
         if not self.nematus_compat:
-            gates_x += self.gates_bias
+            gates_x += self.gates_bias[i]
         if self.use_layer_norm:
-            gates_x = self.gates_x_norm.forward(gates_x, input_is_3d=input_is_3d)
+            gates_x = self.gates_x_norm[i].forward(gates_x, input_is_3d=input_is_3d)
         return gates_x
 
-    def _get_gates_state(self, prev_state):
-        gates_state = tf.matmul(prev_state, self.state_to_gates)
+    def _get_gates_state(self, prev_state, i):
+        gates_state = tf.matmul(prev_state, self.state_to_gates[i])
         if self.nematus_compat:
-            gates_state += self.gates_bias
+            gates_state += self.gates_bias[i]
         if self.use_layer_norm:
-            gates_state = self.gates_state_norm.forward(gates_state)
+            gates_state = self.gates_state_norm[i].forward(gates_state)
         return gates_state
 
-    def _get_proposal_x(self,x, input_is_3d=False):
+    def _get_proposal_x(self, x, i, input_is_3d=False):
         if input_is_3d: 
-            proposal_x = matmul3d(x, self.input_to_proposal)
+            proposal_x = matmul3d(x, self.input_to_proposal[i])
         else:
-            proposal_x = tf.matmul(x, self.input_to_proposal)
+            proposal_x = tf.matmul(x, self.input_to_proposal[i])
         if not self.nematus_compat:
-            proposal_x += self.proposal_bias
+            proposal_x += self.proposal_bias[i]
         if self.use_layer_norm:
-            proposal_x = self.proposal_x_norm.forward(proposal_x, input_is_3d=input_is_3d)
+            proposal_x = self.proposal_x_norm[i].forward(proposal_x, input_is_3d=input_is_3d)
         return proposal_x
 
-    def _get_proposal_state(self, prev_state):
-        proposal_state = tf.matmul(prev_state, self.state_to_proposal)
+    def _get_proposal_state(self, i, prev_state):
+        proposal_state = tf.matmul(prev_state, self.state_to_proposal[i])
         # placing the bias here is unorthodox, but we're keeping this behavior for compatibility with dl4mt-tutorial
         if self.nematus_compat:
-            proposal_state += self.proposal_bias
+            proposal_state += self.proposal_bias[i]
         if self.use_layer_norm:
-            proposal_state = self.proposal_state_norm.forward(proposal_state)
+            proposal_state = self.proposal_state_norm[i].forward(proposal_state)
         return proposal_state
 
     def precompute_from_x(self, x):
@@ -192,24 +204,31 @@ class GRUStep(object):
                 gates_state=None,
                 proposal_x=None,
                 proposal_state=None):
-        if gates_x is None:
-            gates_x = self._get_gates_x(x) 
-        if proposal_x is None:
-            proposal_x = self._get_proposal_x(x) 
-        if gates_state is None:
-            gates_state = self._get_gates_state(prev_state) 
-        if proposal_state is None:
-            proposal_state = self._get_proposal_state(prev_state) 
+        for i in range(0,self.deep_layers):    
+            if gates_x is None:
+                if i == 0:
+                    gates_x = self._get_gates_x(x, i)
+                else:
+                    gates_x = self._get_gates_x(0, i)
+            if proposal_x is None:
+                if i == 0:
+                    proposal_x = self._get_proposal_x(x, i)
+                else:
+                    proposal_x = self._get_proposal_x(0, i)
+            if gates_state is None:
+                gates_state = self._get_gates_state(prev_state, i) 
+            if proposal_state is None:
+                proposal_state = self._get_proposal_state(prev_state, i) 
 
-        gates = gates_x + gates_state
-        gates = tf.nn.sigmoid(gates)
-        read_gate, update_gate = tf.split(gates,
-                                          num_or_size_splits=2,
-                                          axis=1)
+            gates = gates_x + gates_state
+            gates = tf.nn.sigmoid(gates)
+            read_gate, update_gate = tf.split(gates,
+                                            num_or_size_splits=2,
+                                            axis=1)
 
-        proposal = proposal_state*read_gate + proposal_x
-        proposal = tf.tanh(proposal)
-        new_state = update_gate*prev_state + (1-update_gate)*proposal
+            proposal = proposal_state*read_gate + proposal_x
+            proposal = tf.tanh(proposal)
+            new_state = update_gate*prev_state + (1-update_gate)*proposal
 
         return new_state
 
