@@ -233,6 +233,7 @@ class Decoder(object):
 
 class Predictor(object):
     def __init__(self, config, hidden_to_logits_W=None):
+        self.config = config
         with tf.name_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = FeedForwardLayer(
                                 in_size=config.embedding_size,
@@ -251,6 +252,11 @@ class Predictor(object):
                                     out_size=config.embedding_size,
                                     non_linearity=lambda y: y,
                                     use_layer_norm=config.use_layer_norm)
+
+        if config.output_hidden_activation == 'prelu':
+            with tf.name_scope("hidden_prelu"):
+                self.hidden_prelu = PReLU(in_size=config.embedding_size)
+
         with tf.name_scope("hidden_to_logits"):
             self.hidden_to_logits = FeedForwardLayer(
                             in_size=config.embedding_size,
@@ -269,7 +275,16 @@ class Predictor(object):
             hidden_att_ctx = self.att_ctx_to_hidden.forward(attended_states,input_is_3d=multi_step)
 
         hidden = hidden_emb + hidden_state + hidden_att_ctx
-        hidden = tf.tanh(hidden)
+        if self.config.output_hidden_activation == 'tanh':
+            hidden = tf.tanh(hidden)
+        elif self.config.output_hidden_activation == 'relu':
+            hidden = tf.nn.relu(hidden)
+        elif self.config.output_hidden_activation == 'prelu':
+            hidden = self.hidden_prelu.forward(hidden)
+        elif self.config.output_hidden_activation == 'linear':
+            pass
+        else:
+            assert(False, 'Unknown output activation function "%s"' % self.config.output_hidden_activation)
 
         with tf.name_scope("hidden_to_logits"):
             logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)

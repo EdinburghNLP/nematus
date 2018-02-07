@@ -376,6 +376,9 @@ def parse_args():
                          help="Set to use layer normalization in encoder and decoder")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
+    network.add_argument('--output_hidden_activation', type=str, default='tanh',
+                         choices=['tanh', 'relu', 'prelu', 'linear'],
+                         help='activation function in hidden layer of the output network (default: %(default)s)')
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=50, metavar='INT',

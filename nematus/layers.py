@@ -288,3 +288,16 @@ class Masked_cross_entropy_loss(object):
         cost *= self.y_mask
         cost = tf.reduce_sum(cost, axis=0, keep_dims=False)
         return cost
+
+class PReLU(object):
+    def __init__(self,
+                 in_size,
+                 initial_slope = 1.0):
+
+        self.slope = tf.Variable(initial_slope * numpy.ones((in_size,)).astype('float32'), name='slope')
+
+    def forward(self, x):
+        pos = tf.nn.relu(x)
+        neg = x - pos
+        y = pos + self.slope * neg
+        return y
