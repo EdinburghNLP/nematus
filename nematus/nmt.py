@@ -376,10 +376,6 @@ def parse_args():
                          help="Set to use layer normalization in encoder and decoder")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
-    network.add_argument('--deep_layers_enc', type=int, default=1, metavar='INT',
-                         help="number of deep transition layers in the encoder (default: %(default)s)")
-    network.add_argument('--deep_layers_dec', type=int, default=1, metavar='INT',
-                         help="Number of deep transition layers in the decoder  (default: %(default)s)")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=50, metavar='INT',

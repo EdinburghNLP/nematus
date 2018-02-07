@@ -32,24 +32,24 @@ class Decoder(object):
             self.y_emb_layer = EmbeddingLayer(
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)
-            for i in range(1, config.deep_layers_dec):    
-                self.grustep1 = GRUStep(
-                                    input_size=config.embedding_size,
-                                    state_size=config.state_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=False)
-                self.attstep = AttentionStep(
-                                context=context,
-                                context_state_size=2*config.state_size,
-                                context_mask=x_mask,
-                                state_size=config.state_size,
-                                hidden_size=2*config.state_size,
-                                use_layer_norm=config.use_layer_norm)
-                self.grustep2 = GRUStep(
-                                    input_size=2*config.state_size,
-                                    state_size=config.state_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=True)
+
+        self.grustep1 = GRUStep(
+                            input_size=config.embedding_size,
+                            state_size=config.state_size,
+                            use_layer_norm=config.use_layer_norm,
+                            nematus_compat=False)
+        self.attstep = AttentionStep(
+                        context=context,
+                        context_state_size=2*config.state_size,
+                        context_mask=x_mask,
+                        state_size=config.state_size,
+                        hidden_size=2*config.state_size,
+                        use_layer_norm=config.use_layer_norm)
+        self.grustep2 = GRUStep(
+                            input_size=2*config.state_size,
+                            state_size=config.state_size,
+                            use_layer_norm=config.use_layer_norm,
+                            nematus_compat=True)
         with tf.name_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
@@ -279,25 +279,24 @@ class Predictor(object):
 
 class Encoder(object):
     def __init__(self, config):
-        for i in range(0,config.deep_layers_enc):
-            with tf.name_scope("embedding"):
-                self.emb_layer = EmbeddingLayer(
-                                    config.source_vocab_size,
-                                    config.embedding_size)
+        with tf.name_scope("embedding"):
+            self.emb_layer = EmbeddingLayer(
+                                config.source_vocab_size,
+                                config.embedding_size)
 
-            with tf.name_scope("forwardEncoder"):
-                self.gru_forward = GRUStep(
+        with tf.name_scope("forwardEncoder"):
+            self.gru_forward = GRUStep(
+                                input_size=config.embedding_size,
+                                state_size=config.state_size,
+                                use_layer_norm=config.use_layer_norm,
+                                nematus_compat=False)
+
+        with tf.name_scope("backwardEncoder"):
+            self.gru_backward = GRUStep(
                                     input_size=config.embedding_size,
                                     state_size=config.state_size,
                                     use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=False, config.deep_layers_enc)
-
-            with tf.name_scope("backwardEncoder"):
-                self.gru_backward = GRUStep(
-                                        input_size=config.embedding_size,
-                                        state_size=config.state_size,
-                                        use_layer_norm=config.use_layer_norm,
-                                        nematus_compat=False, config.deep_layers_enc)
+                                    nematus_compat=False)
         self.state_size = config.state_size
 
     def get_context(self, x, x_mask):
