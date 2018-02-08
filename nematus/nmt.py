@@ -9,6 +9,7 @@ import time
 import argparse
 
 import tensorflow as tf
+import tensorflow.contrib.slim as slim
 
 from threading import Thread
 from Queue import Queue
@@ -21,10 +22,25 @@ from data_iterator import TextIterator
 from model import *
 from util import *
 
-def create_model(config, sess, train=False):
+def create_model(config, sess, ensemble_scope=None, train=False):
     logging.info('Building model...')
     model = StandardModel(config)
-    saver = tf.train.Saver(max_to_keep=None)
+
+    # Is this model part of an ensemble?
+    if ensemble_scope == None:
+        # No: it's a standalone model, so the saved variable names should match
+        # model's and we don't need to map them.
+        saver = tf.train.Saver(max_to_keep=None)
+    else:
+        # Yes: there is an active model-specific scope, so tell the Saver to
+        # map the saved variables to the scoped variables.
+        variables = slim.get_variables_to_restore()
+        var_map = {}
+        for v in variables:
+            if v.name.startswith(ensemble_scope):
+                base_name = v.name[len(ensemble_scope):].split(':')[0]
+                var_map[base_name] = v
+        saver = tf.train.Saver(var_map, max_to_keep=None)
 
     # compute reload model filename
     reload_filename = None

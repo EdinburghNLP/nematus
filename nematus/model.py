@@ -5,6 +5,7 @@ import numpy
 
 import tensorflow as tf
 from layers import *
+import inference
 
 
 class Decoder(object):
@@ -100,105 +101,6 @@ class Decoder(object):
        i, _, _, _, ys_array = final_loop_vars
        sampled_ys = ys_array.gather(tf.range(0, i))
        return sampled_ys
-
-    def beam_search(self, beam_size):
-
-        """
-        Strategy:
-            compute the log_probs - same as with sampling
-            for sentences that are ended set log_prob(<eos>)=0, log_prob(not eos)=-inf
-            add previous cost to log_probs
-            run top k -> (idxs, values)
-            use values as new costs
-            divide idxs by num_classes to get state_idxs
-            use gather to get new states
-            take the remainder of idxs after num_classes to get new_predicted words
-        """
-
-        # Initialize loop variables
-        batch_size = tf.shape(self.init_state)[0]
-        i = tf.constant(0)
-        init_ys = -tf.ones(dtype=tf.int32, shape=[batch_size])
-        init_embs = tf.zeros(dtype=tf.float32, shape=[batch_size,self.embedding_size])
-
-        f_min = numpy.finfo(numpy.float32).min
-        init_cost = [0.] + [f_min]*(beam_size-1) # to force first top k are from first hypo only
-        init_cost = tf.constant(init_cost, dtype=tf.float32)
-        init_cost = tf.tile(init_cost, multiples=[batch_size/beam_size])
-        ys_array = tf.TensorArray(
-                    dtype=tf.int32,
-                    size=self.translation_maxlen,
-                    clear_after_read=True,
-                    name='y_sampled_array')
-        p_array = tf.TensorArray(
-                    dtype=tf.int32,
-                    size=self.translation_maxlen,
-                    clear_after_read=True,
-                    name='parent_idx_array')
-        init_loop_vars = [i, self.init_state, init_ys, init_embs, init_cost, ys_array, p_array]
-
-        # Prepare cost matrix for completed sentences -> Prob(EOS) = 1 and Prob(x) = 0
-        eos_log_probs = tf.constant(
-                            [[0.] + ([f_min]*(self.target_vocab_size - 1))],
-                            dtype=tf.float32)
-        eos_log_probs = tf.tile(eos_log_probs, multiples=[batch_size,1])
-
-        def cond(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
-            return tf.logical_and(
-                    tf.less(i, self.translation_maxlen),
-                    tf.reduce_any(tf.not_equal(prev_ys, 0)))
-
-        def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
-            #If ensemble decoding is necessary replace with for loop and do model[i].{grustep1,attstep,...}
-            new_states1 = self.grustep1.forward(states, prev_embs)
-            att_ctx = self.attstep.forward(new_states1)
-            new_states2 = self.grustep2.forward(new_states1, att_ctx)
-            logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
-            log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
-
-            # set cost of EOS to zero for completed sentences so that they are in top k
-            # Need to make sure only EOS is selected because a completed sentence might
-            # kill ongoing sentences
-            log_probs = tf.where(tf.equal(prev_ys, 0), eos_log_probs, log_probs)
-
-            all_costs = log_probs + tf.expand_dims(cost, axis=1) # TODO: you might be getting NaNs here since -inf is in log_probs
-
-            all_costs = tf.reshape(all_costs, shape=[-1, self.target_vocab_size * beam_size])
-            values, indices = tf.nn.top_k(all_costs, k=beam_size) #the sorted option is by default True, is this needed? 
-            new_cost = tf.reshape(values, shape=[batch_size])
-            offsets = tf.range(
-                        start = 0,
-                        delta = beam_size,
-                        limit = batch_size,
-                        dtype=tf.int32)
-            offsets = tf.expand_dims(offsets, axis=1)
-            survivor_idxs = (indices/self.target_vocab_size) + offsets
-            new_ys = indices % self.target_vocab_size
-            survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
-            new_ys = tf.reshape(new_ys, shape=[batch_size])
-            new_embs = self.y_emb_layer.forward(new_ys)
-            new_states = tf.gather(new_states2, indices=survivor_idxs)
-
-            new_cost = tf.where(tf.equal(new_ys, 0), tf.abs(new_cost), new_cost)
-
-            ys_array = ys_array.write(i, value=new_ys)
-            p_array = p_array.write(i, value=survivor_idxs)
-
-            return i+1, new_states, new_ys, new_embs, new_cost, ys_array, p_array
-
-
-        final_loop_vars = tf.while_loop(
-                            cond=cond,
-                            body=body,
-                            loop_vars=init_loop_vars,
-                            back_prop=False)
-        i, _, _, _, cost, ys_array, p_array = final_loop_vars
-
-        indices = tf.range(0, i)
-        sampled_ys = ys_array.gather(indices)
-        parents = p_array.gather(indices)
-        cost = tf.abs(cost) #to get negative-log-likelihood
-        return sampled_ys, parents, cost
 
     def score(self, y):
         with tf.name_scope("y_embeddings_layer"):
@@ -468,7 +370,7 @@ class StandardModel(object):
     def _get_beam_search_outputs(self, beam_size):
         if beam_size != self.beam_size:
             self.beam_size = beam_size
-            self.beam_ys, self.parents, self.cost =  self.decoder.beam_search(beam_size)
+            self.beam_ys, self.parents, self.cost = inference.construct_beam_search_functions([self], beam_size)
         return self.beam_ys, self.parents, self.cost
 
 
@@ -482,31 +384,4 @@ class StandardModel(object):
         beam_ys_out, parents_out, cost_out = session.run(
                                                     [beam_ys, parents, cost],
                                                     feed_dict=feeds)
-        hypotheses = self._reconstruct(beam_ys_out, parents_out, cost_out, beam_size)
-        return hypotheses
-
-    def _reconstruct(self, ys, parents, cost, beam_size):
-        #ys.shape = parents.shape = (seqLen, beam_size x batch_size) 
-        # output: hypothesis list with shape (batch_size, beam_size, (sequence, cost))
-
-        def reconstruct_single(ys, parents, hypoId, hypo, pos):
-            if pos < 0:
-                hypo.reverse()
-                return hypo
-            else:
-                hypo.append(ys[pos, hypoId])
-                hypoId = parents[pos, hypoId]
-                return reconstruct_single(ys, parents, hypoId, hypo, pos - 1)
-
-        hypotheses = []
-        batch_size = ys.shape[1] / beam_size
-        pos = ys.shape[0] - 1
-        for batch in range(batch_size):
-            hypotheses.append([])
-            for beam in range(beam_size):
-                i = batch*beam_size + beam
-                hypo = reconstruct_single(ys, parents, i, [], pos)
-                hypo = numpy.trim_zeros(hypo, trim='b') # b for back
-                hypo.append(0)
-                hypotheses[batch].append((hypo, cost[i]))
-        return hypotheses
+        return inference.reconstruct_hypotheses(beam_ys_out, parents_out, cost_out, beam_size)

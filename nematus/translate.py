@@ -10,6 +10,7 @@ import os
 import logging
 import argparse
 import time
+import inference
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
@@ -59,25 +60,20 @@ class Translator(object):
         # init worker processes
         self._init_processes()
 
-        if len(self._models) > 1:
-            logging.error('ensemble decoding is not implemented.')
-            sys.exit(1)
-
     def _load_model_options(self):
         """
         Loads config options for each model.
         """
 
-        options = []
+        self._options = []
         for model in self._models:
-            options.append(load_config(model))
+            config = load_config(model)
             # backward compatibility
-            fill_options(options[-1])
-            options[-1]['reload'] = model
+            fill_options(config)
+            config['reload'] = model
+            self._options.append(argparse.Namespace(**config))
 
-        self._options = argparse.Namespace(**options[-1])
-
-        _, _, _, self._num_to_target = load_dictionaries(self._options)
+        _, _, _, self._num_to_target = load_dictionaries(self._options[0])
 
     def _init_queues(self):
         """
@@ -113,16 +109,21 @@ class Translator(object):
 
 
 
-    def _load_model(self, process_id, sess):
+    def _load_models(self, process_id, sess):
         """
-        Loads model and returns it
+        Loads models and returns them
         """
-        logging.debug("Process '%s' - Loading model\n" % (process_id))
+        logging.debug("Process '%s' - Loading models\n" % (process_id))
 
-        model, saver = create_model(self._options, sess)
+        import tensorflow as tf
+        models = []
+        for i, options in enumerate(self._options):
+            with tf.name_scope("model%d" % i) as scope:
+                model, saver = create_model(options, sess, ensemble_scope=scope)
+                models.append(model)
 
-        logging.info("NOTE: Length of translations is capped to {}".format(self._options.translation_maxlen))
-        return model
+        logging.info("NOTE: Length of translations is capped to {}".format(self._options[0].translation_maxlen))
+        return models
 
     def _start_worker(self, process_id):
         """
@@ -133,7 +134,7 @@ class Translator(object):
         # load TF functionality
         import tensorflow as tf
         sess = tf.Session()
-        model = self._load_model(process_id, sess)
+        models = self._load_models(process_id, sess)
 
         # listen to queue in while loop, translate items
         while True:
@@ -144,12 +145,12 @@ class Translator(object):
             idx = input_item.idx
             request_id = input_item.request_id
 
-            output_item = self._translate(process_id, input_item, model, sess)
+            output_item = self._translate(process_id, input_item, models, sess)
             self._output_queue.put((request_id, idx, output_item))
 
         return
 
-    def _translate(self, process_id, input_item, model, sess):
+    def _translate(self, process_id, input_item, models, sess):
         """
         Actual translation (model sampling).
         """
@@ -162,7 +163,7 @@ class Translator(object):
         y_dummy = numpy.zeros(shape=(len(x),1))
         x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
 
-        sample = model.beam_search(sess, x, x_mask, k)
+        sample = inference.beam_search(models, sess, x, x_mask, k)
 
         return sample
 
@@ -174,7 +175,7 @@ class Translator(object):
         """
         source_batches = []
 
-        batches, idxs = read_all_lines(self._options, input_)
+        batches, idxs = read_all_lines(self._options[0], input_)
 
         for idx, batch in enumerate(batches):
 
