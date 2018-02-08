@@ -25,6 +25,8 @@ def fill_options(options):
         options['model_version'] = 0
     if not 'tie_decoder_embeddings' in options:
         options['tie_decoder_embeddings'] = False
+    if not 'map_decay_c' in options:
+        options['map_decay_c'] = 0.0
 
     # name changes in TF
     if not 'source_vocab_size' in options:
@@ -52,3 +54,5 @@ def fill_options(options):
         options['learning_rate'] = 0.0001
     if not 'clip_c' in options:
         options['clip_c'] = 1.
+    if not 'output_hidden_activation' in options:
+        options['output_hidden_activation'] = 'tanh'
