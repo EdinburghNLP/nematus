@@ -101,12 +101,19 @@ class FakeConfig(object):
         self.target_vocab_size = target_vocab_size
 
         # These are needed to create the model, but their values are irrelevant
-        self.reload = False
+        self.reload = None
+        self.prior_model = None
         self.maxlen = None
         self.learning_rate = 0.0001
         self.clip_c = 1
         self.translation_maxlen = 200
         self.optimizer = 'adam'
+        self.decay_c = 0.0
+        self.map_decay_c = 0.0
+
+        # This option doesn't exist in the Theano version of Nematus - the
+        # activation function is always tanh.
+        self.output_hidden_activation = 'tanh'
 
         self.use_layer_norm = layer_norm
         self.tie_decoder_embeddings = tie_decoder_embeddings
