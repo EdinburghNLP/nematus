@@ -131,6 +131,8 @@ execute nematus/nmt.py to train a model.
 | --saveFreq INT       |  save frequency (default: 30000) |
 | --reload             |  load existing model (if '--model' points to existing model) |
 | --overwrite          |  write all models to same file |
+| --multilingual       |  Use a multilingual data iterator to iterate over multiple sets of parallel sentences in equal batches (requires `language_source_target` to be set, default: False) |
+| --language_source_target |  Target languages and file names for multilingual NMT training (For example `[('ru','multi.en', 'multi.ru'),('et','multi.en', 'multi.et')]`, default: None) |
 
 #### network parameters
 | parameter            | description |

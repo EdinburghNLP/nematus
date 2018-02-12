@@ -38,6 +38,7 @@ from optimizers import *
 from metrics.scorer_provider import ScorerProvider
 
 from domain_interpolation_data_iterator import DomainInterpolatorTextIterator
+from multi_data_iterator import MultilingualTextIterator
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, weights=None, maxlen=None, n_words_src=30000,
@@ -1184,6 +1185,8 @@ def train(dim_word=512,  # word vector dimensionality
           domain_interpolation_max=1.0, # maximum fraction of in-domain training data
           domain_interpolation_inc=0.1, # interpolation increment to be applied each time patience runs out, until maximum amount of interpolation is reached
           domain_interpolation_indomain_datasets=[None, None], # in-domain parallel training corpus (source and target)
+          multilingual=False, # Use multilingual NMT (requires the next parameter `language_source_target` to be set)
+          language_source_target=[None, None], # Languages and file names for multilingual NMT training
           anneal_restarts=0, # when patience run out, restart with annealed learning rate X times before early stopping
           anneal_decay=0.5, # decay learning rate by this amount on each restart
           maxibatch_size=20, #How many minibatches to load at one time
@@ -1316,7 +1319,19 @@ def train(dim_word=512,  # word vector dimensionality
         lrate *= anneal_decay**training_progress.anneal_restarts_done
 
     logging.info('Loading data')
-    if use_domain_interpolation:
+    if multilingual:
+        print 'Using multilingual iterator'
+        train = MultilingualTextIterator(datasets[0], datasets[1],
+                         dictionaries[:-1], dictionaries[-1],
+                         n_words_source=n_words_src, n_words_target=n_words,
+                         batch_size=batch_size,
+                         maxlen=maxlen,
+                         skip_empty=True,
+                         language_source_target=language_source_target,
+                         shuffle_each_epoch=shuffle_each_epoch,
+                         sort_by_length=sort_by_length,
+                         maxibatch_size=maxibatch_size)
+    elif use_domain_interpolation:
         logging.info('Using domain interpolation with initial ratio %s, final ratio %s, increase rate %s' % (training_progress.domain_interpolation_cur, domain_interpolation_max, domain_interpolation_inc))
         train = DomainInterpolatorTextIterator(datasets[0], datasets[1],
                          dictionaries[:-1], dictionaries[1],
