@@ -345,6 +345,9 @@ class StandardModel(object):
     def get_global_step(self):
         return self.t
 
+    def reset_global_step(self, value, session):
+        self.t.load(value, session)
+
     def get_apply_grads(self):
         return self.apply_grads
 

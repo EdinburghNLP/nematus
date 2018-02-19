@@ -21,6 +21,7 @@ from data_iterator import TextIterator
 
 from model import *
 from util import *
+import training_progress
 
 def create_model(config, sess, ensemble_scope=None, train=False):
     logging.info('Building model...')
@@ -44,27 +45,43 @@ def create_model(config, sess, ensemble_scope=None, train=False):
 
     # compute reload model filename
     reload_filename = None
-    if config.reload != None:
-        if config.reload == 'latest_checkpoint':
-            reload_filename = tf.train.latest_checkpoint(os.path.dirname(config.saveto))
-            if reload_filename != None:
-                if (os.path.basename(reload_filename).rsplit('-', 1)[0] !=
-                    os.path.basename(config.saveto)):
-                    logging.error("Mismatching model filename found in the same directory while reloading from the latest checkpoint")
-                    sys.exit(1)
-                logging.info('Latest checkpoint found in directory ' + os.path.abspath(os.path.dirname(config.saveto)))
-        else:
-            reload_filename = config.reload
+    if config.reload == 'latest_checkpoint':
+        checkpoint_dir = os.path.dirname(config.saveto)
+        reload_filename = tf.train.latest_checkpoint(checkpoint_dir)
+        if reload_filename != None:
+            if (os.path.basename(reload_filename).rsplit('-', 1)[0] !=
+                os.path.basename(config.saveto)):
+                logging.error("Mismatching model filename found in the same directory while reloading from the latest checkpoint")
+                sys.exit(1)
+            logging.info('Latest checkpoint found in directory ' + os.path.abspath(checkpoint_dir))
+    elif config.reload != None:
+        reload_filename = config.reload
     if (reload_filename == None) and (config.prior_model != None):
         logging.info('Initializing model parameters from prior')
         reload_filename = config.prior_model
+
+    # initialize or reload training progress
+    if train:
+        progress = training_progress.TrainingProgress()
+        progress.uidx = 0
+        progress.eidx = 0
+        progress.estop = False
+        if reload_filename and config.reload_training_progress:
+            path = reload_filename + '.progress.json'
+            if os.path.exists(path):
+                logging.info('Reloading training progress')
+                progress.load_from_json(path)
+                if (progress.estop == True or
+                    progress.eidx > config.max_epochs or
+                    progress.uidx >= config.finish_after):
+                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % reload_path)
+                    sys.exit(0)
 
     # load prior model
     if train and config.prior_model != None:
         load_prior(config, sess, saver)
     
-    # initialize model
-    
+    # initialize or restore model
     if reload_filename == None:
         logging.info('Initializing model parameters from scratch...')
         init_op = tf.global_variables_initializer()
@@ -72,9 +89,22 @@ def create_model(config, sess, ensemble_scope=None, train=False):
     else:
         logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
         saver.restore(sess, os.path.abspath(reload_filename))
+        if train:
+            # The global step is currently recorded in two places:
+            #   1. model.t, a tf.Variable read and updated by the optimizer
+            #   2. progress.uidx, a Python integer updated by train()
+            # We reset model.t to the value recorded in progress to allow the
+            # value to be controlled by the user (either explicitly by
+            # configuring the value in the progress file or implicitly by using
+            # --no_reload_training_progress).
+            model.reset_global_step(progress.uidx, sess)
+
     logging.info('Done')
 
-    return model, saver 
+    if train:
+        return model, saver, progress
+    else:
+        return model, saver
 
 def load_prior(config, sess, saver):
      logging.info('Loading prior model parameters from file ' + os.path.abspath(config.prior_model))
@@ -159,7 +189,7 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
-    model, saver = create_model(config, sess, train=True)
+    model, saver, progress = create_model(config, sess, train=True)
 
     x,x_mask,y,y_mask = model.get_score_inputs()
     apply_grads = model.get_apply_grads()
@@ -183,17 +213,15 @@ def train(config, sess):
     total_loss = 0.
     n_sents, n_words = 0, 0
     last_time = time.time()
-    uidx = sess.run(t)
-    logging.info("Initial uidx={}".format(uidx))
-    STOP = False
-    for eidx in xrange(config.max_epochs):
-        logging.info('Starting epoch {0}'.format(eidx))
+    logging.info("Initial uidx={}".format(progress.uidx))
+    for progress.eidx in xrange(progress.eidx, config.max_epochs):
+        logging.info('Starting epoch {0}'.format(progress.eidx))
         for source_sents, target_sents in text_iterator:
             x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
-            write_summary_for_this_batch = config.summaryFreq and ((uidx % config.summaryFreq == 0) or (config.finish_after and uidx % config.finish_after == 0))
+            write_summary_for_this_batch = config.summaryFreq and ((progress.uidx % config.summaryFreq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
             out = [t, apply_grads, objective]
@@ -204,24 +232,26 @@ def train(config, sess):
             total_loss += objective_value*batch_size
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
-            uidx += 1
+            progress.uidx += 1
 
             if write_summary_for_this_batch:
                 writer.add_summary(out_values[3], out_values[0])
 
-            if config.dispFreq and uidx % config.dispFreq == 0:
+            if config.dispFreq and progress.uidx % config.dispFreq == 0:
                 duration = time.time() - last_time
                 disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
-                logging.info('{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, eidx, uidx, total_loss/n_words, n_words/duration, n_sents/duration))
+                logging.info('{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, progress.eidx, progress.uidx, total_loss/n_words, n_words/duration, n_sents/duration))
                 last_time = time.time()
                 total_loss = 0.
                 n_sents = 0
                 n_words = 0
 
-            if config.saveFreq and uidx % config.saveFreq == 0:
-                saver.save(sess, save_path=config.saveto, global_step=uidx)
+            if config.saveFreq and progress.uidx % config.saveFreq == 0:
+                saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
+                progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
+                progress.save_to_json(progress_path)
 
-            if config.sampleFreq and uidx % config.sampleFreq == 0:
+            if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:, :10]
                 samples = model.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
@@ -230,7 +260,7 @@ def train(config, sess):
                     logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
                     logging.info('SAMPLE: {0}'.format(seqs2words(ss, num_to_target)))
 
-            if config.beamFreq and uidx % config.beamFreq == 0:
+            if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
                 samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
                 # samples is a list with shape batch x beam x len
@@ -241,15 +271,17 @@ def train(config, sess):
                     for i, (sample, cost) in enumerate(ss):
                         logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seqs2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
 
-            if config.validFreq and uidx % config.validFreq == 0:
+            if config.validFreq and progress.uidx % config.validFreq == 0:
                 validate(sess, valid_text_iterator, model)
 
-            if config.finish_after and uidx % config.finish_after == 0:
+            if config.finish_after and progress.uidx % config.finish_after == 0:
                 logging.info("Maximum number of updates reached")
-                saver.save(sess, save_path=config.saveto, global_step=uidx)
-                STOP=True
+                saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
+                progress.estop=True
+                progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
+                progress.save_to_json(progress_path)
                 break
-        if STOP:
+        if progress.estop:
             break
 
 def translate(config, sess):
@@ -377,6 +409,8 @@ def parse_args():
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
                          help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --saveto")
+    data.add_argument('--no_reload_training_progress', action='store_false',  dest='reload_training_progress',
+                         help="don't reload training progress (only used if --reload is enabled)")
     data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
                          help="directory for saving summaries (default: same directory as the --saveto file)")
     data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
