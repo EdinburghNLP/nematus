@@ -47,9 +47,12 @@ def create_model(config, sess, ensemble_scope=None, train=False):
     if config.reload != None:
         if config.reload == 'latest_checkpoint':
             reload_filename = tf.train.latest_checkpoint(os.path.dirname(config.saveto))
-            assert (reload_filename == None) or (os.path.relpath(reload_filename).split('-')[0] == os.path.relpath(config.saveto)), \
-                   "Mismatching model filename found in the same directory while reloading from the latest checkpoint"
-            logging.info('Latest checkpoint found in directory ' + os.path.abspath(os.path.dirname(config.saveto)))
+            if reload_filename != None:
+                if (os.path.basename(reload_filename).rsplit('-', 1)[0] !=
+                    os.path.basename(config.saveto)):
+                    logging.error("Mismatching model filename found in the same directory while reloading from the latest checkpoint")
+                    sys.exit(1)
+                logging.info('Latest checkpoint found in directory ' + os.path.abspath(os.path.dirname(config.saveto)))
         else:
             reload_filename = config.reload
     if (reload_filename == None) and (config.prior_model != None):
