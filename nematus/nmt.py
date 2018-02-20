@@ -63,9 +63,11 @@ def create_model(config, sess, ensemble_scope=None, train=False):
     # initialize or reload training progress
     if train:
         progress = training_progress.TrainingProgress()
+        progress.bad_counter = 0
         progress.uidx = 0
         progress.eidx = 0
         progress.estop = False
+        progress.history_errs = []
         if reload_filename and config.reload_training_progress:
             path = reload_filename + '.progress.json'
             if os.path.exists(path):
@@ -272,7 +274,21 @@ def train(config, sess):
                         logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seqs2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
-                validate(sess, valid_text_iterator, model)
+                costs = validate(sess, valid_text_iterator, model)
+                # validation loss is mean of normalized sentence log probs
+                valid_loss = sum(costs) / len(costs)
+                if (len(progress.history_errs) == 0 or
+                    valid_loss < min(progress.history_errs)):
+                    progress.bad_counter = 0
+                    saver.save(sess, save_path=config.saveto)
+                    progress_path = '{0}.progress.json'.format(config.saveto)
+                    progress.save_to_json(progress_path)
+                else:
+                    progress.bad_counter += 1
+                    if progress.bad_counter > config.patience:
+                        progress.estop = True
+                        break
+                progress.history_errs.append(valid_loss)
 
             if config.finish_after and progress.uidx % config.finish_after == 0:
                 logging.info("Maximum number of updates reached")
