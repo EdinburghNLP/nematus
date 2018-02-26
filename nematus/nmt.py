@@ -186,7 +186,8 @@ def init_params(options):
                                               main_activation=options['decoder_main_activation'],
                                               main_recurrent_identity_init=options['decoder_main_recurrent_identity_init'],
                                               post_activation_input=options['decoder_post_activation_input'],
-                                              zero_init_main_input=options['decoder_zero_init_main_input'])
+                                              zero_init_main_input=options['decoder_zero_init_main_input'],
+                                              linear_gate_activation=['decoder_linear_gate_activation'])
 
     # deeper layers of the decoder
     if options['dec_depth'] > 1:
@@ -208,7 +209,8 @@ def init_params(options):
                                             main_activation=options['decoder_main_activation'],
                                             main_recurrent_identity_init=options['decoder_main_recurrent_identity_init'],
                                             post_activation_input=options['decoder_post_activation_input'],
-                                            zero_init_main_input=options['decoder_zero_init_main_input'])
+                                            zero_init_main_input=options['decoder_zero_init_main_input'],
+                                            linear_gate_activation=['decoder_linear_gate_activation'])
 
     # readout
     output_hidden_dim = options['dim_word']
@@ -421,6 +423,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                             attention_hidden_activation=options['attention_hidden_activation'],
                                             reset_gate=not options['decoder_gru_no_reset_gate'],
                                             main_activation=options['decoder_main_activation'],
+                                            linear_gate_activation=['decoder_linear_gate_activation'],
                                             crelurhn_layer_norm_on_state=not options['decoder_crelurhn_cond_no_layer_norm_on_state'],
                                             profile=profile)
     # hidden states of the decoder gru
@@ -465,6 +468,7 @@ def build_decoder(tparams, options, y, ctx, init_state, dropout, x_mask=None, y_
                                               attention_hidden_activation=options['attention_hidden_activation'],
                                               reset_gate=not options['decoder_gru_no_reset_gate'],
                                               main_activation=options['decoder_main_activation'],
+                                              linear_gate_activation=['decoder_linear_gate_activation'],
                                               crelurhn_layer_norm_on_state=not options['decoder_crelurhn_cond_no_layer_norm_on_state'],
                                               profile=profile)[0]
 
@@ -1146,6 +1150,7 @@ def train(dim_word=512,  # word vector dimensionality
           decoder_main_recurrent_identity_init=False,
           decoder_post_activation_input=False,
           decoder_zero_init_main_input=False,
+          decoder_linear_gate_activation=False,
           decoder_crelurhn_cond_no_layer_norm_on_state=False,
           encoder_trainable_initial_state=False,
           encoder_gru_no_reset_gate=False,
@@ -1828,7 +1833,7 @@ if __name__ == '__main__':
     network.add_argument('--output_crelu_hidden_dim', type=int, default=-1, metavar='INT',
                          help="output hidden layer size (-1: same as --dim_word) (default: %(default)s)")
     network.add_argument('--decoder_main_activation', type=str, default='tanh',
-                         choices=['tanh', 'prelu', 'crelu'],
+                         choices=['tanh', 'prelu', 'crelu', 'lin2tanh', 'linear'],
                          help='activation function in the main (proposal) gate of the decoder (default: %(default)s)')
     network.add_argument('--decoder_main_recurrent_identity_init', action="store_true", dest='decoder_main_recurrent_identity_init',
                          help='Initialize the weights of the main (proposal) gate of the decoder as the identity matrix')
@@ -1836,6 +1841,8 @@ if __name__ == '__main__':
                          help='Enable post-activation input in the decoder with LL-initializaiton for improved information flow')
     network.add_argument('--decoder_zero_init_main_input', action="store_true", dest='decoder_zero_init_main_input',
                          help='Initialize the main (proposal) input weights of the decoder to zero')
+    network.add_argument('--decoder_linear_gate_activation', action="store_true", dest='decoder_linear_gate_activation',
+                         help='Disable the logistic sigmoid activation on the reset and update gates')
     network.add_argument('--decoder_crelurhn_cond_no_layer_norm_on_state', action="store_true", dest='decoder_crelurhn_cond_no_layer_norm_on_state',
                          help='Disable layer normalization on the state proposal of the crelurhn decoder')
 

@@ -765,7 +765,8 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
                         main_activation='tanh',
                         main_recurrent_identity_init=False,
                         post_activation_input=False,
-                        zero_init_main_input=False):
+                        zero_init_main_input=False,
+                        linear_gate_activation=False):
     if nin is None:
         nin = options['dim']
     if dim is None:
@@ -783,6 +784,10 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     scale_mul = 1.0
     scale_mul_main = numpy.sqrt(0.5) if (main_activation == 'prelu') and (not post_activation_input) else 1.0
     scale_mul_main_in = 0.0 if zero_init_main_input else scale_mul_main
+    scale_add_gates = 0.5 if linear_gate_activation else 0.0
+    if linear_gate_activation and reset_gate:
+        scale_add_gates = numpy.concatenate([1.0 * numpy.ones((dim)), 0.5 * numpy.ones((dim))]).astype(floatX)
+    scale_mul_gates = 0.0 if linear_gate_activation else 1.0 	
 
     n_aux_gates = 2 if reset_gate else 1
     W = numpy.concatenate([norm_weight(nin, dim), norm_weight(nin, dim)], axis=1) if reset_gate else norm_weight(nin, dim)
@@ -812,6 +817,11 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     elif main_activation == 'crelu':
         params[pp(prefix, 'Ux_post_pos')] = Ux.T
         params[pp(prefix, 'Ux_post_neg')] = -Ux.T
+    elif main_activation == 'lin2tanh':
+        params[pp(prefix, 'lin2tanh_linx')]  = numpy.ones((dim_nonlin,)).astype(floatX)
+        params[pp(prefix, 'lin2tanh_tanhx')] = numpy.zeros((dim_nonlin,)).astype(floatX)
+    elif main_activation == 'linear':
+        pass
     else:
         assert False, 'Unknown main activation %s' % main_activation
 
@@ -829,10 +839,13 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
         elif main_activation == 'crelu':
             params[pp(prefix, 'Ux_nl_post_pos'+suffix)] = Ux_nl.T
             params[pp(prefix, 'Ux_nl_post_neg'+suffix)] = -Ux_nl.T
+        elif main_activation == 'lin2tanh':
+            params[pp(prefix, 'lin2tanh_linx_nl'+suffix)]  = numpy.ones((dim_nonlin,)).astype(floatX)
+            params[pp(prefix, 'lin2tanh_tanhx_nl'+suffix)] = numpy.zeros((dim_nonlin,)).astype(floatX)
         
         if options['layer_normalisation']:
-            params[pp(prefix,'U_nl%s_lnb' % suffix)] = scale_add * numpy.ones((n_aux_gates*dim)).astype(floatX)
-            params[pp(prefix,'U_nl%s_lns' % suffix)] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
+            params[pp(prefix,'U_nl%s_lnb' % suffix)] = scale_add_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
+            params[pp(prefix,'U_nl%s_lns' % suffix)] = scale_mul_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
             params[pp(prefix,'Ux_nl%s_lnb' % suffix)] = scale_add * numpy.ones((1*dim)).astype(floatX)
             params[pp(prefix,'Ux_nl%s_lns' % suffix)] = scale_mul_main * numpy.ones((1*dim)).astype(floatX)
             if main_activation == 'crelu':
@@ -860,7 +873,7 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
                 
             if options['layer_normalisation']:
                 params[pp(prefix,'Wc%s_lnb') % suffix] = scale_add * numpy.ones((n_aux_gates*dim)).astype(floatX)
-                params[pp(prefix,'Wc%s_lns') % suffix] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
+                params[pp(prefix,'Wc%s_lns') % suffix] = scale_mul_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
                 params[pp(prefix,'Wcx%s_lnb') % suffix] = scale_add * numpy.ones((1*dim)).astype(floatX)
                 params[pp(prefix,'Wcx%s_lns') % suffix] = scale_mul_main_in * numpy.ones((1*dim)).astype(floatX)
                 if post_activation_input:
@@ -879,9 +892,9 @@ def param_init_gru_cond(options, params, prefix='gru_cond',
     if options['layer_normalisation']:
         # layer-normalization parameters
         params[pp(prefix,'W_lnb')] = scale_add * numpy.ones((n_aux_gates*dim)).astype(floatX)
-        params[pp(prefix,'W_lns')] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
-        params[pp(prefix,'U_lnb')] = scale_add * numpy.ones((n_aux_gates*dim)).astype(floatX)
-        params[pp(prefix,'U_lns')] = scale_mul * numpy.ones((n_aux_gates*dim)).astype(floatX)
+        params[pp(prefix,'W_lns')] = scale_mul_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
+        params[pp(prefix,'U_lnb')] = scale_add_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
+        params[pp(prefix,'U_lns')] = scale_mul_gates * numpy.ones((n_aux_gates*dim)).astype(floatX)
         params[pp(prefix,'Wx_lnb')] = scale_add * numpy.ones((1*dim)).astype(floatX)
         params[pp(prefix,'Wx_lns')] = scale_mul_main_in * numpy.ones((1*dim)).astype(floatX)
         if post_activation_input:
@@ -918,6 +931,7 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                    attention_hidden_activation='tanh',
                    reset_gate=True,
                    main_activation='tanh',
+                   linear_gate_activation=False,
                    profile=False,
                    **kwargs):
 
@@ -995,7 +1009,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         if options['layer_normalisation']:
             preact1 = layer_norm(preact1, tparams[pp(prefix, 'U_lnb')], tparams[pp(prefix, 'U_lns')])
         preact1 += x_
-        preact1 = tensor.nnet.sigmoid(preact1)
+        if not linear_gate_activation:
+            preact1 = tensor.nnet.sigmoid(preact1)
 
         if reset_gate:
             r1 = _slice(preact1, 0, dim)
@@ -1019,6 +1034,10 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
         elif main_activation == 'crelu':
             h1_pos = tensor.nnet.relu(preactx1)
             h1_neg = tensor.nnet.relu(-preactx1)
+        elif main_activation == 'lin2tanh':
+            h1 = tparams[pp(prefix, 'lin2tanh_tanhx')] * tensor.tanh(preactx1) + tparams[pp(prefix, 'lin2tanh_linx')] * preactx1
+        elif main_activation == 'linear':
+            h1 = preactx1
         
         if post_activation_input:
             if main_activation == 'crelu':
@@ -1051,7 +1070,8 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
                 if options['layer_normalisation']:
                     ctx1_ = layer_norm(ctx1_, tparams[pp(prefix, 'Wc%s_lnb' % suffix)], tparams[pp(prefix, 'Wc%s_lns' % suffix)])
                 preact2 += ctx1_
-            preact2 = tensor.nnet.sigmoid(preact2)
+            if not linear_gate_activation:
+                preact2 = tensor.nnet.sigmoid(preact2)
 
             if reset_gate:
                 r2 = _slice(preact2, 0, dim)
@@ -1078,6 +1098,10 @@ def gru_cond_layer(tparams, state_below, options, dropout, prefix='gru',
             elif main_activation == 'crelu':
                 h2_pos = tensor.nnet.relu(preactx2)
                 h2_neg = tensor.nnet.relu(-preactx2)
+            elif main_activation == 'lin2tanh':
+                h2 = tparams[pp(prefix, 'lin2tanh_tanhx_nl'+suffix)] * tensor.tanh(preactx2) + tparams[pp(prefix, 'lin2tanh_linx_nl'+suffix)] * preactx2
+            elif main_activation == 'linear':
+                h2 = preactx2
                 
             if post_activation_input:
                 ctx2_post = tensor.dot(ctx_*ctx_dropout[1], wn(pp(prefix, 'Wcx_post'+suffix))) # dropout mask is shared over mini-steps

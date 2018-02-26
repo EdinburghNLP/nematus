@@ -95,6 +95,8 @@ def fill_options(options):
         options['decoder_post_activation_input'] = False
     if not 'decoder_zero_init_main_input' in options:
         options['decoder_zero_init_main_input'] = False
+    if not 'decoder_linear_gate_activation' in options:
+        options['decoder_linear_gate_activation'] = False
     if not 'decoder_crelurhn_cond_no_layer_norm_on_state' in options:
         options['decoder_crelurhn_cond_no_layer_norm_on_state'] = False
 
