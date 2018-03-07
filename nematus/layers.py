@@ -14,13 +14,25 @@ def matmul3d(x3d, matrix):
     result3d = tf.reshape(result2d, [shape[0], shape[1], mat_shape[1]])
     return result3d
 
+def apply_dropout_mask(x, mask, input_is_3d=False):
+    if mask == None:
+        return x
+    if input_is_3d:
+        mask_3d = tf.expand_dims(mask, 0)
+        mask_3d = tf.tile(mask_3d, [tf.shape(x)[0], 1, 1])
+        return tf.multiply(x, mask_3d)
+    else:
+        return tf.multiply(x, mask)
+
 class FeedForwardLayer(object):
     def __init__(self,
                  in_size,
                  out_size,
+                 batch_size,
                  non_linearity=tf.nn.tanh,
                  W=None,
-                 use_layer_norm=False):
+                 use_layer_norm=False,
+                 dropout_input=None):
         if W is None:
             W = tf.Variable(norm_weight(in_size, out_size), name='W')
         self.W = W
@@ -29,8 +41,16 @@ class FeedForwardLayer(object):
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
             self.layer_norm = LayerNormLayer(layer_size=out_size)
+        # Create a dropout mask for input values (reused at every timestep).
+        if dropout_input == None:
+            self.dropout_mask = None
+        else:
+            ones = tf.ones([batch_size, in_size])
+            self.dropout_mask = dropout_input(ones)
+
 
     def forward(self, x, input_is_3d=False):
+        x = apply_dropout_mask(x, self.dropout_mask, input_is_3d)
         if input_is_3d:
             y = matmul3d(x, self.W) + self.b
         else:
@@ -97,8 +117,11 @@ class GRUStep(object):
     def __init__(self, 
                  input_size, 
                  state_size,
+                 batch_size,
                  use_layer_norm=False,
-                 nematus_compat=False):
+                 nematus_compat=False,
+                 dropout_input=None,
+                 dropout_state=None):
         self.state_to_gates = tf.Variable(
                                 numpy.concatenate(
                                     [ortho_weight(state_size),
@@ -137,7 +160,26 @@ class GRUStep(object):
             with tf.name_scope('proposal_state_norm'):
                 self.proposal_state_norm = LayerNormLayer(state_size)
 
+        # Create dropout masks for input values (reused at every timestep).
+        if dropout_input == None:
+            self.dropout_mask_input_to_gates = None
+            self.dropout_mask_input_to_proposal = None
+        else:
+            ones = tf.ones([batch_size, input_size])
+            self.dropout_mask_input_to_gates = dropout_input(ones)
+            self.dropout_mask_input_to_proposal = dropout_input(ones)
+
+        # Create dropout masks for state values (reused at every timestep).
+        if dropout_state == None:
+            self.dropout_mask_state_to_gates = None
+            self.dropout_mask_state_to_proposal = None
+        else:
+            ones = tf.ones([batch_size, state_size])
+            self.dropout_mask_state_to_gates = dropout_state(ones)
+            self.dropout_mask_state_to_proposal = dropout_state(ones)
+
     def _get_gates_x(self, x, input_is_3d=False):
+        x = apply_dropout_mask(x, self.dropout_mask_input_to_gates, input_is_3d)
         if input_is_3d:
             gates_x = matmul3d(x, self.input_to_gates)
         else:
@@ -149,6 +191,8 @@ class GRUStep(object):
         return gates_x
 
     def _get_gates_state(self, prev_state):
+        prev_state = apply_dropout_mask(prev_state,
+                                        self.dropout_mask_state_to_gates)
         gates_state = tf.matmul(prev_state, self.state_to_gates)
         if self.nematus_compat:
             gates_state += self.gates_bias
@@ -157,6 +201,8 @@ class GRUStep(object):
         return gates_state
 
     def _get_proposal_x(self,x, input_is_3d=False):
+        x = apply_dropout_mask(x, self.dropout_mask_input_to_proposal,
+                               input_is_3d)
         if input_is_3d: 
             proposal_x = matmul3d(x, self.input_to_proposal)
         else:
@@ -168,6 +214,8 @@ class GRUStep(object):
         return proposal_x
 
     def _get_proposal_state(self, prev_state):
+        prev_state = apply_dropout_mask(prev_state,
+                                        self.dropout_mask_state_to_proposal)
         proposal_state = tf.matmul(prev_state, self.state_to_proposal)
         # placing the bias here is unorthodox, but we're keeping this behavior for compatibility with dl4mt-tutorial
         if self.nematus_compat:
@@ -220,7 +268,9 @@ class AttentionStep(object):
                  context_mask,
                  state_size,
                  hidden_size,
-                 use_layer_norm=False):
+                 use_layer_norm=False,
+                 dropout_context=None,
+                 dropout_state=None):
         self.state_to_hidden = tf.Variable(
                                 norm_weight(state_size, hidden_size),
                                 name='state_to_hidden')
@@ -242,8 +292,26 @@ class AttentionStep(object):
         self.context = context
         self.context_mask = context_mask
 
+        batch_size = tf.shape(context)[1]
+
+        # Create a dropout mask for context values (reused at every timestep).
+        if dropout_context == None:
+            self.dropout_mask_context_to_hidden = None
+        else:
+            ones = tf.ones([batch_size, context_state_size])
+            self.dropout_mask_context_to_hidden = dropout_context(ones)
+
+        # Create a dropout mask for state values (reused at every timestep).
+        if dropout_state == None:
+            self.dropout_mask_state_to_hidden = None
+        else:
+            ones = tf.ones([batch_size, state_size])
+            self.dropout_mask_state_to_hidden = dropout_state(ones)
+
         # precompute these activations, they are the same at each step
         # Ideally the compiler would have figured out that too
+        context = apply_dropout_mask(context,
+                                     self.dropout_mask_context_to_hidden, True)
         self.hidden_from_context = matmul3d(context, self.context_to_hidden)
         self.hidden_from_context += self.hidden_bias
         if self.use_layer_norm:
@@ -251,6 +319,8 @@ class AttentionStep(object):
                 self.hidden_context_norm.forward(self.hidden_from_context, input_is_3d=True)
 
     def forward(self, prev_state):
+        prev_state = apply_dropout_mask(prev_state,
+                                        self.dropout_mask_state_to_hidden)
         hidden_from_state = tf.matmul(prev_state, self.state_to_hidden)
         if self.use_layer_norm:
             hidden_from_state = \

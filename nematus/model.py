@@ -9,7 +9,11 @@ import inference
 
 
 class Decoder(object):
-    def __init__(self, config, context, x_mask):
+    def __init__(self, config, context, x_mask, dropout_target,
+                 dropout_embedding, dropout_hidden):
+
+        self.dropout_target = dropout_target
+
         with tf.name_scope("initial_state_constructor"):
             context_sum = tf.reduce_sum(
                             context * tf.expand_dims(x_mask, axis=2),
@@ -21,7 +25,9 @@ class Decoder(object):
             self.init_state_layer = FeedForwardLayer(
                                         in_size=config.state_size * 2,
                                         out_size=config.state_size,
-                                        use_layer_norm=config.use_layer_norm)
+                                        batch_size=tf.shape(x_mask)[1],
+                                        use_layer_norm=config.use_layer_norm,
+                                        dropout_input=dropout_hidden)
             self.init_state = self.init_state_layer.forward(context_mean)
 
             self.translation_maxlen = config.translation_maxlen
@@ -34,31 +40,40 @@ class Decoder(object):
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)
 
+        batch_size = tf.shape(x_mask)[1]
+
         self.grustep1 = GRUStep(
                             input_size=config.embedding_size,
                             state_size=config.state_size,
+                            batch_size=batch_size,
                             use_layer_norm=config.use_layer_norm,
-                            nematus_compat=False)
+                            nematus_compat=False,
+                            dropout_input=dropout_embedding,
+                            dropout_state=dropout_hidden)
         self.attstep = AttentionStep(
                         context=context,
                         context_state_size=2*config.state_size,
                         context_mask=x_mask,
                         state_size=config.state_size,
                         hidden_size=2*config.state_size,
-                        use_layer_norm=config.use_layer_norm)
+                        use_layer_norm=config.use_layer_norm,
+                        dropout_context=dropout_hidden,
+                        dropout_state=dropout_hidden)
         self.grustep2 = GRUStep(
                             input_size=2*config.state_size,
                             state_size=config.state_size,
+                            batch_size=batch_size,
                             use_layer_norm=config.use_layer_norm,
-                            nematus_compat=True)
+                            nematus_compat=True,
+                            dropout_input=dropout_hidden,
+                            dropout_state=dropout_hidden)
         with tf.name_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
                 W = self.y_emb_layer.get_embeddings()
                 W = tf.transpose(W)
-            self.predictor = Predictor(
-                                config,
-                                hidden_to_logits_W=W)
+            self.predictor = Predictor(config, batch_size, dropout_embedding,
+                                       dropout_hidden, hidden_to_logits_W=W)
 
 
     def sample(self):
@@ -106,6 +121,8 @@ class Decoder(object):
         with tf.name_scope("y_embeddings_layer"):
             y_but_last = tf.slice(y, [0,0], [tf.shape(y)[0]-1, -1])
             y_embs = self.y_emb_layer.forward(y_but_last)
+            if self.dropout_target != None:
+                y_embs = self.dropout_target(y_embs)
             y_embs = tf.pad(y_embs,
                             mode='CONSTANT',
                             paddings=[[1,0],[0,0],[0,0]]) # prepend zeros
@@ -130,30 +147,38 @@ class Decoder(object):
         states, attended_states = RecurrentLayer(
                                     initial_state=init_state_att_ctx,
                                     step_fn=step_fn).forward((gates_x, proposal_x))
+
         logits = self.predictor.get_logits(y_embs, states, attended_states, multi_step=True)
         return logits
 
 class Predictor(object):
-    def __init__(self, config, hidden_to_logits_W=None):
+    def __init__(self, config, batch_size, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
         self.config = config
+
         with tf.name_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = FeedForwardLayer(
                                 in_size=config.embedding_size,
                                 out_size=config.embedding_size,
+                                batch_size=batch_size,
                                 non_linearity=lambda y: y,
-                                use_layer_norm=config.use_layer_norm)
+                                use_layer_norm=config.use_layer_norm,
+                                dropout_input=dropout_embedding)
         with tf.name_scope("state_to_hidden"):
             self.state_to_hidden = FeedForwardLayer(
                                     in_size=config.state_size,
                                     out_size=config.embedding_size,
+                                    batch_size=batch_size,
                                     non_linearity=lambda y: y,
-                                    use_layer_norm=config.use_layer_norm)
+                                    use_layer_norm=config.use_layer_norm,
+                                    dropout_input=dropout_hidden)
         with tf.name_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = FeedForwardLayer(
                                     in_size=2*config.state_size,
                                     out_size=config.embedding_size,
+                                    batch_size=batch_size,
                                     non_linearity=lambda y: y,
-                                    use_layer_norm=config.use_layer_norm)
+                                    use_layer_norm=config.use_layer_norm,
+                                    dropout_input=dropout_hidden)
 
         if config.output_hidden_activation == 'prelu':
             with tf.name_scope("hidden_prelu"):
@@ -163,8 +188,10 @@ class Predictor(object):
             self.hidden_to_logits = FeedForwardLayer(
                             in_size=config.embedding_size,
                             out_size=config.target_vocab_size,
+                            batch_size=batch_size,
                             non_linearity=lambda y: y,
-                            W=hidden_to_logits_W)
+                            W=hidden_to_logits_W,
+                            dropout_input=dropout_embedding)
 
     def get_logits(self, y_embs, states, attended_states, multi_step=True):
         with tf.name_scope("prev_emb_to_hidden"):
@@ -195,30 +222,44 @@ class Predictor(object):
 
 
 class Encoder(object):
-    def __init__(self, config):
+    def __init__(self, config, batch_size, dropout_source, dropout_embedding,
+                 dropout_hidden):
+
+        self.dropout_source = dropout_source
+
         with tf.name_scope("embedding"):
             self.emb_layer = EmbeddingLayer(
                                 config.source_vocab_size,
                                 config.embedding_size)
 
+
         with tf.name_scope("forwardEncoder"):
             self.gru_forward = GRUStep(
                                 input_size=config.embedding_size,
                                 state_size=config.state_size,
+                                batch_size=batch_size,
                                 use_layer_norm=config.use_layer_norm,
-                                nematus_compat=False)
+                                nematus_compat=False,
+                                dropout_input=dropout_embedding,
+                                dropout_state=dropout_hidden)
 
         with tf.name_scope("backwardEncoder"):
             self.gru_backward = GRUStep(
                                     input_size=config.embedding_size,
                                     state_size=config.state_size,
+                                    batch_size=batch_size,
                                     use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=False)
+                                    nematus_compat=False,
+                                    dropout_input=dropout_embedding,
+                                    dropout_state=dropout_hidden)
         self.state_size = config.state_size
 
     def get_context(self, x, x_mask):
+
         with tf.name_scope("embedding"):
             embs = self.emb_layer.forward(x)
+            if self.dropout_source != None:
+                embs = self.dropout_source(embs)
             embs_reversed = tf.reverse(embs, axis=[0], name='reverse_embeddings')
 
         batch_size = tf.shape(x)[1]
@@ -283,13 +324,50 @@ class StandardModel(object):
                         dtype=tf.float32,
                         name='y_mask',
                         shape=(seqLen, batch_size))
+        self.training = tf.placeholder_with_default(
+            False, name='training', shape=())
+
+        # Dropout functions for words.
+        # These probabilistically zero-out all embedding values for individual
+        # words.
+        dropout_source, dropout_target = None, None
+        if config.use_dropout and config.dropout_source > 0.0:
+            def dropout_source(x):
+                return tf.layers.dropout(
+                    x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
+                    rate=config.dropout_source, training=self.training)
+        if config.use_dropout and config.dropout_target > 0.0:
+            def dropout_target(y):
+                return tf.layers.dropout(
+                    y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
+                    rate=config.dropout_target, training=self.training)
+
+        # Dropout functions for use within FF, GRU, and attention layers.
+        # We use Gal and Ghahramani (2016)-style dropout, so these functions
+        # will be used to create 2D dropout masks that are reused at every
+        # timestep.
+        dropout_embedding, dropout_hidden = None, None
+        if config.use_dropout and config.dropout_embedding > 0.0:
+            def dropout_embedding(e):
+                return tf.layers.dropout(e, noise_shape=tf.shape(e),
+                                         rate=config.dropout_embedding,
+                                         training=self.training)
+        if config.use_dropout and config.dropout_hidden > 0.0:
+            def dropout_hidden(h):
+                return tf.layers.dropout(h, noise_shape=tf.shape(h),
+                                         rate=config.dropout_hidden,
+                                         training=self.training)
+
+        batch_size = tf.shape(self.x)[1]  # dynamic value
 
         with tf.name_scope("encoder"):
-            self.encoder = Encoder(config)
+            self.encoder = Encoder(config, batch_size, dropout_source,
+                                   dropout_embedding, dropout_hidden)
             ctx = self.encoder.get_context(self.x, self.x_mask)
-        
+
         with tf.name_scope("decoder"):
-            self.decoder = Decoder(config, ctx, self.x_mask)
+            self.decoder = Decoder(config, ctx, self.x_mask, dropout_target,
+                                   dropout_embedding, dropout_hidden)
             self.logits = self.decoder.score(self.y)
 
         with tf.name_scope("loss"):
@@ -331,7 +409,7 @@ class StandardModel(object):
         self.beam_size, self.beam_ys, self.parents, self.cost = None, None, None, None
 
     def get_score_inputs(self):
-        return self.x, self.x_mask, self.y, self.y_mask
+        return self.x, self.x_mask, self.y, self.y_mask, self.training
     
     def get_loss(self):
         return self.loss_per_sentence

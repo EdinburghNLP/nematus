@@ -193,7 +193,7 @@ def train(config, sess):
 
     model, saver, progress = create_model(config, sess, train=True)
 
-    x,x_mask,y,y_mask = model.get_score_inputs()
+    x,x_mask,y,y_mask,training = model.get_score_inputs()
     apply_grads = model.get_apply_grads()
     t = model.get_global_step()
     loss_per_sentence = model.get_loss()
@@ -225,7 +225,7 @@ def train(config, sess):
                 continue
             write_summary_for_this_batch = config.summaryFreq and ((progress.uidx % config.summaryFreq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (seqLen, batch_size) = x_in.shape
-            inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in}
+            inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in, training:True}
             out = [t, apply_grads, objective]
             if write_summary_for_this_batch:
                 out += [merged]
@@ -365,11 +365,11 @@ def validate(sess, valid_text_iterator, model, normalization_alpha=0):
     costs = []
     total_loss = 0.
     total_seen = 0
-    x,x_mask,y,y_mask = model.get_score_inputs()
+    x,x_mask,y,y_mask,training = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
     for x_v, y_v in valid_text_iterator:
         x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
-        feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in}
+        feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in, training:False}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
 
         # normalize scores according to output length
@@ -441,6 +441,16 @@ def parse_args():
                          help="source vocabulary size (default: %(default)s)")
     network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
+    network.add_argument('--use_dropout', action="store_true",
+                         help="use dropout layer (default: %(default)s)")
+    network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
+                         help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
+                         help="dropout source words (0: no dropout) (default: %(default)s)")
+    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
+                         help="dropout target words (0: no dropout) (default: %(default)s)")
     network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
