@@ -875,7 +875,9 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
 
     for x, y in iterator:
         #ensure consistency in number of factors
-        if len(x[0][0]) != options['factors']:
+
+        n_x_factors = len(x[0][0]) if not options['contrastive_training'] else len(x[0][0][0])
+        if n_x_factors != options['factors']:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(options['factors'], len(x[0][0])))
             sys.exit(1)
 
@@ -901,7 +903,7 @@ def pred_probs(f_log_probs, prepare_data, options, iterator, verbose=True, norma
         else:
             pprobs = f_log_probs(*f_log_pobs_args)
 
-        if options['contrastive_training']:
+        if options['contrastive_training'] and len(batch.y_extra_ids) > 0:
             # discard contrastive examples
             pprobs = pprobs[:-len(batch.y_extra_ids)]
 
@@ -1581,12 +1583,12 @@ def train(dim_word=512,  # word vector dimensionality
             # generate some samples with the model and display them
             if sampleFreq and numpy.mod(training_progress.uidx, sampleFreq) == 0:
                 # FIXME: random selection?
-                for jj in xrange(numpy.minimum(5, x.shape[2])):
+                for jj in xrange(numpy.minimum(5, batch.x.shape[2])):
                     stochastic = True
-                    x_current = x[:, :, jj][:, :, None]
+                    x_current = batch.x[:, :, jj][:, :, None]
 
                     # remove padding
-                    x_current = x_current[:,:x_mask.astype('int64')[:, jj].sum(),:]
+                    x_current = x_current[:,:batch.x_mask.astype('int64')[:, jj].sum(),:]
 
                     sample, score, sample_word_probs, alignment, hyp_graph = gen_sample([f_init], [f_next],
                                                x_current,
@@ -1597,11 +1599,11 @@ def train(dim_word=512,  # word vector dimensionality
                                                suppress_unk=False,
                                                return_hyp_graph=False)
                     print 'Source ', jj, ': ',
-                    for pos in range(x.shape[1]):
-                        if x[0, pos, jj] == 0:
+                    for pos in range(batch.x.shape[1]):
+                        if batch.x[0, pos, jj] == 0:
                             break
                         for factor in range(factors):
-                            vv = x[factor, pos, jj]
+                            vv = batch.x[factor, pos, jj]
                             if vv in worddicts_r[factor]:
                                 sys.stdout.write(worddicts_r[factor][vv])
                             else:
@@ -1612,7 +1614,7 @@ def train(dim_word=512,  # word vector dimensionality
                                 sys.stdout.write(' ')
                     print
                     print 'Truth ', jj, ' : ',
-                    for vv in y[:, jj]:
+                    for vv in batch.y[:, jj]:
                         if vv == 0:
                             break
                         if vv in worddicts_r[-1]:
