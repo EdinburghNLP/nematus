@@ -8,26 +8,6 @@ from __future__ import unicode_literals
 
 def fill_options(options):
 
-    # old theano versions
-    if not 'dropout_embedding' in options:
-        options['dropout_embedding'] = 0
-    if not 'dropout_hidden' in options:
-        options['dropout_hidden'] = 0
-    if not 'dropout_source' in options:
-        options['dropout_source'] = 0
-    if not 'dropout_target' in options:
-        options['dropout_target'] = 0
-    if not 'factors' in options:
-        options['factors'] = 1
-    if not 'dim_per_factor' in options:
-        options['dim_per_factor'] = [options['dim_word']]
-    if not 'model_version' in options:
-        options['model_version'] = 0
-    if not 'tie_decoder_embeddings' in options:
-        options['tie_decoder_embeddings'] = False
-    if not 'map_decay_c' in options:
-        options['map_decay_c'] = 0.0
-
     # name changes in TF
     if not 'source_vocab_size' in options:
         options['source_vocab_size'] = options['n_words_src']
@@ -45,6 +25,26 @@ def fill_options(options):
     if not 'source_vocab' in options:
         options['source_vocab'] = options['dictionaries'][0]
         options['target_vocab'] = options['dictionaries'][1]
+
+    # set defaults for newer options that may not be present
+    if not 'dropout_embedding' in options:
+        options['dropout_embedding'] = 0
+    if not 'dropout_hidden' in options:
+        options['dropout_hidden'] = 0
+    if not 'dropout_source' in options:
+        options['dropout_source'] = 0
+    if not 'dropout_target' in options:
+        options['dropout_target'] = 0
+    if not 'factors' in options:
+        options['factors'] = 1
+    if not 'dim_per_factor' in options:
+        options['dim_per_factor'] = [options['embedding_size']]
+    if not 'model_version' in options:
+        options['model_version'] = 0
+    if not 'tie_decoder_embeddings' in options:
+        options['tie_decoder_embeddings'] = False
+    if not 'map_decay_c' in options:
+        options['map_decay_c'] = 0.0
 
     # extra config options in TF; only translation_maxlen matters for translation/scoring
     if not 'translation_maxlen' in options:
