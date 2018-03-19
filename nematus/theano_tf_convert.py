@@ -110,6 +110,7 @@ class FakeConfig(object):
         self.optimizer = 'adam'
         self.decay_c = 0.0
         self.map_decay_c = 0.0
+        self.use_dropout = False
 
         # This option doesn't exist in the Theano version of Nematus - the
         # activation function is always tanh.
