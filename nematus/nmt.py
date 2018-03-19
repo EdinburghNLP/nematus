@@ -286,6 +286,7 @@ def train(config, sess):
                 else:
                     progress.bad_counter += 1
                     if progress.bad_counter > config.patience:
+                        logging.info('Early Stop!')
                         progress.estop = True
                         break
                 progress.history_errs.append(valid_loss)
