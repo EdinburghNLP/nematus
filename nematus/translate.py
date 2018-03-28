@@ -10,18 +10,20 @@ import os
 import logging
 import argparse
 import time
-import inference
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
 from Queue import Empty
 
-from util import load_dict, load_config, seqs2words, prepare_data
+from util import load_dict, load_config, seq2words, prepare_data
 from compat import fill_options
 from hypgraph import HypGraphRenderer
 from settings import TranslationSettings
 
 from nmt import create_model, load_dictionaries, read_all_lines
+
+import inference
+import exception
 
 class Translation(object):
     """
@@ -175,7 +177,13 @@ class Translator(object):
         """
         source_batches = []
 
-        batches, idxs = read_all_lines(self._options[0], input_)
+        try:
+            batches, idxs = read_all_lines(self._options[0], input_)
+        except exception.Error as x:
+            logging.error(x.msg)
+            for process in self._processes:
+                process.terminate()
+            sys.exit(1)
 
         for idx, batch in enumerate(batches):
 
@@ -253,17 +261,17 @@ class Translator(object):
                 for j, (sent, cost) in enumerate(beam):
                     translation = Translation(sentence_id=i,
                                               source_words=source_segments[i],
-                                              target_words=seqs2words(sent, self._num_to_target, join=False),
+                                              target_words=seq2words(sent, self._num_to_target, join=False),
                                               score=cost,
                                               hypothesis_id=j)
                     n_best_list.append(translation)
                 translations.append(n_best_list)
             else:
                 best_hypo, cost = beam[0]
-                target_words = seqs2words(best_hypo, self._num_to_target)
+                target_words = seq2words(best_hypo, self._num_to_target)
                 translation = Translation(sentence_id=i,
                                             source_words=source_segments[i],
-                                            target_words=seqs2words(best_hypo, self._num_to_target, join=False),
+                                            target_words=seq2words(best_hypo, self._num_to_target, join=False),
                                             score=cost)
                 translations.append(translation)
 

@@ -22,6 +22,7 @@ from data_iterator import TextIterator
 from model import *
 from util import *
 import training_progress
+import exception
 
 def create_model(config, sess, ensemble_scope=None, train=False):
     logging.info('Building model...')
@@ -129,8 +130,8 @@ def load_data(config):
     text_iterator = TextIterator(
                         source=config.source_dataset,
                         target=config.target_dataset,
-                        source_dicts=[config.source_vocab],
-                        target_dict=config.target_vocab,
+                        source_dicts=config.source_dicts,
+                        target_dict=config.target_dict,
                         batch_size=config.batch_size,
                         maxlen=config.maxlen,
                         n_words_source=config.source_vocab_size,
@@ -138,6 +139,7 @@ def load_data(config):
                         skip_empty=True,
                         shuffle_each_epoch=config.shuffle_each_epoch,
                         sort_by_length=config.sort_by_length,
+                        use_factor=(config.factors > 1),
                         maxibatch_size=config.maxibatch_size,
                         keep_data_in_memory=config.keep_train_set_in_memory)
 
@@ -145,14 +147,15 @@ def load_data(config):
         valid_text_iterator = TextIterator(
                             source=config.valid_source_dataset,
                             target=config.valid_target_dataset,
-                            source_dicts=[config.source_vocab],
-                            target_dict=config.target_vocab,
+                            source_dicts=config.source_dicts,
+                            target_dict=config.target_dict,
                             batch_size=config.valid_batch_size,
                             maxlen=config.maxlen,
                             n_words_source=config.source_vocab_size,
                             n_words_target=config.target_vocab_size,
                             shuffle_each_epoch=False,
                             sort_by_length=True,
+                            use_factor=(config.factors > 1),
                             maxibatch_size=config.maxibatch_size)
     else:
         logging.info('no validation set loaded')
@@ -161,17 +164,29 @@ def load_data(config):
     return text_iterator, valid_text_iterator
 
 def load_dictionaries(config):
-    source_to_num = load_dict(config.source_vocab)
-    target_to_num = load_dict(config.target_vocab)
-    num_to_source = reverse_dict(source_to_num)
+    source_to_num = [load_dict(d) for d in config.source_dicts]
+    target_to_num = load_dict(config.target_dict)
+    num_to_source = [reverse_dict(d) for d in source_to_num]
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
 
 def read_all_lines(config, sentences):
     source_to_num, _, _, _ = load_dictionaries(config)
-    lines = map(lambda l: l.strip().split(), sentences)
-    fn = lambda w: [source_to_num[w] if w in source_to_num else 1] # extra [ ] brackets for factor dimension
-    lines = map(lambda l: map(lambda w: fn(w), l), lines)
+    lines = []
+    for sent in sentences:
+        line = []
+        for w in sent.strip().split():
+            if config.factors == 1:
+                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
+            else:
+                w = [source_to_num[i][f] if f in source_to_num[i] else 1
+                                         for (i,f) in enumerate(w.split('|'))]
+                if len(w) != config.factors:
+                    raise exception.Error(
+                        'Expected {0} factors, but input word has {1}\n'.format(
+                            config.factors, len(w)))
+            line.append(w)
+        lines.append(line)
     lines = numpy.array(lines)
     lengths = numpy.array(map(lambda l: len(l), lines))
     lengths = numpy.array(lengths)
@@ -211,7 +226,7 @@ def train(config, sess):
     json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
-    source_to_num, target_to_num, num_to_source, num_to_target = load_dictionaries(config)
+    _, _, num_to_source, num_to_target = load_dictionaries(config)
     total_loss = 0.
     n_sents, n_words = 0, 0
     last_time = time.time()
@@ -219,12 +234,15 @@ def train(config, sess):
     for progress.eidx in xrange(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
         for source_sents, target_sents in text_iterator:
+            if len(source_sents[0][0]) != config.factors:
+                logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(config.factors, len(source_sents[0][0])))
+                sys.exit(1)
             x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
             write_summary_for_this_batch = config.summaryFreq and ((progress.uidx % config.summaryFreq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
-            (seqLen, batch_size) = x_in.shape
+            (factors, seqLen, batch_size) = x_in.shape
             inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in, training:True}
             out = [t, apply_grads, objective]
             if write_summary_for_this_batch:
@@ -254,27 +272,27 @@ def train(config, sess):
                 progress.save_to_json(progress_path)
 
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
-                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:, :10]
+                x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
                 samples = model.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
-                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
-                    logging.info('SAMPLE: {0}'.format(seqs2words(ss, num_to_target)))
+                    logging.info('SOURCE: {0}'.format(factoredseq2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seq2words(yy, num_to_target)))
+                    logging.info('SAMPLE: {0}'.format(seq2words(ss, num_to_target)))
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
-                x_small, x_mask_small, y_small = x_in[:, :10], x_mask_in[:, :10], y_in[:,:10]
+                x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
                 samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    logging.info('SOURCE: {0}'.format(seqs2words(xx, num_to_source)))
-                    logging.info('TARGET: {0}'.format(seqs2words(yy, num_to_target)))
+                    logging.info('SOURCE: {0}'.format(factoredseq2words(xx, num_to_source)))
+                    logging.info('TARGET: {0}'.format(seq2words(yy, num_to_target)))
                     for i, (sample, cost) in enumerate(ss):
-                        logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seqs2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
+                        logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seq2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
-                costs = validate(sess, valid_text_iterator, model)
+                costs = validate(config, sess, valid_text_iterator, model)
                 # validation loss is mean of normalized sentence log probs
                 valid_loss = sum(costs) / len(costs)
                 if (len(progress.history_errs) == 0 or
@@ -308,7 +326,11 @@ def translate(config, sess):
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
     n_sent = 0
-    batches, idxs = read_all_lines(config, open(config.valid_source_dataset, 'r').readlines())
+    try:
+        batches, idxs = read_all_lines(config, open(config.valid_source_dataset, 'r').readlines())
+    except exception.Error as x:
+        logging.error(x.msg)
+        sys.exit(1)
     in_queue, out_queue = Queue(), Queue()
     model._get_beam_search_outputs(config.beam_size)
     
@@ -354,21 +376,24 @@ def translate(config, sess):
         beam = sorted(beam, key=lambda (sent, cost): cost)
         if config.n_best:
             for sent, cost in beam:
-                print seqs2words(sent, num_to_target), '[%f]' % cost
+                print seq2words(sent, num_to_target), '[%f]' % cost
         else:
             best_hypo, cost = beam[0]
-            print seqs2words(best_hypo, num_to_target)
+            print seq2words(best_hypo, num_to_target)
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
 
 
-def validate(sess, valid_text_iterator, model, normalization_alpha=0):
+def validate(config, sess, valid_text_iterator, model, normalization_alpha=0):
     costs = []
     total_loss = 0.
     total_seen = 0
     x,x_mask,y,y_mask,training = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
     for x_v, y_v in valid_text_iterator:
+        if len(x_v[0][0]) != config.factors:
+            logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
+            sys.exit(1)
         x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
         feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in, training:False}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
@@ -379,7 +404,7 @@ def validate(sess, valid_text_iterator, model, normalization_alpha=0):
             loss_per_sentence_out /= adjusted_lengths
 
         total_loss += loss_per_sentence_out.sum()
-        total_seen += x_v_in.shape[1]
+        total_seen += x_v_in.shape[2]
         costs += list(loss_per_sentence_out)
         logging.info( "Seen {0}".format(total_seen))
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(total_loss/total_seen, total_loss, total_seen))
@@ -390,16 +415,17 @@ def validate_helper(config, sess):
     valid_text_iterator = TextIterator(
                         source=config.valid_source_dataset,
                         target=config.valid_target_dataset,
-                        source_dicts=[config.source_vocab],
-                        target_dict=config.target_vocab,
+                        source_dicts=config.source_dicts,
+                        target_dict=config.target_dict,
                         batch_size=config.valid_batch_size,
                         maxlen=config.maxlen,
                         n_words_source=config.source_vocab_size,
                         n_words_target=config.target_vocab_size,
                         shuffle_each_epoch=False,
                         sort_by_length=False, #TODO
+                        use_factor=(config.factors > 1),
                         maxibatch_size=config.maxibatch_size)
-    costs = validate(sess, valid_text_iterator, model)
+    costs = validate(config, sess, valid_text_iterator, model)
     lines = open(config.valid_target_dataset).readlines()
     for cost, line in zip(costs, lines):
         logging.info("{0} {1}".format(cost,line.strip()))
@@ -442,6 +468,10 @@ def parse_args():
                          help="source vocabulary size (default: %(default)s)")
     network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
+    network.add_argument('--factors', type=int, default=1, metavar='INT',
+                         help="number of input factors (default: %(default)s)")
+    network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
+                         help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")
     network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
@@ -555,12 +585,29 @@ def parse_args():
             config.valid_source_dataset = config.valid_datasets[0]
             config.valid_target_dataset = config.valid_datasets[1]
 
-    # put check in place until factors are implemented
-    if len(config.dictionaries) != 2:
-        logging.error('exactly two dictionaries need to be provided')
+    # check factor-related options are consistent
+
+    if config.dim_per_factor == None:
+        if config.factors == 1:
+            config.dim_per_factor = [config.embedding_size]
+        else:
+            logging.error('if using factored input, you must specify \'dim_per_factor\'\n')
+            sys.exit(1)
+
+    if len(config.dim_per_factor) != config.factors:
+        logging.error('mismatch between \'--factors\' ({0}) and \'--dim_per_factor\' ({1} entries)\n'.format(config.factors, len(config.dim_per_factor)))
         sys.exit(1)
-    config.source_vocab = config.dictionaries[0]
-    config.target_vocab = config.dictionaries[-1]
+
+    if sum(config.dim_per_factor) != config.embedding_size:
+        logging.error('mismatch between \'--embedding_size\' ({0}) and \'--dim_per_factor\' (sums to {1})\n'.format(config.embedding_size, sum(config.dim_per_factor)))
+        sys.exit(1)
+
+    if len(config.dictionaries) != config.factors + 1:
+        logging.error('\'--dictionaries\' must specify one dictionary per source factor and one target dictionary\n')
+        sys.exit(1)
+
+    config.source_dicts = config.dictionaries[:-1]
+    config.target_dict = config.dictionaries[-1]
 
     return config
 

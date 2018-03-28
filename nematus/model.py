@@ -228,9 +228,9 @@ class Encoder(object):
         self.dropout_source = dropout_source
 
         with tf.name_scope("embedding"):
-            self.emb_layer = EmbeddingLayer(
+            self.emb_layer = EmbeddingLayerWithFactors(
                                 config.source_vocab_size,
-                                config.embedding_size)
+                                config.dim_per_factor)
 
 
         with tf.name_scope("forwardEncoder"):
@@ -262,7 +262,7 @@ class Encoder(object):
                 embs = self.dropout_source(embs)
             embs_reversed = tf.reverse(embs, axis=[0], name='reverse_embeddings')
 
-        batch_size = tf.shape(x)[1]
+        batch_size = tf.shape(x)[-1]
         init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
         with tf.name_scope("forwardEncoder"):
             gates_x, proposal_x = self.gru_forward.precompute_from_x(embs)
@@ -311,7 +311,7 @@ class StandardModel(object):
         self.x = tf.placeholder(
                     dtype=tf.int32,
                     name='x',
-                    shape=(seqLen, batch_size))
+                    shape=(config.factors, seqLen, batch_size))
         self.x_mask = tf.placeholder(
                         dtype=tf.float32,
                         name='x_mask',
@@ -358,7 +358,7 @@ class StandardModel(object):
                                          rate=config.dropout_hidden,
                                          training=self.training)
 
-        batch_size = tf.shape(self.x)[1]  # dynamic value
+        batch_size = tf.shape(self.x)[-1]  # dynamic value
 
         with tf.name_scope("encoder"):
             self.encoder = Encoder(config, batch_size, dropout_source,
@@ -456,10 +456,10 @@ class StandardModel(object):
 
 
     def beam_search(self, session, x_in, x_mask_in, beam_size):
-        # x_in, x_mask_in are numpy arrays with shape (seqLen, batch)
-        # change init_state, context, context_in_attention_layer
-        x_in = numpy.repeat(x_in, repeats=beam_size, axis=1)
-        x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=1)
+        # x_in is a numpy array with shape (factors, seqLen, batch)
+        # x_mask is a numpy array with shape (seqLen, batch)
+        x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
+        x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=-1)
         feeds = {self.x : x_in, self.x_mask : x_mask_in}
         beam_ys, parents, cost = self._get_beam_search_outputs(beam_size)
         beam_ys_out, parents_out, cost_out = session.run(

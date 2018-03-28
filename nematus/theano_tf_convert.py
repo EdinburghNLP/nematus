@@ -94,9 +94,11 @@ th2tf = {
     'uidx' : 'time:0'}
 
 class FakeConfig(object):
-    def __init__(self, state_size, embedding_size, source_vocab_size, target_vocab_size, layer_norm, tie_decoder_embeddings):
+    def __init__(self, state_size, dim_per_factor, source_vocab_size, target_vocab_size, layer_norm, tie_decoder_embeddings):
         self.state_size = state_size
-        self.embedding_size = embedding_size
+        self.dim_per_factor = dim_per_factor
+        self.embedding_size = sum(dim_per_factor)
+        self.factors = len(dim_per_factor)
         self.source_vocab_size = source_vocab_size
         self.target_vocab_size = target_vocab_size
 
@@ -128,7 +130,18 @@ def theano_to_tensorflow_model(in_path, out_path):
     saved_model = np.load(in_path)
 
     # Create fake config
-    src_size, src_emb_size = saved_model['Wemb'].shape
+    src_size, first_src_emb_size = saved_model['Wemb'].shape
+    dim_per_factor = [first_src_emb_size]
+    # check for additional source embedding layers (one per factor)
+    i = 1
+    while True:
+        th_name = 'Wemb{0}'.format(i)
+        if th_name not in saved_model:
+            break
+        dim_per_factor.append(saved_model[th_name].shape[1])
+        th2tf[th_name] = 'encoder/embedding/embeddings_{0}:0'.format(i)
+        i += 1
+    src_emb_size = sum(dim_per_factor)
     trg_size, trg_emb_size = saved_model['Wemb_dec'].shape
     state_size = saved_model['decoder_U'].shape[0]
     if 'encoder_Wx_lns' in saved_model:
@@ -140,7 +153,7 @@ def theano_to_tensorflow_model(in_path, out_path):
     else:
         tie_decoder_embeddings = True
     assert trg_emb_size == src_emb_size, 'src_emb_size ({}) and trg_emb_size ({}) do not equal, this is unsupported in TF'.format(src_emb_size, trg_emb_size)
-    fake_config = FakeConfig(state_size, src_emb_size, src_size, trg_size, layer_norm, tie_decoder_embeddings)
+    fake_config = FakeConfig(state_size, dim_per_factor, src_size, trg_size, layer_norm, tie_decoder_embeddings)
 
     with tf.Session() as sess:
         model, saver = create_model(fake_config, sess)

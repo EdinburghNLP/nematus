@@ -32,12 +32,13 @@ def score_model(source_file, target_file, scorer_settings, options):
             valid_text_iterator = TextIterator(
                         source=source_file.name,
                         target=target_file.name,
-                        source_dicts=[option.source_vocab],
-                        target_dict=option.target_vocab,
+                        source_dicts=option.source_dicts,
+                        target_dict=option.target_dict,
                         batch_size=scorer_settings.b,
                         maxlen=float('inf'),
                         n_words_source=option.source_vocab_size,
                         n_words_target=option.target_vocab_size,
+                        use_factor=(option.factors > 1),
                         sort_by_length=False)
 
             score = validate(sess, valid_text_iterator, model, normalization_alpha=scorer_settings.normalization_alpha)

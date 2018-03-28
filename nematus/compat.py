@@ -22,9 +22,10 @@ def fill_options(options):
             options['use_layer_norm'] = False
     if not 'state_size' in options:
         options['state_size'] = options['dim']
-    if not 'source_vocab' in options:
-        options['source_vocab'] = options['dictionaries'][0]
-        options['target_vocab'] = options['dictionaries'][1]
+
+    # handle vocab dictionaries
+    options['source_dicts'] = options['dictionaries'][:-1]
+    options['target_dict'] = options['dictionaries'][-1]
 
     # set defaults for newer options that may not be present
     if not 'dropout_embedding' in options:

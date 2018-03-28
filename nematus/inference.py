@@ -2,11 +2,12 @@ import numpy
 import tensorflow as tf
 
 def beam_search(models, session, x_in, x_mask_in, beam_size):
-    x_in = numpy.repeat(x_in, repeats=beam_size, axis=1)
-    x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=1)
+    # x_in is a numpy array with shape (factors, seqLen, batch)
+    # x_mask is a numpy array with shape (seqLen, batch)
+    x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
+    x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=-1)
     feeds = {}
     for model in models:
-        # x_in, x_mask_in are numpy arrays with shape (seqLen, batch)
         # change init_state, context, context_in_attention_layer
         feeds[model.x] = x_in
         feeds[model.x_mask] = x_mask_in

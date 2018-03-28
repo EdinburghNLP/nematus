@@ -47,6 +47,7 @@ class TextIterator:
                  skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
+                 use_factor=False,
                  maxibatch_size=20,
                  keep_data_in_memory=False):
         if keep_data_in_memory:
@@ -71,6 +72,7 @@ class TextIterator:
         self.batch_size = batch_size
         self.maxlen = maxlen
         self.skip_empty = skip_empty
+        self.use_factor = use_factor
 
         self.n_words_source = n_words_source
         self.n_words_target = n_words_target
@@ -170,7 +172,10 @@ class TextIterator:
                     break
                 tmp = []
                 for w in ss:
-                    w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                    if self.use_factor:
+                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                    else:
+                        w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
                     tmp.append(w)
                 ss = tmp
 

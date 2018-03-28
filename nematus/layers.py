@@ -66,13 +66,27 @@ class EmbeddingLayer(object):
                  embedding_size):
         self.embeddings = tf.Variable(norm_weight(vocabulary_size, embedding_size),
                                       name='embeddings')
-    
+
     def forward(self, x):
         embs = tf.nn.embedding_lookup(self.embeddings, x)
         return embs
 
     def get_embeddings(self):
         return self.embeddings
+
+class EmbeddingLayerWithFactors(object):
+    def __init__(self,
+                 vocabulary_size,
+                 dim_per_factor):
+        self.embedding_matrices = [
+            tf.Variable(norm_weight(vocabulary_size, dim), name='embeddings')
+            for dim in dim_per_factor]
+
+    def forward(self, x):
+        # Assumes that x has shape: factors, ...
+        embs = [tf.nn.embedding_lookup(matrix, x[i])
+                for i, matrix in enumerate(self.embedding_matrices)]
+        return tf.concat(embs, axis=-1)
 
 class RecurrentLayer(object):
     def __init__(self,

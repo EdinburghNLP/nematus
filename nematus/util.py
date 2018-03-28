@@ -34,7 +34,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None):
 
     n_samples = len(seqs_x)
     n_factors = len(seqs_x[0][0])
-    assert n_factors == 1
     maxlen_x = numpy.max(lengths_x) + 1
     maxlen_y = numpy.max(lengths_y) + 1
 
@@ -47,9 +46,6 @@ def prepare_data(seqs_x, seqs_y, maxlen=None):
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
-
-    # there is only one factor, get rid of that dimension
-    x = x.squeeze(axis=0)
 
     return x, x_mask, y, y_mask
 
@@ -80,15 +76,29 @@ def load_config(basename):
             sys.exit(1)
 
 
-def seqs2words(seq, inverse_target_dictionary, join=True):
+def seq2words(seq, inverse_dictionary, join=True):
+    seq = numpy.array(seq, dtype='int64')
+    assert len(seq.shape) == 1
+    return factoredseq2words(seq.reshape([seq.shape[0], 1]),
+                             [inverse_dictionary],
+                             join)
+
+def factoredseq2words(seq, inverse_dictionaries, join=True):
+    assert len(seq.shape) == 2
+    assert len(inverse_dictionaries) == seq.shape[1]
     words = []
     for i, w in enumerate(seq):
-        if w == 0:
-            assert (i == len(seq) - 1) or (seq[i+1] == 0), ('Zero not at the end of sequence', seq)
-        elif w in inverse_target_dictionary:
-            words.append(inverse_target_dictionary[w])
-        else:
-            words.append('UNK')
+        factors = []
+        for j, f in enumerate(w):
+            if f == 0:
+                assert (i == len(seq) - 1) or (seq[i+1][j] == 0), \
+                       ('Zero not at the end of sequence', seq)
+            elif f in inverse_dictionaries[j]:
+                factors.append(inverse_dictionaries[j][f])
+            else:
+                factors.append('UNK')
+        word = '|'.join(factors)
+        words.append(word)
     return ' '.join(words) if join else words
 
 def reverse_dict(dictt):
