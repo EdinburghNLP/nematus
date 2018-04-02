@@ -1,6 +1,11 @@
 CHANGELOG
 ---------
 
+dev
+----------
+
+ - more efficient training with --token_batch_size
+
 v0.2 (17/12/2017)
 ----------
 

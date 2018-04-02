@@ -113,6 +113,14 @@ GPU, float16, CuDNN 5.1, theano 0.9.0-RELEASE, new GPU backend:
 
 >> 222.28 sentences/s
 
+GPU, CUDNN 7, theano 1.0, scan.allow_output_prealloc=True:
+
+>> 308 sentences/s
+
+GPU, CUDNN 7, theano 1.0, scan.allow_output_prealloc=True, dynamic batching ("--token_batch_size 2000"):
+
+>> 363 sentences/s
+
 See SPEED.md for more benchmark results on different hardware and hyperparameter configurations.
 
 USAGE INSTRUCTIONS
@@ -170,6 +178,7 @@ execute nematus/nmt.py to train a model.
 | --maxlen INT         |  maximum sequence length (default: 100) |
 | --optimizer {adam,adadelta,rmsprop,sgd} | optimizer (default: adam) |
 | --batch_size INT     | minibatch size (default: 80) |
+| --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. |
 | --max_epochs INT     | maximum number of epochs (default: 5000) |
 | --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
 | --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
@@ -187,6 +196,7 @@ execute nematus/nmt.py to train a model.
 |---                   |--- |
 | --valid_datasets PATH PATH | parallel validation corpus (source and target)| (default: None) |
 | --valid_batch_size INT | validation minibatch size (default: 80) |
+| --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. |
 | --validFreq INT       | validation frequency (default: 10000) |
 | --patience INT        | early stopping patience (default: 10) |
 | --anneal_restarts INT | when patience runs out, restart training INT times with annealed learning rate (default: 0) |
