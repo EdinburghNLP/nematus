@@ -141,6 +141,7 @@ def load_data(config):
                         sort_by_length=config.sort_by_length,
                         use_factor=(config.factors > 1),
                         maxibatch_size=config.maxibatch_size,
+                        token_batch_size=config.token_batch_size,
                         keep_data_in_memory=config.keep_train_set_in_memory)
 
     if config.validFreq and config.valid_source_dataset and config.valid_target_dataset:
@@ -156,7 +157,8 @@ def load_data(config):
                             shuffle_each_epoch=False,
                             sort_by_length=True,
                             use_factor=(config.factors > 1),
-                            maxibatch_size=config.maxibatch_size)
+                            maxibatch_size=config.maxibatch_size,
+                            token_batch_size=config.valid_token_batch_size)
     else:
         logging.info('no validation set loaded')
         valid_text_iterator = None
@@ -495,6 +497,8 @@ def parse_args():
                          help="maximum sequence length for training and validation (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
+    training.add_argument('--token_batch_size', type=int, default=0, metavar='INT',
+                          help="minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: %(default)s)")
     training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
@@ -531,6 +535,8 @@ def parse_args():
                          help=argparse.SUPPRESS)
     validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
                          help="validation minibatch size (default: %(default)s)")
+    training.add_argument('--valid_token_batch_size', type=int, default=0, metavar='INT',
+                          help="validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: %(default)s)")
     validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
                          help="validation frequency (default: %(default)s)")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
