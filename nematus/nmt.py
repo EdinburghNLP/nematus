@@ -1154,7 +1154,9 @@ def train(dim_word=512,  # word vector dimensionality
           maxlen=100,  # maximum length of the description
           optimizer='adam',
           batch_size=16,
+          token_batch_size=0,
           valid_batch_size=16,
+          valid_token_batch_size=0,
           saveto='model.npz',
           deep_fusion_lm=None,
           concatenate_lm_decoder=False,
@@ -1345,7 +1347,8 @@ def train(dim_word=512,  # word vector dimensionality
                          indomain_target=domain_interpolation_indomain_datasets[1],
                          interpolation_rate=training_progress.domain_interpolation_cur,
                          use_factor=(factors > 1),
-                         maxibatch_size=maxibatch_size)
+                         maxibatch_size=maxibatch_size,
+                         token_batch_size=token_batch_size)
     else:
         train = TextIterator(datasets[0], datasets[1],
                          dictionaries[:-1], dictionaries[-1],
@@ -1356,7 +1359,8 @@ def train(dim_word=512,  # word vector dimensionality
                          shuffle_each_epoch=shuffle_each_epoch,
                          sort_by_length=sort_by_length,
                          use_factor=(factors > 1),
-                         maxibatch_size=maxibatch_size)
+                         maxibatch_size=maxibatch_size,
+                         token_batch_size=token_batch_size)
 
     if valid_datasets and validFreq:
         valid = TextIterator(valid_datasets[0], valid_datasets[1],
@@ -1364,7 +1368,8 @@ def train(dim_word=512,  # word vector dimensionality
                             n_words_source=n_words_src, n_words_target=n_words,
                             batch_size=valid_batch_size,
                             use_factor=(factors>1),
-                            maxlen=maxlen)
+                            maxlen=maxlen,
+                            token_batch_size=valid_token_batch_size)
     else:
         valid = None
 
@@ -1962,6 +1967,8 @@ if __name__ == '__main__':
                          help="optimizer (default: %(default)s)")
     training.add_argument('--batch_size', type=int, default=80, metavar='INT',
                          help="minibatch size (default: %(default)s)")
+    training.add_argument('--token_batch_size', type=int, default=0, metavar='INT',
+                          help="minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: %(default)s)")
     training.add_argument('--max_epochs', type=int, default=5000, metavar='INT',
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
@@ -1995,6 +2002,8 @@ if __name__ == '__main__':
                          help="parallel validation corpus (source and target) (default: %(default)s)")
     validation.add_argument('--valid_batch_size', type=int, default=80, metavar='INT',
                          help="validation minibatch size (default: %(default)s)")
+    training.add_argument('--valid_token_batch_size', type=int, default=0, metavar='INT',
+                          help="validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: %(default)s)")
     validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
                          help="validation frequency (default: %(default)s)")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',

@@ -22,7 +22,8 @@ class TextIterator:
                  shuffle_each_epoch=False,
                  sort_by_length=True,
                  use_factor=False,
-                 maxibatch_size=20):
+                 maxibatch_size=20,
+                 token_batch_size=0):
         if shuffle_each_epoch:
             self.source_orig = source
             self.target_orig = target
@@ -60,7 +61,7 @@ class TextIterator:
         self.source_buffer = []
         self.target_buffer = []
         self.k = batch_size * maxibatch_size
-        
+        self.token_batch_size = token_batch_size
 
         self.end_of_data = False
 
@@ -85,6 +86,9 @@ class TextIterator:
 
         source = []
         target = []
+
+        source_tokens = 0
+        target_tokens = 0
 
         # fill buffer, if it's empty
         assert len(self.source_buffer) == len(self.target_buffer), 'Buffer size mismatch!'
@@ -141,21 +145,36 @@ class TextIterator:
                     else:
                         w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
                     tmp.append(w)
-                ss = tmp
+                ss_indices = tmp
 
                 # read from source file and map to word index
                 tt = self.target_buffer.pop()
-                tt = [self.target_dict[w] if w in self.target_dict else 1
+                tt_indices = [self.target_dict[w] if w in self.target_dict else 1
                       for w in tt]
                 if self.n_words_target > 0:
-                    tt = [w if w < self.n_words_target else 1 for w in tt]
+                    tt_indices = [w if w < self.n_words_target else 1 for w in tt_indices]
 
-                source.append(ss)
-                target.append(tt)
+                source.append(ss_indices)
+                target.append(tt_indices)
+                source_tokens += len(ss_indices)
+                target_tokens += len(tt_indices)
 
-                if len(source) >= self.batch_size or \
+                if self.token_batch_size:
+                    if source_tokens > self.token_batch_size or \
+                        target_tokens > self.token_batch_size:
+                        # remove last sentence pair (that made batch over-long)
+                        source.pop()
+                        target.pop()
+                        self.source_buffer.append(ss)
+                        self.target_buffer.append(tt)
+
+                        break
+
+                else:
+                    if len(source) >= self.batch_size or \
                         len(target) >= self.batch_size:
-                    break
+                        break
+
         except IOError:
             self.end_of_data = True
 
