@@ -156,9 +156,9 @@ class DomainInterpolatorTextIterator:
                 self.source_buffer.append(ss.strip().split())
                 self.target_buffer.append(tt.strip().split())
 
-            # sort by target buffer
+            # sort by source/target buffer
             if self.sort_by_length:
-                tlen = numpy.array([len(t) for t in self.target_buffer])
+                tlen = numpy.array([max(len(s),len(t)) for (s,t) in zip(self.source_buffer, self.target_buffer)])
                 tidx = tlen.argsort()
 
                 _sbuf = [self.source_buffer[i] for i in tidx]
