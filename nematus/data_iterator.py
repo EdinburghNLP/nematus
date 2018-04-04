@@ -125,8 +125,8 @@ class TextIterator:
         source = []
         target = []
 
-        source_tokens = 0
-        target_tokens = 0
+        longest_source = 0
+        longest_target = 0
 
         # fill buffer, if it's empty
         assert len(self.source_buffer) == len(self.target_buffer), 'Buffer size mismatch!'
@@ -194,12 +194,12 @@ class TextIterator:
 
                 source.append(ss_indices)
                 target.append(tt_indices)
-                source_tokens += len(ss_indices)
-                target_tokens += len(tt_indices)
+                longest_source = max(longest_source, len(ss_indices))
+                longest_target = max(longest_target, len(tt_indices))
 
                 if self.token_batch_size:
-                    if source_tokens > self.token_batch_size or \
-                        target_tokens > self.token_batch_size:
+                    if len(source)*longest_source > self.token_batch_size or \
+                        len(target)*longest_target > self.token_batch_size:
                         # remove last sentence pair (that made batch over-long)
                         source.pop()
                         target.pop()
