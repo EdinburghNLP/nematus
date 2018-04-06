@@ -1398,7 +1398,7 @@ def train(dim_word=512,  # word vector dimensionality
     # load prior model if specified
     if prior_model:
         logging.info('Loading prior model parameters')
-        params, model_options = load_params(prior_model, params, model_options, with_prefix='prior_')
+        params = load_params(prior_model, params, with_prefix='prior_')
 
     # language model parameters and
     # parameter initialization (deep fusion)
