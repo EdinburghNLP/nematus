@@ -23,26 +23,36 @@ from model import *
 from util import *
 import training_progress
 import exception
+import compat
 
 def create_model(config, sess, ensemble_scope=None, train=False):
     logging.info('Building model...')
     model = StandardModel(config)
 
-    # Is this model part of an ensemble?
-    if ensemble_scope == None:
-        # No: it's a standalone model, so the saved variable names should match
-        # model's and we don't need to map them.
-        saver = tf.train.Saver(max_to_keep=None)
-    else:
-        # Yes: there is an active model-specific scope, so tell the Saver to
-        # map the saved variables to the scoped variables.
-        variables = slim.get_variables_to_restore()
-        var_map = {}
-        for v in variables:
-            if v.name.startswith(ensemble_scope):
-                base_name = v.name[len(ensemble_scope):].split(':')[0]
-                var_map[base_name] = v
-        saver = tf.train.Saver(var_map, max_to_keep=None)
+    # Construct a mapping between saved variable names and names in the current
+    # scope. There are two reasons why names might be different:
+    #
+    #   1. This model is part of an ensemble, in which case a model-specific
+    #       name scope will be active.
+    #
+    #   2. The saved model is from an old version of Nematus (before deep model
+    #        support was added) and uses a different variable naming scheme
+    #        for the GRUs.
+    variables = slim.get_variables_to_restore()
+    var_map = {}
+    for v in variables:
+        name = v.name.split(':')[0]
+        if ensemble_scope == None:
+            saved_name = name
+        elif v.name.startswith(ensemble_scope):
+            saved_name = name[len(ensemble_scope):]
+        else: # v belongs to a different model in the ensemble.
+            continue
+        if config.model_version == 0.1:
+            # Backwards compatibility with the old variable naming scheme.
+            saved_name = compat.revert_variable_name(saved_name, 0.1)
+        var_map[saved_name] = v
+    saver = tf.train.Saver(var_map, max_to_keep=None)
 
     # compute reload model filename
     reload_filename = None
@@ -614,6 +624,9 @@ def parse_args():
 
     config.source_dicts = config.dictionaries[:-1]
     config.target_dict = config.dictionaries[-1]
+
+    # set the model version
+    config.model_version = 0.2
 
     return config
 

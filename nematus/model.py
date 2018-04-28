@@ -42,31 +42,35 @@ class Decoder(object):
 
         batch_size = tf.shape(x_mask)[1]
 
-        self.grustep1 = GRUStep(
-                            input_size=config.embedding_size,
-                            state_size=config.state_size,
-                            batch_size=batch_size,
-                            use_layer_norm=config.use_layer_norm,
-                            nematus_compat=False,
-                            dropout_input=dropout_embedding,
-                            dropout_state=dropout_hidden)
-        self.attstep = AttentionStep(
-                        context=context,
-                        context_state_size=2*config.state_size,
-                        context_mask=x_mask,
-                        state_size=config.state_size,
-                        hidden_size=2*config.state_size,
-                        use_layer_norm=config.use_layer_norm,
-                        dropout_context=dropout_hidden,
-                        dropout_state=dropout_hidden)
-        self.grustep2 = GRUStep(
-                            input_size=2*config.state_size,
-                            state_size=config.state_size,
-                            batch_size=batch_size,
-                            use_layer_norm=config.use_layer_norm,
-                            nematus_compat=True,
-                            dropout_input=dropout_hidden,
-                            dropout_state=dropout_hidden)
+        with tf.name_scope("base"):
+            with tf.name_scope("gru0"):
+                self.grustep1 = GRUStep(
+                                    input_size=config.embedding_size,
+                                    state_size=config.state_size,
+                                    batch_size=batch_size,
+                                    use_layer_norm=config.use_layer_norm,
+                                    nematus_compat=False,
+                                    dropout_input=dropout_embedding,
+                                    dropout_state=dropout_hidden)
+            with tf.name_scope("attention"):
+                self.attstep = AttentionStep(
+                                context=context,
+                                context_state_size=2*config.state_size,
+                                context_mask=x_mask,
+                                state_size=config.state_size,
+                                hidden_size=2*config.state_size,
+                                use_layer_norm=config.use_layer_norm,
+                                dropout_context=dropout_hidden,
+                                dropout_state=dropout_hidden)
+            with tf.name_scope("gru1"):
+                self.grustep2 = GRUStep(
+                                    input_size=2*config.state_size,
+                                    state_size=config.state_size,
+                                    batch_size=batch_size,
+                                    use_layer_norm=config.use_layer_norm,
+                                    nematus_compat=True,
+                                    dropout_input=dropout_hidden,
+                                    dropout_state=dropout_hidden)
         with tf.name_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
@@ -233,25 +237,29 @@ class Encoder(object):
                                 config.dim_per_factor)
 
 
-        with tf.name_scope("forwardEncoder"):
-            self.gru_forward = GRUStep(
-                                input_size=config.embedding_size,
-                                state_size=config.state_size,
-                                batch_size=batch_size,
-                                use_layer_norm=config.use_layer_norm,
-                                nematus_compat=False,
-                                dropout_input=dropout_embedding,
-                                dropout_state=dropout_hidden)
+        with tf.name_scope("forward-stack"):
+            with tf.name_scope("level0"):
+                with tf.name_scope("gru0"):
+                    self.gru_forward = GRUStep(
+                                        input_size=config.embedding_size,
+                                        state_size=config.state_size,
+                                        batch_size=batch_size,
+                                        use_layer_norm=config.use_layer_norm,
+                                        nematus_compat=False,
+                                        dropout_input=dropout_embedding,
+                                        dropout_state=dropout_hidden)
 
-        with tf.name_scope("backwardEncoder"):
-            self.gru_backward = GRUStep(
-                                    input_size=config.embedding_size,
-                                    state_size=config.state_size,
-                                    batch_size=batch_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=False,
-                                    dropout_input=dropout_embedding,
-                                    dropout_state=dropout_hidden)
+        with tf.name_scope("backward-stack"):
+            with tf.name_scope("level0"):
+                with tf.name_scope("gru0"):
+                    self.gru_backward = GRUStep(
+                                            input_size=config.embedding_size,
+                                            state_size=config.state_size,
+                                            batch_size=batch_size,
+                                            use_layer_norm=config.use_layer_norm,
+                                            nematus_compat=False,
+                                            dropout_input=dropout_embedding,
+                                            dropout_state=dropout_hidden)
         self.state_size = config.state_size
 
     def get_context(self, x, x_mask):
@@ -264,39 +272,43 @@ class Encoder(object):
 
         batch_size = tf.shape(x)[-1]
         init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
-        with tf.name_scope("forwardEncoder"):
-            gates_x, proposal_x = self.gru_forward.precompute_from_x(embs)
-            def step_fn(prev_state, x):
-                gates_x2d, proposal_x2d = x
-                return self.gru_forward.forward(
-                        prev_state,
-                        gates_x=gates_x2d,
-                        proposal_x=proposal_x2d)
-            states = RecurrentLayer(
-                        initial_state=init_state,
-                        step_fn = step_fn).forward((gates_x, proposal_x))
-
-        with tf.name_scope("backwardEncoder"):
-            gates_x, proposal_x = self.gru_backward.precompute_from_x(embs_reversed)
-            def step_fn(prev_state, x):
-                gates_x2d, proposal_x2d, mask = x
-                new_state = self.gru_backward.forward(
+        with tf.name_scope("forward-stack"):
+            with tf.name_scope("level0"):
+                with tf.name_scope("gru0"):
+                    gates_x, proposal_x = self.gru_forward.precompute_from_x(embs)
+                    def step_fn(prev_state, x):
+                        gates_x2d, proposal_x2d = x
+                        return self.gru_forward.forward(
                                 prev_state,
                                 gates_x=gates_x2d,
                                 proposal_x=proposal_x2d)
-                new_state *= mask # batch x 1
-                # first couple of states of reversed encoder should be zero
-                # this is why we need to multiply by mask
-                # this way, when the reversed encoder reaches actual words
-                # the state will be zeros and not some accumulated garbage
-                return new_state
-                
-            x_mask_r = tf.reverse(x_mask, axis=[0])
-            x_mask_r = tf.expand_dims(x_mask_r, axis=[2]) #seqLen x batch x 1
-            states_reversed = RecurrentLayer(
+                    states = RecurrentLayer(
                                 initial_state=init_state,
-                                step_fn = step_fn).forward((gates_x, proposal_x, x_mask_r))
-            states_reversed = tf.reverse(states_reversed, axis=[0])
+                                step_fn = step_fn).forward((gates_x, proposal_x))
+
+        with tf.name_scope("backward-stack"):
+            with tf.name_scope("level0"):
+                with tf.name_scope("gru0"):
+                    gates_x, proposal_x = self.gru_backward.precompute_from_x(embs_reversed)
+                    def step_fn(prev_state, x):
+                        gates_x2d, proposal_x2d, mask = x
+                        new_state = self.gru_backward.forward(
+                                        prev_state,
+                                        gates_x=gates_x2d,
+                                        proposal_x=proposal_x2d)
+                        new_state *= mask # batch x 1
+                        # first couple of states of reversed encoder should be zero
+                        # this is why we need to multiply by mask
+                        # this way, when the reversed encoder reaches actual words
+                        # the state will be zeros and not some accumulated garbage
+                        return new_state
+
+                    x_mask_r = tf.reverse(x_mask, axis=[0])
+                    x_mask_r = tf.expand_dims(x_mask_r, axis=[2]) #seqLen x batch x 1
+                    states_reversed = RecurrentLayer(
+                                        initial_state=init_state,
+                                        step_fn = step_fn).forward((gates_x, proposal_x, x_mask_r))
+                    states_reversed = tf.reverse(states_reversed, axis=[0])
 
         concat_states = tf.concat([states, states_reversed], axis=2)
         return concat_states
