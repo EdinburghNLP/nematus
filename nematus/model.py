@@ -35,7 +35,7 @@ class Decoder(object):
             self.state_size = config.state_size
             self.target_vocab_size = config.target_vocab_size
 
-        with tf.name_scope("y_embeddings_layer"):
+        with tf.name_scope("embedding"):
             self.y_emb_layer = EmbeddingLayer(
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)

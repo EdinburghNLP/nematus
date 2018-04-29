@@ -53,8 +53,8 @@ def construct_parameter_map(config):
         'ff_state_ln_b' : 'decoder/initial_state_constructor/new_mean:0',
         'ff_state_ln_s' : 'decoder/initial_state_constructor/new_std:0',
 
-        # decoder/y_embeddings_layer
-        'Wemb_dec' : 'decoder/y_embeddings_layer/embeddings:0',
+        # decoder/embedding
+        'Wemb_dec' : 'decoder/embedding/embeddings:0',
 
         # decoder/base/gru0
         'decoder_U' : 'decoder/base/gru0/state_to_gates:0',
