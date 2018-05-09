@@ -50,9 +50,8 @@ def fill_options(options):
 
     # set the default model version.
     if not 'model_version' in options:
-        if from_theano_version:
-            # version 0 is not supported in TensorFlow Nematus
-            assert False  # TODO handle this properly
+        if from_theano_version and options['use_dropout']:
+            assert False # version 0 dropout is not supported in TensorFlow Nematus
         else:
             options['model_version'] = 0.1
 

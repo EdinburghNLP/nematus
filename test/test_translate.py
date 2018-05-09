@@ -29,7 +29,7 @@ class TestTranslate(unittest.TestCase):
         """given two translation outputs, check that output string is identical
         """
         for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
-            self.assertEqual(line, line2)
+            self.assertEqual(line.strip(), line2.strip())
 
 
     def get_settings(self):

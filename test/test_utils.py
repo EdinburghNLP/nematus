@@ -14,7 +14,7 @@ def load_wmt16_model(src, target):
             os.makedirs(path)
         except OSError:
             pass
-        for filename in ['model.npz', 'model.npz.json', 'vocab.{0}.json'.format(src), 'vocab.{0}.json'.format(target)]:
+        for filename in ['model.npz.json', 'model.npz', 'vocab.{0}.json'.format(src), 'vocab.{0}.json'.format(target)]:
             if not os.path.exists(os.path.join(path, filename)):
                 if filename == 'model.npz' and os.path.exists(os.path.join(path, 'model.npz.index')):
                     continue
@@ -24,6 +24,8 @@ def load_wmt16_model(src, target):
                         f.write(chunk)
 
                 # regression test is based on Theano model - convert to TF names
-                if filename == 'model.npz' and not os.path.exists(os.path.join(path, 'model.npz.index')):
+                if filename == 'model.npz.json' and not os.path.exists(os.path.join(path, 'model.npz.index')):
+                    os.copy(os.path.join(path, 'model.npz.json'), os.path.join(path, 'model-theano.npz.json'))
+                elif filename == 'model.npz' and not os.path.exists(os.path.join(path, 'model.npz.index')):
                     os.rename(os.path.join(path, 'model.npz'), os.path.join(path, 'model-theano.npz'))
                     theano_to_tensorflow_model(os.path.join(path, 'model-theano.npz'), os.path.join(path, 'model.npz'))
