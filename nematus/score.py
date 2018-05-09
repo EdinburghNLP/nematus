@@ -41,7 +41,7 @@ def score_model(source_file, target_file, scorer_settings, options):
                         use_factor=(option.factors > 1),
                         sort_by_length=False)
 
-            score = validate(sess, valid_text_iterator, model, normalization_alpha=scorer_settings.normalization_alpha)
+            score = validate(option, sess, valid_text_iterator, model, normalization_alpha=scorer_settings.normalization_alpha)
             scores.append(score)
 
     return scores
