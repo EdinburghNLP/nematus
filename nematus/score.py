@@ -36,8 +36,8 @@ def score_model(source_file, target_file, scorer_settings, options):
                         target_dict=option.target_dict,
                         batch_size=scorer_settings.b,
                         maxlen=float('inf'),
-                        n_words_source=option.source_vocab_size,
-                        n_words_target=option.target_vocab_size,
+                        source_vocab_sizes=option.source_vocab_sizes,
+                        target_vocab_size=option.target_vocab_size,
                         use_factor=(option.factors > 1),
                         sort_by_length=False)
 

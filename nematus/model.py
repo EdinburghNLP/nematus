@@ -233,7 +233,7 @@ class Encoder(object):
 
         with tf.name_scope("embedding"):
             self.emb_layer = EmbeddingLayerWithFactors(
-                                config.source_vocab_size,
+                                config.source_vocab_sizes,
                                 config.dim_per_factor)
 
 

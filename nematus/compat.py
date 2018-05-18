@@ -9,11 +9,16 @@ from __future__ import unicode_literals
 def fill_options(options):
 
     # does this look like an old Theano config?
-    from_theano_version = ('source_vocab_size' not in options)
+    from_theano_version = ('embedding_size' not in options)
 
     # name changes in TF
-    if not 'source_vocab_size' in options:
-        options['source_vocab_size'] = options['n_words_src']
+    if not 'source_vocab_sizes' in options:
+        if 'source_vocab_size' in options:
+            first_factor_size = options['source_vocab_size']
+        else:
+            first_factor_size = options['n_words_src']
+        num_factors = options.get('factors', 1)
+        options['source_vocab_sizes'] = [first_factor_size] * num_factors
     if not 'target_vocab_size' in options:
         options['target_vocab_size'] = options['n_words']
     if not 'embedding_size' in options:

@@ -76,11 +76,12 @@ class EmbeddingLayer(object):
 
 class EmbeddingLayerWithFactors(object):
     def __init__(self,
-                 vocabulary_size,
+                 vocabulary_sizes,
                  dim_per_factor):
+        assert len(vocabulary_sizes) == len(dim_per_factor)
         self.embedding_matrices = [
-            tf.Variable(norm_weight(vocabulary_size, dim), name='embeddings')
-            for dim in dim_per_factor]
+            tf.Variable(norm_weight(vocab_size, dim), name='embeddings')
+                for vocab_size, dim in zip(vocabulary_sizes, dim_per_factor)]
 
     def forward(self, x):
         # Assumes that x has shape: factors, ...

@@ -42,8 +42,8 @@ class TextIterator:
                  source_dicts, target_dict,
                  batch_size=128,
                  maxlen=100,
-                 n_words_source=-1,
-                 n_words_target=-1,
+                 source_vocab_sizes=None,
+                 target_vocab_size=None,
                  skip_empty=False,
                  shuffle_each_epoch=False,
                  sort_by_length=True,
@@ -75,21 +75,23 @@ class TextIterator:
         self.skip_empty = skip_empty
         self.use_factor = use_factor
 
-        self.n_words_source = n_words_source
-        self.n_words_target = n_words_target
+        self.source_vocab_sizes = source_vocab_sizes
+        self.target_vocab_size = target_vocab_size
 
         self.token_batch_size = token_batch_size
 
-        if self.n_words_source > 0:
-            for d in self.source_dicts:
-                for key, idx in d.items():
-                    if idx >= self.n_words_source:
-                        del d[key]
+        if self.source_vocab_sizes != None:
+            assert len(self.source_vocab_sizes) == len(self.source_dicts)
+            for d, vocab_size in zip(self.source_dicts, self.source_vocab_sizes):
+                if vocab_size != None and vocab_size > 0:
+                    for key, idx in d.items():
+                        if idx >= vocab_size:
+                            del d[key]
 
-        if self.n_words_target > 0:
-                for key, idx in self.target_dict.items():
-                    if idx >= self.n_words_target:
-                        del self.target_dict[key]
+        if self.target_vocab_size != None and self.target_vocab_size > 0:
+            for key, idx in self.target_dict.items():
+                if idx >= self.target_vocab_size:
+                    del self.target_dict[key]
 
         self.shuffle = shuffle_each_epoch
         self.sort_by_length = sort_by_length
@@ -189,8 +191,8 @@ class TextIterator:
                 tt = self.target_buffer.pop()
                 tt_indices = [self.target_dict[w] if w in self.target_dict else 1
                       for w in tt]
-                if self.n_words_target > 0:
-                    tt_indices = [w if w < self.n_words_target else 1 for w in tt_indices]
+                if self.target_vocab_size != None:
+                    tt_indices = [w if w < self.target_vocab_size else 1 for w in tt_indices]
 
                 source.append(ss_indices)
                 target.append(tt_indices)

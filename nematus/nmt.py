@@ -144,8 +144,8 @@ def load_data(config):
                         target_dict=config.target_dict,
                         batch_size=config.batch_size,
                         maxlen=config.maxlen,
-                        n_words_source=config.source_vocab_size,
-                        n_words_target=config.target_vocab_size,
+                        source_vocab_sizes=config.source_vocab_sizes,
+                        target_vocab_size=config.target_vocab_size,
                         skip_empty=True,
                         shuffle_each_epoch=config.shuffle_each_epoch,
                         sort_by_length=config.sort_by_length,
@@ -162,8 +162,8 @@ def load_data(config):
                             target_dict=config.target_dict,
                             batch_size=config.valid_batch_size,
                             maxlen=config.maxlen,
-                            n_words_source=config.source_vocab_size,
-                            n_words_target=config.target_vocab_size,
+                            source_vocab_sizes=config.source_vocab_sizes,
+                            target_vocab_size=config.target_vocab_size,
                             shuffle_each_epoch=False,
                             sort_by_length=True,
                             use_factor=(config.factors > 1),
@@ -431,8 +431,8 @@ def validate_helper(config, sess):
                         target_dict=config.target_dict,
                         batch_size=config.valid_batch_size,
                         maxlen=config.maxlen,
-                        n_words_source=config.source_vocab_size,
-                        n_words_target=config.target_vocab_size,
+                        source_vocab_sizes=config.source_vocab_sizes,
+                        target_vocab_size=config.target_vocab_size,
                         shuffle_each_epoch=False,
                         sort_by_length=False, #TODO
                         use_factor=(config.factors > 1),
@@ -476,14 +476,18 @@ def parse_args():
                          help="embedding layer size (default: %(default)s)")
     network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
                          help="hidden state size (default: %(default)s)")
-    network.add_argument('--source_vocab_size', '--n_words_src', type=int, default=-1, metavar='INT',
-                         help="source vocabulary size (default: %(default)s)")
+
+    network.add_argument('--source_vocab_sizes', '--n_words_src', type=int, default=None, nargs='+', metavar='INT',
+                         help="source vocabulary sizes (one per input factor) (default: %(default)s)")
+
     network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")
+
     network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
                          help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
+
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")
     network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
@@ -622,8 +626,38 @@ def parse_args():
         logging.error('\'--dictionaries\' must specify one dictionary per source factor and one target dictionary\n')
         sys.exit(1)
 
+    # set vocabulary sizes
+    vocab_sizes = []
+    if config.source_vocab_sizes == None:
+        vocab_sizes = [-1] * config.factors
+    elif len(config.source_vocab_sizes) == config.factors:
+        vocab_sizes = config.source_vocab_sizes
+    elif len(config.source_vocab_sizes) < config.factors:
+        num_missing = config.factors - len(config.source_vocab_sizes)
+        vocab_sizes += config.source_vocab_sizes + [-1] * num_missing
+    else:
+        logging.error('too many values supplied to \'--source_vocab_sizes\' option (expected one per factor = {0})'.format(config.factors))
+        sys.exit(1)
+    if config.target_vocab_size == -1:
+        vocab_sizes.append(-1)
+    else:
+        vocab_sizes.append(config.target_vocab_size)
+
+    # for unspecified vocabulary sizes, determine sizes from vocabulary dictionaries
+    for i, vocab_size in enumerate(vocab_sizes):
+        if vocab_size >= 0:
+            continue
+        try:
+            d = load_dict(config.dictionaries[i])
+        except:
+            logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
+        vocab_sizes[i] = max(d.values()) + 1
+
     config.source_dicts = config.dictionaries[:-1]
+    config.source_vocab_sizes = vocab_sizes[:-1]
     config.target_dict = config.dictionaries[-1]
+    config.target_vocab_size = vocab_sizes[-1]
+
 
     # set the model version
     config.model_version = 0.2
