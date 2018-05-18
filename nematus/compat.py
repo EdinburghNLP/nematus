@@ -36,6 +36,8 @@ def fill_options(options):
     options['target_dict'] = options['dictionaries'][-1]
 
     # set defaults for newer options that may not be present
+    if not 'use_dropout' in options:
+        options['use_dropout'] = False
     if not 'dropout_embedding' in options:
         options['dropout_embedding'] = 0
     if not 'dropout_hidden' in options:
@@ -95,4 +97,6 @@ def revert_variable_name(name, old_version):
             return tmp.replace("/new_std", "_1/new_std")
         else:
             return tmp + "_1"
+    if "decoder/embedding" in name:
+        return name.replace("decoder/embedding", "decoder/y_embeddings_layer")
     return name
