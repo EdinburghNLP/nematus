@@ -13,6 +13,7 @@ class Decoder(object):
                  dropout_embedding, dropout_hidden):
 
         self.dropout_target = dropout_target
+        batch_size = tf.shape(x_mask)[1]
 
         with tf.name_scope("initial_state_constructor"):
             context_sum = tf.reduce_sum(
@@ -25,7 +26,7 @@ class Decoder(object):
             self.init_state_layer = FeedForwardLayer(
                                         in_size=config.state_size * 2,
                                         out_size=config.state_size,
-                                        batch_size=tf.shape(x_mask)[1],
+                                        batch_size=batch_size,
                                         use_layer_norm=config.use_layer_norm,
                                         dropout_input=dropout_hidden)
             self.init_state = self.init_state_layer.forward(context_mean)
@@ -39,8 +40,6 @@ class Decoder(object):
             self.y_emb_layer = EmbeddingLayer(
                                 vocabulary_size=config.target_vocab_size,
                                 embedding_size=config.embedding_size)
-
-        batch_size = tf.shape(x_mask)[1]
 
         with tf.name_scope("base"):
             with tf.name_scope("gru0"):
@@ -62,15 +61,35 @@ class Decoder(object):
                                 use_layer_norm=config.use_layer_norm,
                                 dropout_context=dropout_hidden,
                                 dropout_state=dropout_hidden)
-            with tf.name_scope("gru1"):
-                self.grustep2 = GRUStep(
+            self.grustep2 = DeepTransitionGRUStep(
                                     input_size=2*config.state_size,
                                     state_size=config.state_size,
                                     batch_size=batch_size,
                                     use_layer_norm=config.use_layer_norm,
                                     nematus_compat=True,
                                     dropout_input=dropout_hidden,
-                                    dropout_state=dropout_hidden)
+                                    dropout_state=dropout_hidden,
+                                    transition_depth=config.dec_base_recurrence_transition_depth-1,
+                                    name_scope_fn=lambda i: "gru{0}".format(i+1))
+
+        with tf.name_scope("high"):
+            if config.dec_depth == 1:
+                self.high_gru_stack = None
+            else:
+                self.high_gru_stack = GRUStack(
+                    input_size=config.state_size,
+                    state_size=config.state_size,
+                    batch_size=batch_size,
+                    use_layer_norm=config.use_layer_norm,
+                    nematus_compat=True,
+                    dropout_input=dropout_hidden,
+                    dropout_state=dropout_hidden,
+                    stack_depth=config.dec_depth-1,
+                    transition_depth=config.dec_high_recurrence_transition_depth,
+                    context_state_size=(2*config.state_size if config.dec_deep_context else 0),
+                    residual_connections=True,
+                    first_residual_output=0)
+
         with tf.name_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
@@ -81,45 +100,60 @@ class Decoder(object):
 
 
     def sample(self):
-       batch_size = tf.shape(self.init_state)[0]
-       i = tf.constant(0)
-       init_ys = -tf.ones(dtype=tf.int32, shape=[batch_size])
-       init_embs = tf.zeros(dtype=tf.float32, shape=[batch_size,self.embedding_size])
-       ys_array = tf.TensorArray(
-                    dtype=tf.int32,
-                    size=self.translation_maxlen,
-                    clear_after_read=True, #TODO: does this help? or will it only introduce bugs in the future?
-                    name='y_sampled_array')
-       init_loop_vars = [i, self.init_state, init_ys, init_embs, ys_array]
-       def cond(i, states, prev_ys, prev_embs, ys_array):
-           return tf.logical_and(
-                   tf.less(i, self.translation_maxlen),
-                   tf.reduce_any(tf.not_equal(prev_ys, 0)))
+        batch_size = tf.shape(self.init_state)[0]
+        high_depth = 0 if self.high_gru_stack == None \
+                       else len(self.high_gru_stack.grus)
+        i = tf.constant(0)
+        init_y = -tf.ones(dtype=tf.int32, shape=[batch_size])
+        init_emb = tf.zeros(dtype=tf.float32,
+                            shape=[batch_size,self.embedding_size])
+        y_array = tf.TensorArray(
+            dtype=tf.int32,
+            size=self.translation_maxlen,
+            clear_after_read=True, #TODO: does this help? or will it only introduce bugs in the future?
+            name='y_sampled_array')
+        init_loop_vars = [i, self.init_state, [self.init_state] * high_depth,
+                          init_y, init_emb, y_array]
 
-       def body(i, states, prev_ys, prev_embs, ys_array):
-           new_states1 = self.grustep1.forward(states, prev_embs)
-           att_ctx = self.attstep.forward(new_states1)
-           new_states2 = self.grustep2.forward(new_states1, att_ctx)
-           logits = self.predictor.get_logits(prev_embs, new_states2, att_ctx, multi_step=False)
-           new_ys = tf.multinomial(logits, num_samples=1)
-           new_ys = tf.cast(new_ys, dtype=tf.int32)
-           new_ys = tf.squeeze(new_ys, axis=1)
-           new_ys = tf.where(
-                   tf.equal(prev_ys, tf.constant(0, dtype=tf.int32)),
-                   tf.zeros_like(new_ys),
-                   new_ys)
-           ys_array = ys_array.write(index=i, value=new_ys)
-           new_embs = self.y_emb_layer.forward(new_ys)
-           return i+1, new_states2, new_ys, new_embs, ys_array
+        def cond(i, base_state, high_states, prev_y, prev_emb, y_array):
+            return tf.logical_and(
+                tf.less(i, self.translation_maxlen),
+                tf.reduce_any(tf.not_equal(prev_y, 0)))
 
-       final_loop_vars = tf.while_loop(
+        def body(i, prev_base_state, prev_high_states, prev_y, prev_emb,
+                 y_array):
+            state1 = self.grustep1.forward(prev_base_state, prev_emb)
+            att_ctx = self.attstep.forward(state1)
+            base_state = self.grustep2.forward(state1, att_ctx)
+            if self.high_gru_stack == None:
+                output = base_state
+                high_states = []
+            else:
+                if self.high_gru_stack.context_state_size == 0:
+                    output, high_states = self.high_gru_stack.forward_single(
+                        prev_high_states, base_state)
+                else:
+                    output, high_states = self.high_gru_stack.forward_single(
+                        prev_high_states, base_state, context=att_ctx)
+            logits = self.predictor.get_logits(prev_emb, output, att_ctx,
+                                               multi_step=False)
+            new_y = tf.multinomial(logits, num_samples=1)
+            new_y = tf.cast(new_y, dtype=tf.int32)
+            new_y = tf.squeeze(new_y, axis=1)
+            new_y = tf.where(tf.equal(prev_y, tf.constant(0, dtype=tf.int32)),
+                             tf.zeros_like(new_y), new_y)
+            y_array = y_array.write(index=i, value=new_y)
+            new_emb = self.y_emb_layer.forward(new_y)
+            return i+1, base_state, high_states, new_y, new_emb, y_array
+
+        final_loop_vars = tf.while_loop(
                            cond=cond,
                            body=body,
                            loop_vars=init_loop_vars,
                            back_prop=False)
-       i, _, _, _, ys_array = final_loop_vars
-       sampled_ys = ys_array.gather(tf.range(0, i))
-       return sampled_ys
+        i, _, _, _, _, y_array = final_loop_vars
+        sampled_ys = y_array.gather(tf.range(0, i))
+        return sampled_ys
 
     def score(self, y):
         with tf.name_scope("y_embeddings_layer"):
@@ -151,6 +185,11 @@ class Decoder(object):
         states, attended_states = RecurrentLayer(
                                     initial_state=init_state_att_ctx,
                                     step_fn=step_fn).forward((gates_x, proposal_x))
+
+        if self.high_gru_stack != None:
+            states = self.high_gru_stack.forward(
+                states,
+                context_layer=(attended_states if self.high_gru_stack.context_state_size > 0 else None))
 
         logits = self.predictor.get_logits(y_embs, states, attended_states, multi_step=True)
         return logits
@@ -233,34 +272,39 @@ class Encoder(object):
 
         with tf.name_scope("embedding"):
             self.emb_layer = EmbeddingLayerWithFactors(
-                                config.source_vocab_sizes,
-                                config.dim_per_factor)
-
+                config.source_vocab_sizes,
+                config.dim_per_factor)
 
         with tf.name_scope("forward-stack"):
-            with tf.name_scope("level0"):
-                with tf.name_scope("gru0"):
-                    self.gru_forward = GRUStep(
-                                        input_size=config.embedding_size,
-                                        state_size=config.state_size,
-                                        batch_size=batch_size,
-                                        use_layer_norm=config.use_layer_norm,
-                                        nematus_compat=False,
-                                        dropout_input=dropout_embedding,
-                                        dropout_state=dropout_hidden)
+            self.forward_encoder = GRUStack(
+                    input_size=config.embedding_size,
+                    state_size=config.state_size,
+                    batch_size=batch_size,
+                    use_layer_norm=config.use_layer_norm,
+                    nematus_compat=False,
+                    dropout_input=dropout_embedding,
+                    dropout_state=dropout_hidden,
+                    stack_depth=config.enc_depth,
+                    transition_depth=config.enc_recurrence_transition_depth,
+                    alternating=True,
+                    residual_connections=True,
+                    first_residual_output=1)
 
         with tf.name_scope("backward-stack"):
-            with tf.name_scope("level0"):
-                with tf.name_scope("gru0"):
-                    self.gru_backward = GRUStep(
-                                            input_size=config.embedding_size,
-                                            state_size=config.state_size,
-                                            batch_size=batch_size,
-                                            use_layer_norm=config.use_layer_norm,
-                                            nematus_compat=False,
-                                            dropout_input=dropout_embedding,
-                                            dropout_state=dropout_hidden)
-        self.state_size = config.state_size
+            self.backward_encoder = GRUStack(
+                    input_size=config.embedding_size,
+                    state_size=config.state_size,
+                    batch_size=batch_size,
+                    use_layer_norm=config.use_layer_norm,
+                    nematus_compat=False,
+                    dropout_input=dropout_embedding,
+                    dropout_state=dropout_hidden,
+                    stack_depth=config.enc_depth,
+                    transition_depth=config.enc_recurrence_transition_depth,
+                    alternating=True,
+                    reverse_alternation=True,
+                    residual_connections=True,
+                    first_residual_output=1)
 
     def get_context(self, x, x_mask):
 
@@ -268,51 +312,24 @@ class Encoder(object):
             embs = self.emb_layer.forward(x)
             if self.dropout_source != None:
                 embs = self.dropout_source(embs)
-            embs_reversed = tf.reverse(embs, axis=[0], name='reverse_embeddings')
 
-        batch_size = tf.shape(x)[-1]
-        init_state = tf.zeros(shape=[batch_size, self.state_size], dtype=tf.float32)
         with tf.name_scope("forward-stack"):
-            with tf.name_scope("level0"):
-                with tf.name_scope("gru0"):
-                    gates_x, proposal_x = self.gru_forward.precompute_from_x(embs)
-                    def step_fn(prev_state, x):
-                        gates_x2d, proposal_x2d = x
-                        return self.gru_forward.forward(
-                                prev_state,
-                                gates_x=gates_x2d,
-                                proposal_x=proposal_x2d)
-                    states = RecurrentLayer(
-                                initial_state=init_state,
-                                step_fn = step_fn).forward((gates_x, proposal_x))
+            fwd_states = self.forward_encoder.forward(embs, x_mask)
 
         with tf.name_scope("backward-stack"):
-            with tf.name_scope("level0"):
-                with tf.name_scope("gru0"):
-                    gates_x, proposal_x = self.gru_backward.precompute_from_x(embs_reversed)
-                    def step_fn(prev_state, x):
-                        gates_x2d, proposal_x2d, mask = x
-                        new_state = self.gru_backward.forward(
-                                        prev_state,
-                                        gates_x=gates_x2d,
-                                        proposal_x=proposal_x2d)
-                        new_state *= mask # batch x 1
-                        # first couple of states of reversed encoder should be zero
-                        # this is why we need to multiply by mask
-                        # this way, when the reversed encoder reaches actual words
-                        # the state will be zeros and not some accumulated garbage
-                        return new_state
+            bwd_states = self.backward_encoder.forward(embs, x_mask)
 
-                    x_mask_r = tf.reverse(x_mask, axis=[0])
-                    x_mask_r = tf.expand_dims(x_mask_r, axis=[2]) #seqLen x batch x 1
-                    states_reversed = RecurrentLayer(
-                                        initial_state=init_state,
-                                        step_fn = step_fn).forward((gates_x, proposal_x, x_mask_r))
-                    states_reversed = tf.reverse(states_reversed, axis=[0])
-
-        concat_states = tf.concat([states, states_reversed], axis=2)
+        # Concatenate the left-to-right and the right-to-left states, in that
+        # order. This is for compatibility with models that were trained with
+        # the Theano version.
+        stack_depth = len(self.forward_encoder.grus)
+        if stack_depth % 2 == 0:
+            concat_states = tf.concat([bwd_states, fwd_states], axis=2)
+        else:
+            concat_states = tf.concat([fwd_states, bwd_states], axis=2)
         return concat_states
-        
+
+
 class StandardModel(object):
     def __init__(self, config):
 

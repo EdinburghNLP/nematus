@@ -143,12 +143,13 @@ class GRUStep(object):
                                      ortho_weight(state_size)],
                                     axis=1), 
                                 name='state_to_gates')
-        self.input_to_gates = tf.Variable(
-                                numpy.concatenate(
-                                    [norm_weight(input_size, state_size),
-                                     norm_weight(input_size, state_size)],
-                                    axis=1), 
-                                name='input_to_gates')
+        if input_size > 0:
+            self.input_to_gates = tf.Variable(
+                                    numpy.concatenate(
+                                        [norm_weight(input_size, state_size),
+                                         norm_weight(input_size, state_size)],
+                                        axis=1),
+                                    name='input_to_gates')
         self.gates_bias = tf.Variable(
                             numpy.zeros((2*state_size,)).astype('float32'),
                             name='gates_bias')
@@ -156,9 +157,10 @@ class GRUStep(object):
         self.state_to_proposal = tf.Variable(
                                     ortho_weight(state_size),
                                     name = 'state_to_proposal')
-        self.input_to_proposal = tf.Variable(
-                                    norm_weight(input_size, state_size),
-                                    name = 'input_to_proposal')
+        if input_size > 0:
+            self.input_to_proposal = tf.Variable(
+                                        norm_weight(input_size, state_size),
+                                        name = 'input_to_proposal')
         self.proposal_bias = tf.Variable(
                                     numpy.zeros((state_size,)).astype('float32'),
                                     name='proposal_bias')
@@ -166,14 +168,15 @@ class GRUStep(object):
         self.use_layer_norm = use_layer_norm
 
         if self.use_layer_norm:
-            with tf.name_scope('gates_x_norm'):
-                self.gates_x_norm = LayerNormLayer(2*state_size)
             with tf.name_scope('gates_state_norm'):
                 self.gates_state_norm = LayerNormLayer(2*state_size)
-            with tf.name_scope('proposal_x_norm'):
-                self.proposal_x_norm = LayerNormLayer(state_size)
             with tf.name_scope('proposal_state_norm'):
                 self.proposal_state_norm = LayerNormLayer(state_size)
+            if input_size > 0:
+                with tf.name_scope('gates_x_norm'):
+                    self.gates_x_norm = LayerNormLayer(2*state_size)
+                with tf.name_scope('proposal_x_norm'):
+                    self.proposal_x_norm = LayerNormLayer(state_size)
 
         # Create dropout masks for input values (reused at every timestep).
         if dropout_input == None:
@@ -255,26 +258,191 @@ class GRUStep(object):
                 gates_state=None,
                 proposal_x=None,
                 proposal_state=None):
-        if gates_x is None:
+        if gates_x is None and x != None:
             gates_x = self._get_gates_x(x) 
-        if proposal_x is None:
+        if proposal_x is None and x != None:
             proposal_x = self._get_proposal_x(x) 
         if gates_state is None:
             gates_state = self._get_gates_state(prev_state) 
         if proposal_state is None:
             proposal_state = self._get_proposal_state(prev_state) 
 
-        gates = gates_x + gates_state
+        if gates_x == None:
+            gates = gates_state
+        else:
+            gates = gates_x + gates_state
         gates = tf.nn.sigmoid(gates)
         read_gate, update_gate = tf.split(gates,
                                           num_or_size_splits=2,
                                           axis=1)
 
-        proposal = proposal_state*read_gate + proposal_x
+        proposal = proposal_state*read_gate
+        if proposal_x != None:
+            proposal += proposal_x
         proposal = tf.tanh(proposal)
         new_state = update_gate*prev_state + (1-update_gate)*proposal
 
         return new_state
+
+class DeepTransitionGRUStep(object):
+    def __init__(self,
+                 input_size,
+                 state_size,
+                 batch_size,
+                 use_layer_norm=False,
+                 nematus_compat=False,
+                 dropout_input=None,
+                 dropout_state=None,
+                 transition_depth=1,
+                 name_scope_fn=lambda i: "gru{0}".format(i)):
+        self.gru_steps = []
+        for i in range(transition_depth):
+            with tf.name_scope(name_scope_fn(i)):
+                gru = GRUStep(input_size=(input_size if i == 0 else 0),
+                              state_size=state_size,
+                              batch_size=batch_size,
+                              use_layer_norm=use_layer_norm,
+                              nematus_compat=nematus_compat,
+                              dropout_input=(dropout_input if i == 0 else None),
+                              dropout_state=dropout_state)
+            self.gru_steps.append(gru)
+
+    def precompute_from_x(self, x):
+        return self.gru_steps[0].precompute_from_x(x)
+
+    def forward(self,
+                prev_state,
+                x=None,
+                gates_x=None,
+                gates_state=None,
+                proposal_x=None,
+                proposal_state=None):
+        new_state = self.gru_steps[0].forward(prev_state=prev_state,
+                                              x=x,
+                                              gates_x=gates_x,
+                                              gates_state=gates_state,
+                                              proposal_x=proposal_x,
+                                              proposal_state=proposal_state)
+        for gru_step in self.gru_steps[1:]:
+            new_state = gru_step.forward(prev_state=new_state)
+        return new_state
+
+
+class GRUStack(object):
+    def __init__(self,
+                 input_size,
+                 state_size,
+                 batch_size,
+                 use_layer_norm=False,
+                 nematus_compat=False,
+                 dropout_input=None,
+                 dropout_state=None,
+                 stack_depth=1,
+                 transition_depth=1,
+                 alternating=False,
+                 reverse_alternation=False,
+                 context_state_size=0,
+                 residual_connections=False,
+                 first_residual_output=0):
+        self.state_size = state_size
+        self.batch_size = batch_size
+        self.alternating = alternating
+        self.reverse_alternation = reverse_alternation
+        self.context_state_size = context_state_size
+        self.residual_connections = residual_connections
+        self.first_residual_output = first_residual_output
+        self.grus = []
+        for i in range(stack_depth):
+            in_size = (input_size if i == 0 else state_size) + context_state_size
+            with tf.name_scope("level{0}".format(i)):
+                self.grus.append(DeepTransitionGRUStep(
+                    input_size=in_size,
+                    state_size=state_size,
+                    batch_size=batch_size,
+                    use_layer_norm=use_layer_norm,
+                    nematus_compat=nematus_compat,
+                    dropout_input=(dropout_input if i == 0 else dropout_state),
+                    dropout_state=dropout_state,
+                    transition_depth=transition_depth))
+
+    # Single timestep version
+    def forward_single(self, prev_states, x, context=None):
+        stack_depth = len(self.grus)
+        states = [None] * stack_depth
+        for i in range(stack_depth):
+            if context == None:
+                x2 = x
+            else:
+                x2 = tf.concat([x, context], axis=-1)
+            states[i] = self.grus[i].forward(prev_states[i], x2)
+            if not self.residual_connections or i < self.first_residual_output:
+                x = states[i]
+            else:
+                x += states[i]
+        return x, states
+
+    # Layer version
+    def forward(self, x, x_mask=None, context_layer=None):
+
+        assert not (self.reverse_alternation and x_mask == None)
+
+#        assert (context_layer == None or
+#                tf.shape(context_layer)[-1] == self.context_state_size)
+
+        def create_step_fun(gru):
+            def step_fn(prev_state, x):
+                gates_x2d, proposal_x2d = x[0], x[1]
+                new_state = gru.forward(prev_state,
+                                        gates_x=gates_x2d,
+                                        proposal_x=proposal_x2d)
+                if len(x) > 2:
+                    mask = x[2]
+                    new_state *= mask # batch x 1
+                    # first couple of states of reversed encoder should be zero
+                    # this is why we need to multiply by mask
+                    # this way, when the reversed encoder reaches actual words
+                    # the state will be zeros and not some accumulated garbage
+                return new_state
+            return step_fn
+
+        init_state = tf.zeros(shape=[self.batch_size, self.state_size],
+                              dtype=tf.float32)
+        if x_mask != None:
+            x_mask_r = tf.reverse(x_mask, axis=[0])
+            x_mask_bwd = tf.expand_dims(x_mask_r, axis=[2]) #seqLen x batch x 1
+
+        for i, gru in enumerate(self.grus):
+            layer = RecurrentLayer(initial_state=init_state,
+                                   step_fn=create_step_fun(gru))
+            if context_layer == None:
+                x2 = x
+            else:
+                x2 = tf.concat([x, context_layer], axis=-1)
+            if not self.alternating:
+                left_to_right = True
+            else:
+                if self.reverse_alternation:
+                    left_to_right = (i % 2 == 1)
+                else:
+                    left_to_right = (i % 2 == 0)
+            if left_to_right:
+                # Recurrent state flows from left to right in this layer.
+                gates_x, proposal_x = gru.precompute_from_x(x2)
+                h = layer.forward((gates_x, proposal_x))
+            else:
+                # Recurrent state flows from right to left in this layer.
+                x2_reversed = tf.reverse(x2, axis=[0])
+                gates_x, proposal_x = gru.precompute_from_x(x2_reversed)
+                h_reversed = layer.forward((gates_x, proposal_x, x_mask_bwd))
+                h = tf.reverse(h_reversed, axis=[0])
+            # Compute the word states, which will become the input for the
+            # next layer (or the output of the stack if we're at the top).
+            if i == 0:
+                x = h
+            else:
+                x += h # Residual connection
+        return x
+
 
 class AttentionStep(object):
     def __init__(self,

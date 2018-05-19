@@ -11,41 +11,43 @@ import nmt
 import util
 
 def construct_parameter_map(config):
+    def drt_tag(i):
+        return "" if i == 0 else "_drt_{0}".format(i)
+
+    def add_gru_variables(param_map, th_prefix, tf_prefix, drt_tag,
+                          alt_names=False):
+        for th_roots, tf_root in [[["U",  "U_nl"],  "state_to_gates"],
+                                  [["Ux", "Ux_nl"], "state_to_proposal"],
+                                  [["W",  "Wc"],    "input_to_gates"],
+                                  [["Wx", "Wcx"],   "input_to_proposal"],
+                                  [["b",  "b_nl"],  "gates_bias"],
+                                  [["bx", "bx_nl"], "proposal_bias"]]:
+            th_root = th_roots[1] if alt_names else th_roots[0]
+            if drt_tag != "" and th_root.startswith("W"):
+                # For deep transition, only the bottom GRU has external inputs.
+                continue
+            key = "{0}{1}{2}".format(th_prefix, th_root, drt_tag)
+            val = "{0}{1}:0".format(tf_prefix, tf_root)
+            param_map[key] = val
+
+        for th_roots, tf_root in [[["U",  "U_nl"],  "gates_state_norm"],
+                                  [["Ux", "Ux_nl"], "proposal_state_norm"],
+                                  [["W",  "Wc"],    "gates_x_norm"],
+                                  [["Wx", "Wcx"],   "proposal_x_norm"]]:
+            th_root = th_roots[1] if alt_names else th_roots[0]
+            if drt_tag != "" and th_root.startswith("W"):
+                # For deep transition, only the bottom GRU has external inputs.
+                continue
+            key = "{0}{1}{2}_lnb".format(th_prefix, th_root, drt_tag)
+            val = "{0}{1}/new_mean:0".format(tf_prefix, tf_root)
+            param_map[key] = val
+            key = "{0}{1}{2}_lns".format(th_prefix, th_root, drt_tag)
+            val = "{0}{1}/new_std:0".format(tf_prefix, tf_root)
+            param_map[key] = val
+
     th2tf = {
         # encoder/embedding
         'Wemb' : 'encoder/embedding/embeddings:0',
-
-        # encoder/forward-stack
-        'encoder_U' : 'encoder/forward-stack/level0/gru0/state_to_gates:0',
-        'encoder_U_lnb' : 'encoder/forward-stack/level0/gru0/gates_state_norm/new_mean:0',
-        'encoder_U_lns' : 'encoder/forward-stack/level0/gru0/gates_state_norm/new_std:0',
-        'encoder_Ux' : 'encoder/forward-stack/level0/gru0/state_to_proposal:0',
-        'encoder_Ux_lnb' : 'encoder/forward-stack/level0/gru0/proposal_state_norm/new_mean:0',
-        'encoder_Ux_lns' : 'encoder/forward-stack/level0/gru0/proposal_state_norm/new_std:0',
-        'encoder_W' : 'encoder/forward-stack/level0/gru0/input_to_gates:0',
-        'encoder_W_lnb' : 'encoder/forward-stack/level0/gru0/gates_x_norm/new_mean:0',
-        'encoder_W_lns' : 'encoder/forward-stack/level0/gru0/gates_x_norm/new_std:0',
-        'encoder_Wx' : 'encoder/forward-stack/level0/gru0/input_to_proposal:0',
-        'encoder_Wx_lnb' : 'encoder/forward-stack/level0/gru0/proposal_x_norm/new_mean:0',
-        'encoder_Wx_lns' : 'encoder/forward-stack/level0/gru0/proposal_x_norm/new_std:0',
-        'encoder_b' : 'encoder/forward-stack/level0/gru0/gates_bias:0',
-        'encoder_bx' : 'encoder/forward-stack/level0/gru0/proposal_bias:0',
-
-        # encoder/backward-stack
-        'encoder_r_U' : 'encoder/backward-stack/level0/gru0/state_to_gates:0',
-        'encoder_r_U_lnb' : 'encoder/backward-stack/level0/gru0/gates_state_norm/new_mean:0',
-        'encoder_r_U_lns' : 'encoder/backward-stack/level0/gru0/gates_state_norm/new_std:0',
-        'encoder_r_Ux' : 'encoder/backward-stack/level0/gru0/state_to_proposal:0',
-        'encoder_r_Ux_lnb' : 'encoder/backward-stack/level0/gru0/proposal_state_norm/new_mean:0',
-        'encoder_r_Ux_lns' : 'encoder/backward-stack/level0/gru0/proposal_state_norm/new_std:0',
-        'encoder_r_W' : 'encoder/backward-stack/level0/gru0/input_to_gates:0',
-        'encoder_r_W_lnb' : 'encoder/backward-stack/level0/gru0/gates_x_norm/new_mean:0',
-        'encoder_r_W_lns' : 'encoder/backward-stack/level0/gru0/gates_x_norm/new_std:0',
-        'encoder_r_Wx' : 'encoder/backward-stack/level0/gru0/input_to_proposal:0',
-        'encoder_r_Wx_lnb' : 'encoder/backward-stack/level0/gru0/proposal_x_norm/new_mean:0',
-        'encoder_r_Wx_lns' : 'encoder/backward-stack/level0/gru0/proposal_x_norm/new_std:0',
-        'encoder_r_b' : 'encoder/backward-stack/level0/gru0/gates_bias:0',
-        'encoder_r_bx' : 'encoder/backward-stack/level0/gru0/proposal_bias:0',
 
         # decoder/initial_state_constructor
         'ff_state_W' : 'decoder/initial_state_constructor/W:0',
@@ -56,22 +58,6 @@ def construct_parameter_map(config):
         # decoder/embedding
         'Wemb_dec' : 'decoder/embedding/embeddings:0',
 
-        # decoder/base/gru0
-        'decoder_U' : 'decoder/base/gru0/state_to_gates:0',
-        'decoder_U_lnb' : 'decoder/base/gru0/gates_state_norm/new_mean:0',
-        'decoder_U_lns' : 'decoder/base/gru0/gates_state_norm/new_std:0',
-        'decoder_Ux' : 'decoder/base/gru0/state_to_proposal:0',
-        'decoder_Ux_lnb' : 'decoder/base/gru0/proposal_state_norm/new_mean:0',
-        'decoder_Ux_lns' : 'decoder/base/gru0/proposal_state_norm/new_std:0',
-        'decoder_W' : 'decoder/base/gru0/input_to_gates:0',
-        'decoder_W_lnb' : 'decoder/base/gru0/gates_x_norm/new_mean:0',
-        'decoder_W_lns' : 'decoder/base/gru0/gates_x_norm/new_std:0',
-        'decoder_Wx' : 'decoder/base/gru0/input_to_proposal:0',
-        'decoder_Wx_lnb' : 'decoder/base/gru0/proposal_x_norm/new_mean:0',
-        'decoder_Wx_lns' : 'decoder/base/gru0/proposal_x_norm/new_std:0',
-        'decoder_b' : 'decoder/base/gru0/gates_bias:0',
-        'decoder_bx' : 'decoder/base/gru0/proposal_bias:0',
-
         # decoder/base/attention
         'decoder_U_att' : 'decoder/base/attention/hidden_to_score:0',
         'decoder_W_comb_att' : 'decoder/base/attention/state_to_hidden:0',
@@ -81,22 +67,6 @@ def construct_parameter_map(config):
         'decoder_Wc_att_lnb' : 'decoder/base/attention/hidden_context_norm/new_mean:0',
         'decoder_Wc_att_lns' : 'decoder/base/attention/hidden_context_norm/new_std:0',
         'decoder_b_att' : 'decoder/base/attention/hidden_bias:0',
-
-        # decoder/base/gru1
-        'decoder_U_nl' : 'decoder/base/gru1/state_to_gates:0',
-        'decoder_U_nl_lnb' : 'decoder/base/gru1/gates_state_norm/new_mean:0',
-        'decoder_U_nl_lns' : 'decoder/base/gru1/gates_state_norm/new_std:0',
-        'decoder_Ux_nl' : 'decoder/base/gru1/state_to_proposal:0',
-        'decoder_Ux_nl_lnb' : 'decoder/base/gru1/proposal_state_norm/new_mean:0',
-        'decoder_Ux_nl_lns' : 'decoder/base/gru1/proposal_state_norm/new_std:0',
-        'decoder_Wc' : 'decoder/base/gru1/input_to_gates:0',
-        'decoder_Wc_lnb' : 'decoder/base/gru1/gates_x_norm/new_mean:0',
-        'decoder_Wc_lns' : 'decoder/base/gru1/gates_x_norm/new_std:0',
-        'decoder_Wcx' : 'decoder/base/gru1/input_to_proposal:0',
-        'decoder_Wcx_lnb' : 'decoder/base/gru1/proposal_x_norm/new_mean:0',
-        'decoder_Wcx_lns' : 'decoder/base/gru1/proposal_x_norm/new_std:0',
-        'decoder_b_nl' : 'decoder/base/gru1/gates_bias:0',
-        'decoder_bx_nl' : 'decoder/base/gru1/proposal_bias:0',
 
         # decoder/next_word_predictor
         'ff_logit_W' : 'decoder/next_word_predictor/hidden_to_logits/W:0',
@@ -119,9 +89,44 @@ def construct_parameter_map(config):
         'history_errs' : None,
         'uidx' : 'time:0'}
 
+    # Add embedding variables for any additional factors.
     for i in range(1, len(config.dim_per_factor)):
         th_name = 'Wemb{0}'.format(i)
         th2tf[th_name] = 'encoder/embedding/embeddings_{0}:0'.format(i)
+
+    # Add GRU variables for the encoder.
+    for i in range(config.enc_depth):
+        for j in range(config.enc_recurrence_transition_depth):
+            th_prefix_f = "encoder_" + ("" if i == 0 else "{0}_".format(i+1))
+            tf_prefix_f = "encoder/forward-stack/level{0}/gru{1}/".format(i, j)
+            th_prefix_b = "encoder_r_" + ("" if i == 0 else "{0}_".format(i+1))
+            tf_prefix_b = "encoder/backward-stack/level{0}/gru{1}/".format(i, j)
+            if i % 2:
+                # The variable naming convention differs between the Theano and
+                # Tensorflow versions: in the Theano version, encoder_<i> is
+                # used for the i-th left-to-right encoder GRU, and encoder_r_<i>
+                # is used for the i-th right-to-left one. In the Tensorflow
+                # version, forward-stack/level0 is left-to-right and
+                # backward-stack/level0 is right-to-left, but then the
+                # directions alternate up the stack.  Flipping the th_prefixes
+                # will map the GRU variables accordingly.
+                th_prefix_f, th_prefix_b = th_prefix_b, th_prefix_f
+            add_gru_variables(th2tf, th_prefix_f, tf_prefix_f, drt_tag(j))
+            add_gru_variables(th2tf, th_prefix_b, tf_prefix_b, drt_tag(j))
+
+    # Add GRU variables for the base level of the decoder.
+    add_gru_variables(th2tf, "decoder_", "decoder/base/gru0/", "")
+    for j in range(1, config.dec_base_recurrence_transition_depth):
+        tf_prefix = "decoder/base/gru{0}/".format(j)
+        add_gru_variables(th2tf, "decoder_", tf_prefix, drt_tag(j-1),
+                          alt_names=True)
+
+    # Add GRU variables for the high levels of the decoder.
+    for i in range(config.dec_depth-1):
+        for j in range(config.dec_high_recurrence_transition_depth):
+            th_prefix = "decoder_{0}_".format(i+2)
+            tf_prefix = "decoder/high/level{0}/gru{1}/".format(i, j)
+            add_gru_variables(th2tf, th_prefix, tf_prefix, drt_tag(j))
 
     return th2tf
 

@@ -487,7 +487,18 @@ def parse_args():
 
     network.add_argument('--dim_per_factor', type=int, default=None, nargs='+', metavar='INT',
                          help="list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: %(default)s)")
-
+    network.add_argument('--enc_depth', type=int, default=1, metavar='INT',
+                         help="number of encoder layers (default: %(default)s)")
+    network.add_argument('--enc_recurrence_transition_depth', type=int, default=1, metavar='INT',
+                         help="number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
+    network.add_argument('--dec_depth', type=int, default=1, metavar='INT',
+                         help="number of decoder layers (default: %(default)s)")
+    network.add_argument('--dec_base_recurrence_transition_depth', type=int, default=2, metavar='INT',
+                         help="number of GRU transition operations applied in the first layer of the decoder. Minimum is 2.  (Only applies to gru_cond). (default: %(default)s)")
+    network.add_argument('--dec_high_recurrence_transition_depth', type=int, default=1, metavar='INT',
+                         help="number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
+    network.add_argument('--dec_deep_context', action='store_true',
+                         help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")
     network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",

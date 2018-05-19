@@ -54,6 +54,18 @@ def fill_options(options):
         options['tie_decoder_embeddings'] = False
     if not 'map_decay_c' in options:
         options['map_decay_c'] = 0.0
+    if not 'enc_depth' in options:
+        options['enc_depth'] = 1
+    if not 'enc_recurrence_transition_depth' in options:
+        options['enc_recurrence_transition_depth'] = 1
+    if not 'dec_depth' in options:
+        options['dec_depth'] = 1
+    if not 'dec_base_recurrence_transition_depth' in options:
+        options['dec_base_recurrence_transition_depth'] = 2
+    if not 'dec_high_recurrence_transition_depth' in options:
+        options['dec_high_recurrence_transition_depth'] = 1
+    if not 'dec_deep_context' in options:
+        options['dec_deep_context'] = False
 
     # set the default model version.
     if not 'model_version' in options:

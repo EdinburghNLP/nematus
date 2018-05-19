@@ -40,6 +40,8 @@ def construct_beam_search_functions(models, beam_size):
     embedding_size = decoder.embedding_size
     translation_maxlen = decoder.translation_maxlen
     target_vocab_size = decoder.target_vocab_size
+    high_depth = 0 if decoder.high_gru_stack == None \
+                   else len(decoder.high_gru_stack.grus)
 
     # Initialize loop variables
     i = tf.constant(0)
@@ -60,8 +62,10 @@ def construct_beam_search_functions(models, beam_size):
                 size=translation_maxlen,
                 clear_after_read=True,
                 name='parent_idx_array')
-    init_states = [model.decoder.init_state for model in models]
-    init_loop_vars = [i, init_states, init_ys, init_embs, init_cost, ys_array, p_array]
+    init_base_states = [m.decoder.init_state for m in models]
+    init_high_states = [[m.decoder.init_state] * high_depth for m in models]
+    init_loop_vars = [i, init_base_states, init_high_states, init_ys, init_embs,
+                      init_cost, ys_array, p_array]
 
     # Prepare cost matrix for completed sentences -> Prob(EOS) = 1 and Prob(x) = 0
     eos_log_probs = tf.constant(
@@ -69,21 +73,33 @@ def construct_beam_search_functions(models, beam_size):
                         dtype=tf.float32)
     eos_log_probs = tf.tile(eos_log_probs, multiples=[batch_size,1])
 
-    def cond(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
+    def cond(i, prev_base_states, prev_high_states, prev_ys, prev_embs, cost, ys_array, p_array):
         return tf.logical_and(
                 tf.less(i, translation_maxlen),
                 tf.reduce_any(tf.not_equal(prev_ys, 0)))
 
-    def body(i, states, prev_ys, prev_embs, cost, ys_array, p_array):
+    def body(i, prev_base_states, prev_high_states, prev_ys, prev_embs, cost, ys_array, p_array):
         # get predictions from all models and sum the log probs
         sum_log_probs = None
-        new_states2 = [None] * len(models)  # we need to save these states for later
+        base_states = [None] * len(models)
+        high_states = [None] * len(models)
         for j in range(len(models)):
             d = models[j].decoder
-            new_states1 = d.grustep1.forward(states[j], prev_embs[j])
-            att_ctx = d.attstep.forward(new_states1)
-            new_states2[j] = d.grustep2.forward(new_states1, att_ctx)
-            logits = d.predictor.get_logits(prev_embs[j], new_states2[j], att_ctx, multi_step=False)
+            states1 = d.grustep1.forward(prev_base_states[j], prev_embs[j])
+            att_ctx = d.attstep.forward(states1)
+            base_states[j] = d.grustep2.forward(states1, att_ctx)
+            if d.high_gru_stack == None:
+                stack_output = base_states[j]
+                high_states[j] = []
+            else:
+                if d.high_gru_stack.context_state_size == 0:
+                    stack_output, high_states[j] = d.high_gru_stack.forward_single(
+                        prev_high_states[j], base_states[j])
+                else:
+                    stack_output, high_states[j] = d.high_gru_stack.forward_single(
+                        prev_high_states[j], base_states[j], context=att_ctx)
+            logits = d.predictor.get_logits(prev_embs[j], stack_output,
+                                            att_ctx, multi_step=False)
             log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
             if sum_log_probs == None:
                 sum_log_probs = log_probs
@@ -97,7 +113,8 @@ def construct_beam_search_functions(models, beam_size):
 
         all_costs = sum_log_probs + tf.expand_dims(cost, axis=1) # TODO: you might be getting NaNs here since -inf is in log_probs
 
-        all_costs = tf.reshape(all_costs, shape=[-1, target_vocab_size * beam_size])
+        all_costs = tf.reshape(all_costs,
+                               shape=[-1, target_vocab_size * beam_size])
         values, indices = tf.nn.top_k(all_costs, k=beam_size) #the sorted option is by default True, is this needed? 
         new_cost = tf.reshape(values, shape=[batch_size])
         offsets = tf.range(
@@ -111,13 +128,14 @@ def construct_beam_search_functions(models, beam_size):
         survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
         new_ys = tf.reshape(new_ys, shape=[batch_size])
         new_embs = [m.decoder.y_emb_layer.forward(new_ys) for m in models]
-        new_states = [tf.gather(s, indices=survivor_idxs) for s in new_states2]
+        new_base_states = [tf.gather(s, indices=survivor_idxs) for s in base_states]
+        new_high_states = [[tf.gather(s, indices=survivor_idxs) for s in states] for states in high_states]
         new_cost = tf.where(tf.equal(new_ys, 0), tf.abs(new_cost), new_cost)
 
         ys_array = ys_array.write(i, value=new_ys)
         p_array = p_array.write(i, value=survivor_idxs)
 
-        return i+1, new_states, new_ys, new_embs, new_cost, ys_array, p_array
+        return i+1, new_base_states, new_high_states, new_ys, new_embs, new_cost, ys_array, p_array
 
 
     final_loop_vars = tf.while_loop(
@@ -125,7 +143,7 @@ def construct_beam_search_functions(models, beam_size):
                         body=body,
                         loop_vars=init_loop_vars,
                         back_prop=False)
-    i, _, _, _, cost, ys_array, p_array = final_loop_vars
+    i, _, _, _, _, cost, ys_array, p_array = final_loop_vars
 
     indices = tf.range(0, i)
     sampled_ys = ys_array.gather(indices)
