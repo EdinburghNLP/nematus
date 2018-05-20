@@ -4,7 +4,7 @@ Utility functions
 
 import sys
 import json
-import cPickle as pkl
+import pickle as pkl
 import numpy
 
 # batch preparation
@@ -42,7 +42,7 @@ def prepare_data(seqs_x, seqs_y, maxlen=None):
     x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
     y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
     for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:, :lengths_x[idx], idx] = zip(*s_x)
+        x[:, :lengths_x[idx], idx] = list(zip(*s_x))
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
@@ -56,8 +56,8 @@ def unicode_to_utf8(d):
 
 def load_dict(filename):
     try:
-        with open(filename, 'rb') as f:
-            return unicode_to_utf8(json.load(f))
+        with open(filename, 'r', encoding="utf8") as f:
+            return json.load(f)
     except:
         with open(filename, 'rb') as f:
             return pkl.load(f)
@@ -65,7 +65,7 @@ def load_dict(filename):
 
 def load_config(basename):
     try:
-        with open('%s.json' % basename, 'rb') as f:
+        with open('%s.json' % basename, 'r', encoding="utf8") as f:
             return json.load(f)
     except:
         try:

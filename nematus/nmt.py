@@ -4,6 +4,7 @@
 Build a neural machine translation model with soft attention
 '''
 import os
+import sys
 import logging
 import time
 import argparse
@@ -12,7 +13,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from threading import Thread
-from Queue import Queue
+import queue
 from datetime import datetime
 from collections import OrderedDict
 
@@ -87,7 +88,7 @@ def create_model(config, sess, ensemble_scope=None, train=False):
                 if (progress.estop == True or
                     progress.eidx > config.max_epochs or
                     progress.uidx >= config.finish_after):
-                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % reload_path)
+                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % path)
                     sys.exit(0)
 
     # load prior model
@@ -215,8 +216,8 @@ def read_all_lines(config, sentences):
 
 
 def train(config, sess):
-    assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
-    "MAP training requires a prior model file: Use command-line option --prior_model"
+    assert config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0), \
+        "MAP training requires a prior model file: Use command-line option --prior_model"
 
     model, saver, progress = create_model(config, sess, train=True)
 
@@ -235,7 +236,7 @@ def train(config, sess):
 
     #save model options
     config_as_dict = OrderedDict(sorted(vars(config).items()))
-    json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
+    json.dump(config_as_dict, open('%s.json' % config.saveto, 'w'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
     _, _, num_to_source, num_to_target = load_dictionaries(config)
@@ -243,7 +244,7 @@ def train(config, sess):
     n_sents, n_words = 0, 0
     last_time = time.time()
     logging.info("Initial uidx={}".format(progress.uidx))
-    for progress.eidx in xrange(progress.eidx, config.max_epochs):
+    for progress.eidx in range(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
         for source_sents, target_sents in text_iterator:
             if len(source_sents[0][0]) != config.factors:
@@ -384,14 +385,14 @@ def translate(config, sess):
 
     for beam in outputs:
         if config.normalize:
-            beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
-        beam = sorted(beam, key=lambda (sent, cost): cost)
+            beam = map(lambda sent_cost: (sent_cost[0], sent_cost[1]/len(sent_cost[0])), beam)
+        beam = sorted(beam, key=lambda sent_cost: sent_cost[1])
         if config.n_best:
             for sent, cost in beam:
-                print seq2words(sent, num_to_target), '[%f]' % cost
+                print(seq2words(sent, num_to_target), '[%f]' % cost)
         else:
             best_hypo, cost = beam[0]
-            print seq2words(best_hypo, num_to_target)
+            print(seq2words(best_hypo, num_to_target))
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
 

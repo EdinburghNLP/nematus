@@ -45,7 +45,7 @@ class BaseSettings(object):
             args = vars(self._parser.parse_args())
         else:
             args = {a.dest: self._parser.get_default(a.dest) for a in self._parser._actions}
-        for key, value in args.iteritems():
+        for key, value in args.items():
             setattr(self, key, value)
 
     def _set_additional_vars(self):

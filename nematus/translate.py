@@ -13,7 +13,7 @@ import time
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
-from Queue import Empty
+from queue import Empty
 
 from util import load_dict, load_config, seq2words, prepare_data
 from compat import fill_options
@@ -97,7 +97,7 @@ class Translator(object):
         Starts child (worker) processes.
         """
         processes = [None] * self._num_processes
-        for process_id in xrange(self._num_processes):
+        for process_id in range(self._num_processes):
             processes[process_id] = Process(
                 target=self._start_worker,
                 args=(process_id,)
@@ -209,12 +209,12 @@ class Translator(object):
                     resp = self._output_queue.get(True, timeout)
                 # if queue is empty after 5s, check if processes are still alive
                 except Empty:
-                    for midx in xrange(self._num_processes):
+                    for midx in range(self._num_processes):
                         if not self._processes[midx].is_alive() and self._processes[midx].exitcode != 0:
                             # kill all other processes and raise exception if one dies
                             self._input_queue.cancel_join_thread()
                             self._output_queue.cancel_join_thread()
-                            for idx in xrange(self._num_processes):
+                            for idx in range(self._num_processes):
                                 self._processes[idx].terminate()
                             logging.error("Translate worker process {0} crashed with exitcode {1}".format(self._processes[midx].pid, self._processes[midx].exitcode))
                             sys.exit(1)
@@ -222,7 +222,7 @@ class Translator(object):
             self._retrieved_translations[request_id][idx] = output_item
             #print self._retrieved_translations
 
-        for idx in xrange(num_samples):
+        for idx in range(num_samples):
             yield self._retrieved_translations[request_id][idx]
 
         # then remove all entries with this request ID from the dictionary
@@ -253,8 +253,8 @@ class Translator(object):
         translations = []
         for i, beam in enumerate(outputs):
             if translation_settings.normalization_alpha:
-                beam = map(lambda (sent, cost): (sent, cost/len(sent)** translation_settings.normalization_alpha), beam)
-            beam = sorted(beam, key=lambda (sent, cost): cost)
+                beam = map(lambda sent_cost: (sent_cost[0], sent_cost[1]/len(sent_cost[0]) ** translation_settings.normalization_alpha), beam)
+            beam = sorted(beam, key=lambda sent_cost: sent_cost[1])
 
             if translation_settings.n_best is True:
                 n_best_list = []

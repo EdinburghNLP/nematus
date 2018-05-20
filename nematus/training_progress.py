@@ -13,7 +13,7 @@ class TrainingProgress(object):
     '''
 
     def load_from_json(self, file_name):
-        self.__dict__.update(util.unicode_to_utf8(json.load(open(file_name, 'rb'))))
+        self.__dict__.update(json.load(open(file_name, 'r', encoding="utf8")))
 
     def save_to_json(self, file_name):
-        json.dump(self.__dict__, open(file_name, 'wb'), indent=2)
+        json.dump(self.__dict__, open(file_name, 'w'), indent=2)

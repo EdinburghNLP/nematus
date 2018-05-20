@@ -5,39 +5,50 @@ import gzip
 import shuffle
 from util import load_dict
 
+
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
         return gzip.open(filename, mode)
     return open(filename, mode)
+
 
 class FileWrapper(object):
     def __init__(self, fname):
         self.pos = 0
         self.lines = fopen(fname).readlines()
         self.lines = numpy.array(self.lines, dtype=numpy.object)
+
     def __iter__(self):
         return self
+
     def next(self):
         if self.pos >= len(self.lines):
             raise StopIteration
         l = self.lines[self.pos]
         self.pos += 1
         return l
+
     def reset(self):
         self.pos = 0
+
     def seek(self, pos):
         assert pos == 0
         self.pos = 0
+
     def readline(self):
         return self.next()
+
     def shuffle_lines(self, perm):
         self.lines = self.lines[perm]
         self.pos = 0
+
     def __len__(self):
         return len(self.lines)
 
+
 class TextIterator:
     """Simple Bitext iterator."""
+
     def __init__(self, source, target,
                  source_dicts, target_dict,
                  batch_size=128,
@@ -84,12 +95,12 @@ class TextIterator:
             assert len(self.source_vocab_sizes) == len(self.source_dicts)
             for d, vocab_size in zip(self.source_dicts, self.source_vocab_sizes):
                 if vocab_size != None and vocab_size > 0:
-                    for key, idx in d.items():
+                    for key, idx in list(d.items()):
                         if idx >= vocab_size:
                             del d[key]
 
         if self.target_vocab_size != None and self.target_vocab_size > 0:
-            for key, idx in self.target_dict.items():
+            for key, idx in list(self.target_dict.items()):
                 if idx >= self.target_vocab_size:
                     del self.target_dict[key]
 
@@ -99,7 +110,6 @@ class TextIterator:
         self.source_buffer = []
         self.target_buffer = []
         self.k = batch_size * maxibatch_size
-        
 
         self.end_of_data = False
 
@@ -118,7 +128,7 @@ class TextIterator:
             self.source.seek(0)
             self.target.seek(0)
 
-    def next(self):
+    def __next__(self):
         if self.end_of_data:
             self.end_of_data = False
             self.reset()
@@ -137,7 +147,7 @@ class TextIterator:
             for ss in self.source:
                 ss = ss.split()
                 tt = self.target.readline().split()
-                
+
                 if self.skip_empty and (len(ss) == 0 or len(tt) == 0):
                     continue
                 if len(ss) > self.maxlen or len(tt) > self.maxlen:
@@ -155,7 +165,7 @@ class TextIterator:
 
             # sort by source/target buffer length
             if self.sort_by_length:
-                tlen = numpy.array([max(len(s),len(t)) for (s,t) in zip(self.source_buffer,self.target_buffer)])
+                tlen = numpy.array([max(len(s), len(t)) for (s, t) in zip(self.source_buffer, self.target_buffer)])
                 tidx = tlen.argsort()
 
                 _sbuf = [self.source_buffer[i] for i in tidx]
@@ -167,7 +177,6 @@ class TextIterator:
             else:
                 self.source_buffer.reverse()
                 self.target_buffer.reverse()
-
 
         try:
             # actual work here
@@ -181,7 +190,8 @@ class TextIterator:
                 tmp = []
                 for w in ss:
                     if self.use_factor:
-                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i, f) in
+                             enumerate(w.split('|'))]
                     else:
                         w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
                     tmp.append(w)
@@ -190,7 +200,7 @@ class TextIterator:
                 # read from source file and map to word index
                 tt = self.target_buffer.pop()
                 tt_indices = [self.target_dict[w] if w in self.target_dict else 1
-                      for w in tt]
+                              for w in tt]
                 if self.target_vocab_size != None:
                     tt_indices = [w if w < self.target_vocab_size else 1 for w in tt_indices]
 
@@ -200,8 +210,8 @@ class TextIterator:
                 longest_target = max(longest_target, len(tt_indices))
 
                 if self.token_batch_size:
-                    if len(source)*longest_source > self.token_batch_size or \
-                        len(target)*longest_target > self.token_batch_size:
+                    if len(source) * longest_source > self.token_batch_size or \
+                            len(target) * longest_target > self.token_batch_size:
                         # remove last sentence pair (that made batch over-long)
                         source.pop()
                         target.pop()
@@ -212,9 +222,12 @@ class TextIterator:
 
                 else:
                     if len(source) >= self.batch_size or \
-                        len(target) >= self.batch_size:
+                            len(target) >= self.batch_size:
                         break
         except IOError:
             self.end_of_data = True
 
         return source, target
+
+    def next(self):
+        return self.__next__()
