@@ -1,9 +1,6 @@
 NEMATUS
 -------
 
-(This branch uses a Tensorflow backend. See https://github.com/EdinburghNLP/nematus/tree/master for the Theano-based version of Nematus,
-which currently supports more architecture variants.)
-
 Attention-based encoder-decoder model for neural machine translation
 
 This package is based on the dl4mt-tutorial by Kyunghyun Cho et al. ( https://github.com/nyu-dl/dl4mt-tutorial ).
@@ -11,7 +8,13 @@ It was used to produce top-scoring systems at the WMT 16 shared translation task
 
 The changes to Nematus include:
 
+  - the model has been re-implemented in tensorflow.
+    See https://github.com/EdinburghNLP/nematus/tree/theano for the Theano-based version of Nematus.
+
   - new architecture variants for better performance:
+     - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
+     - deep models (Miceli Barone et al., 2017) https://arxiv.org/abs/1707.07631
+     - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
      - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
 

@@ -1,22 +1,22 @@
 CHANGELOG
 ---------
 
-v0.3 (dev)
+v0.3 (23/5/2018)
 ----------
  - Tensorflow backend. The main model was rewritten to support Tensorflow in lieu of Theano.
-   Not all features have been re-implemented so far, but work is ongoing.
+   A few features have not been implemented in the Tensorflow model.
+
  - currently supported:
    -- re-implementation of default Nematus model
    -- model compatibility with Theano version and conversion via `theano_tf_convert.py`
    -- same scripts and command line API for training, translating and (re)scoring
    -- layer normalisation
    -- tied embeddings
+   -- deep models
+   -- ensemble decoding
+   -- input features
  
  - not yet supported:
-   -- deep models
-   -- input features
-   -- ensemble decoding
-   -- dorpout
    -- minimum risk training
    -- LSTM cells
    -- learning rate annealing
