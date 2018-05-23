@@ -6,6 +6,8 @@ Attention-based encoder-decoder model for neural machine translation
 This package is based on the dl4mt-tutorial by Kyunghyun Cho et al. ( https://github.com/nyu-dl/dl4mt-tutorial ).
 It was used to produce top-scoring systems at the WMT 16 shared translation task.
 
+This version of Nematus is based on Theano. The main development work is done on the Tensorflow version in the master branch.
+
 The changes to Nematus include:
 
  - new architecture variants for better performance:

@@ -1,10 +1,11 @@
 CHANGELOG
 ---------
 
-dev
+v0.2.1 (23/5/18)
 ----------
-
+ - move theano backend out of master branch
  - more efficient training with --token_batch_size
+ - data iterator for multilingual training (#67)
 
 v0.2 (17/12/2017)
 ----------
