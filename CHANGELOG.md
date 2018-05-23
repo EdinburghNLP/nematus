@@ -23,6 +23,7 @@ v0.3 (23/5/2018)
 
  - new features:
    -- batch decoding
+   -- more efficient training with --token_batch_size
 
 v0.2 (17/12/2017)
 ----------
