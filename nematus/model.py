@@ -256,7 +256,7 @@ class Predictor(object):
         elif self.config.output_hidden_activation == 'linear':
             pass
         else:
-            assert(False, 'Unknown output activation function "%s"' % self.config.output_hidden_activation)
+            assert False, 'Unknown output activation function "%s"' % self.config.output_hidden_activation
 
         with tf.name_scope("hidden_to_logits"):
             logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
