@@ -661,7 +661,8 @@ def parse_args():
             continue
         try:
             d = load_dict(config.dictionaries[i])
-        except:
+        except Exception as e:
+            print(e)
             logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
         vocab_sizes[i] = max(d.values()) + 1
 

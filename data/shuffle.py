@@ -1,16 +1,11 @@
 import os
 import sys
 import random
-
 import tempfile
-from subprocess import call
-
 
 
 def main(files, temporary=False):
-
-
-    fds = [open(ff) for ff in files]
+    fds = [open(ff, encoding='utf-8') for ff in files]
 
     lines = []
     for l in fds[0]:
@@ -25,13 +20,13 @@ def main(files, temporary=False):
         fds = []
         for ff in files:
             path, filename = os.path.split(os.path.realpath(ff))
-            fds.append(tempfile.TemporaryFile(prefix=filename+'.shuf', dir=path))
+            fds.append(tempfile.TemporaryFile(mode="w+", prefix=filename+'.shuf', encoding='utf-8', dir=path))
     else:
-        fds = [open(ff+'.shuf','w') for ff in files]
+        fds = [open(ff+'.shuf','w', encoding='utf-8') for ff in files]
 
     for l in lines:
         for ii, fd in enumerate(fds):
-            print >>fd, l[ii]
+            print(l[ii], file=fd)
 
     if temporary:
         [ff.seek(0) for ff in fds]
