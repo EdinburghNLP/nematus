@@ -71,10 +71,10 @@ class TranslationSettings(BaseSettings):
         self._parser.add_argument('-c', dest='char_level', action="store_true", help="Character-level")
 
         if self._from_console_arguments: # don't open files if no console arguments are parsed
-            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
+            self._parser.add_argument('--input', '-i', type=str,
                                       default=sys.stdin, metavar='PATH',
                                       help="Input file (default: standard input)")
-            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
+            self._parser.add_argument('--output', '-o', type=str,
                                       default=sys.stdout, metavar='PATH',
                                       help="Output file (default: standard output)")
 
@@ -83,6 +83,8 @@ class TranslationSettings(BaseSettings):
 
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
+        self.input = open(self.input, mode="r", encoding='utf-8')
+        self.output = open(self.output, mode="w", encoding='utf-8')
 
 class ServerSettings(BaseSettings):
     """
