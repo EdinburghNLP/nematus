@@ -25,6 +25,7 @@ from nmt import create_model, load_dictionaries, read_all_lines
 import inference
 import exception
 
+
 class Translation(object):
     """
     Models a translated segment.
@@ -361,3 +362,5 @@ if __name__ == "__main__":
     level = logging.DEBUG if translation_settings.verbose else logging.WARNING
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
     main(input_file, output_file, translation_settings)
+    input_file.close()
+    output_file.close()

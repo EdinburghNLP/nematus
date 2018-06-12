@@ -8,12 +8,13 @@ import sys
 import logging
 import time
 import argparse
+import numpy as np
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from threading import Thread
-import queue
+from queue import Queue
 from datetime import datetime
 from collections import OrderedDict
 
@@ -102,7 +103,14 @@ def create_model(config, sess, ensemble_scope=None, train=False):
         sess.run(init_op)
     else:
         logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
-        saver.restore(sess, os.path.abspath(reload_filename))
+        checkpoint_dir = os.path.dirname(os.path.abspath(reload_filename))
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        # restore from checkpoint file
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            saver.restore(sess, os.path.join(checkpoint_dir, ckpt_name))
+        else:
+            raise ValueError("Cant find checkpoint file at {}".format(checkpoint_dir))
         if train:
             # The global step is currently recorded in two places:
             #   1. model.t, a tf.Variable read and updated by the optimizer
@@ -200,9 +208,8 @@ def read_all_lines(config, sentences):
                             config.factors, len(w)))
             line.append(w)
         lines.append(line)
-    lines = numpy.array(lines)
-    lengths = numpy.array(map(lambda l: len(l), lines))
-    lengths = numpy.array(lengths)
+    lines = np.array(lines)
+    lengths = np.array([len(l) for l in lines])
     idxs = lengths.argsort()
     lines = lines[idxs]
 
