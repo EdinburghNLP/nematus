@@ -714,7 +714,7 @@ def parse_args():
 if __name__ == "__main__":
     # set up logging
     level = logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=level, format='%(asctime)s %(levelname)s: %(message)s')
 
     config = parse_args()
     logging.info(config)

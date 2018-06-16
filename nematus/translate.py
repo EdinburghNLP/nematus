@@ -360,7 +360,7 @@ if __name__ == "__main__":
     output_file = translation_settings.output
     # start logging
     level = logging.DEBUG if translation_settings.verbose else logging.WARNING
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=level, format='%(asctime)s %(levelname)s: %(message)s')
     main(input_file, output_file, translation_settings)
     input_file.close()
     output_file.close()
