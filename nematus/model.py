@@ -422,6 +422,8 @@ class StandardModel(object):
 
         if config.optimizer == 'adam':
             self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+        elif config.optimizer == 'adadelta':
+            self.optimizer = tf.train.AdadeltaOptimizer(learning_rate=config.learning_rate)
         else:
             logging.error('No valid optimizer defined: {0}'.format(config.optimizer))
             sys.exit(1)

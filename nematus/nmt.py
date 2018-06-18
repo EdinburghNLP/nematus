@@ -577,7 +577,7 @@ def parse_args():
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                           help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
     training.add_argument('--optimizer', type=str, default="adam",
-                          choices=['adam'],
+                          choices=['adam', 'adadelta'],
                           help="optimizer (default: %(default)s)")
 
     validation = parser.add_argument_group('validation parameters')
