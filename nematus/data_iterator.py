@@ -21,7 +21,7 @@ class FileWrapper(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         if self.pos >= len(self.lines):
             raise StopIteration
         l = self.lines[self.pos]
@@ -36,7 +36,7 @@ class FileWrapper(object):
         self.pos = 0
 
     def readline(self):
-        return self.next()
+        return next(self)
 
     def shuffle_lines(self, perm):
         self.lines = self.lines[perm]
