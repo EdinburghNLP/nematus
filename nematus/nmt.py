@@ -511,6 +511,8 @@ def parse_args():
                          help="dropout target words (0: no dropout) (default: %(default)s)")
     network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
+    network.add_argument('--tie_encoder_decoder_embeddings', action="store_true", dest="tie_encoder_decoder_embeddings",
+                         help="tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must be the same")
     network.add_argument('--tie_decoder_embeddings', action="store_true", dest="tie_decoder_embeddings",
                          help="tie the input embeddings of the decoder with the softmax output embeddings")
     network.add_argument('--output_hidden_activation', type=str, default='tanh',
@@ -636,6 +638,12 @@ def parse_args():
     if len(config.dictionaries) != config.factors + 1:
         logging.error('\'--dictionaries\' must specify one dictionary per source factor and one target dictionary\n')
         sys.exit(1)
+
+    # determine target_embedding_size
+    if config.tie_encoder_decoder_embeddings:
+        config.target_embedding_size = config.dim_per_factor[0]
+    else:
+        config.target_embedding_size = config.embedding_size
 
     # set vocabulary sizes
     vocab_sizes = []

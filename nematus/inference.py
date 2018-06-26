@@ -127,7 +127,7 @@ def construct_beam_search_functions(models, beam_size):
         new_ys = indices % target_vocab_size
         survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
         new_ys = tf.reshape(new_ys, shape=[batch_size])
-        new_embs = [m.decoder.y_emb_layer.forward(new_ys) for m in models]
+        new_embs = [m.decoder.y_emb_layer.forward(new_ys, factor=0) for m in models]
         new_base_states = [tf.gather(s, indices=survivor_idxs) for s in base_states]
         new_high_states = [[tf.gather(s, indices=survivor_idxs) for s in states] for states in high_states]
         new_cost = tf.where(tf.equal(new_ys, 0), tf.abs(new_cost), new_cost)
