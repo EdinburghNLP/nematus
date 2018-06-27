@@ -410,7 +410,7 @@ class StandardModel(object):
         with tf.name_scope("loss"):
             self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
-            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keep_dims=False)
+            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keepdims=False)
             self.objective = self.mean_loss
             
             self.l2_loss = tf.constant(0.0, dtype=tf.float32)

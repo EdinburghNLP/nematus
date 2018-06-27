@@ -118,7 +118,7 @@ class LayerNormLayer(object):
         # TODO: Actually, this is probably fixed now and should be tested with latest
         # TF version. See: https://github.com/tensorflow/tensorflow/issues/8101
         axis = 2 if input_is_3d else 1
-        m, v = tf.nn.moments(x, axes=[axis], keep_dims=True)
+        m, v = tf.nn.moments(x, axes=[axis], keepdims=True)
         std = tf.sqrt(v + self.eps)
         norm_x = (x-m)/std
         new_x = norm_x*self.new_std + self.new_mean
@@ -511,13 +511,13 @@ class AttentionStep(object):
 
         scores = matmul3d(hidden, self.hidden_to_score) # seqLen x batch x 1
         scores = tf.squeeze(scores, axis=2)
-        scores = scores - tf.reduce_max(scores, axis=0, keep_dims=True)
+        scores = scores - tf.reduce_max(scores, axis=0, keepdims=True)
         scores = tf.exp(scores)
         scores *= self.context_mask
-        scores = scores / tf.reduce_sum(scores, axis=0, keep_dims=True)
+        scores = scores / tf.reduce_sum(scores, axis=0, keepdims=True)
 
         attention_context = self.context * tf.expand_dims(scores, axis=2)
-        attention_context = tf.reduce_sum(attention_context, axis=0, keep_dims=False)
+        attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
 
         return attention_context
 
@@ -535,7 +535,7 @@ class Masked_cross_entropy_loss(object):
                 logits=logits)
         #cost has shape seqLen x batch
         cost *= self.y_mask
-        cost = tf.reduce_sum(cost, axis=0, keep_dims=False)
+        cost = tf.reduce_sum(cost, axis=0, keepdims=False)
         return cost
 
 class PReLU(object):
