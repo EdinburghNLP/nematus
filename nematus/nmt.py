@@ -499,6 +499,9 @@ def parse_args():
                          help="number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
+    network.add_argument('--dec_attention_hops', type=int, default=1, metavar='INT',
+                         help="Number of sequential attention hops in GRU decoder")
+    
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")
     network.add_argument('--dropout_embedding', type=float, default=0.2, metavar="FLOAT",
@@ -518,6 +521,7 @@ def parse_args():
     network.add_argument('--output_hidden_activation', type=str, default='tanh',
                          choices=['tanh', 'relu', 'prelu', 'linear'],
                          help='activation function in hidden layer of the output network (default: %(default)s)')
+
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
@@ -637,6 +641,11 @@ def parse_args():
 
     if len(config.dictionaries) != config.factors + 1:
         logging.error('\'--dictionaries\' must specify one dictionary per source factor and one target dictionary\n')
+        sys.exit(1)
+
+    # check that attention options are consistent
+    if config.dec_attention_hops >= config.dec_base_recurrence_transition_depth:
+        logging.error("'--dec_attention_hops' must be lower than to '--dec_base_recurrence_transition_depth'\n")
         sys.exit(1)
 
     # determine target_embedding_size

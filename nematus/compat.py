@@ -74,6 +74,9 @@ def fill_options(options):
         else:
             options['target_embedding_size'] = options['embedding_size']
 
+    if not 'dec_attention_hops' in options:
+        options['dec_attention_hops'] = 1
+
     # set the default model version.
     if not 'model_version' in options:
         if from_theano_version and options['use_dropout']:

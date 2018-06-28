@@ -55,26 +55,23 @@ class Decoder(object):
                                     nematus_compat=False,
                                     dropout_input=dropout_embedding,
                                     dropout_state=dropout_hidden)
-            with tf.name_scope("attention"):
-                self.attstep = AttentionStep(
-                                context=context,
-                                context_state_size=2*config.state_size,
-                                context_mask=x_mask,
-                                state_size=config.state_size,
-                                hidden_size=2*config.state_size,
-                                use_layer_norm=config.use_layer_norm,
-                                dropout_context=dropout_hidden,
-                                dropout_state=dropout_hidden)
-            self.grustep2 = DeepTransitionGRUStep(
-                                    input_size=2*config.state_size,
+            self.att_grustep2 = DeepTransitionRNNWithMultiHopAttentionStep(
+                                    context=context,
+                                    context_state_size=2*config.state_size,
+                                    context_mask=x_mask,
                                     state_size=config.state_size,
                                     batch_size=batch_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=True,
-                                    dropout_input=dropout_hidden,
-                                    dropout_state=dropout_hidden,
-                                    transition_depth=config.dec_base_recurrence_transition_depth-1,
-                                    name_scope_fn=lambda i: "gru{0}".format(i+1))
+                                    rnn_transition_depth=config.dec_base_recurrence_transition_depth-1,
+                                    n_attention_hops = config.dec_attention_hops,
+                                    attention_step_options={'hidden_size' : 2*config.state_size,
+                                                            'use_layer_norm' : config.use_layer_norm,
+                                                            'dropout_context' : dropout_hidden,
+                                                            'dropout_state' : dropout_hidden},
+                                    rnn_step_options={'use_layer_norm' : config.use_layer_norm,
+                                                      'nematus_compat' : True,
+                                                      'dropout_input' : dropout_hidden,
+                                                      'dropout_state' : dropout_hidden},
+                                    rnn_name_scope_fn=lambda i: "gru{0}".format(i+1))
 
         with tf.name_scope("high"):
             if config.dec_depth == 1:
@@ -127,8 +124,8 @@ class Decoder(object):
         def body(i, prev_base_state, prev_high_states, prev_y, prev_emb,
                  y_array):
             state1 = self.grustep1.forward(prev_base_state, prev_emb)
-            att_ctx = self.attstep.forward(state1)
-            base_state = self.grustep2.forward(state1, att_ctx)
+            att_ctx, base_state = self.att_grustep2.forward(state1)
+
             if self.high_gru_stack == None:
                 output = base_state
                 high_states = []
@@ -181,8 +178,7 @@ class Decoder(object):
                         prev_state,
                         gates_x=gates_x2d,
                         proposal_x=proposal_x2d)
-            att_ctx = self.attstep.forward(state) 
-            state = self.grustep2.forward(state, att_ctx)
+            att_ctx, state = self.att_grustep2.forward(state)
             #TODO: write att_ctx to tensorArray instead of having it as output of scan?
             return (state, att_ctx)
 

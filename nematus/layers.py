@@ -5,6 +5,7 @@ Layer definitions
 from initializers import ortho_weight, norm_weight
 import tensorflow as tf
 import numpy
+import sys
 
 def matmul3d(x3d, matrix):
     shape = tf.shape(x3d)
@@ -146,6 +147,8 @@ class GRUStep(object):
                                          norm_weight(input_size, state_size)],
                                         axis=1),
                                     name='input_to_gates')
+        else:
+            dropout_input = None
         self.gates_bias = tf.Variable(
                             numpy.zeros((2*state_size,)).astype('float32'),
                             name='gates_bias')
@@ -520,6 +523,68 @@ class AttentionStep(object):
         attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
 
         return attention_context
+
+class DeepTransitionRNNWithMultiHopAttentionStep(object):
+    def __init__(self,
+                 context,
+                 context_state_size,
+                 context_mask,
+                 state_size,
+                 batch_size,
+                 rnn_transition_depth=1,
+                 n_attention_hops = 1,
+                 attention_step_options={},
+                 rnn_step_options={},
+                 attention_step_class = AttentionStep,
+                 rnn_step_class = GRUStep,
+                 attention_name_scope_fn=lambda i: ("attention{0}".format(i) if (i > 0) else "attention"),                 
+                 rnn_name_scope_fn=lambda i: "gru{0}".format(i)):
+        self.context = context
+        self.context_state_size = context_state_size
+        self.state_size = state_size
+        self.batch_size = batch_size
+        self.rnn_transition_depth = rnn_transition_depth
+        self.n_attention_hops = n_attention_hops
+        self.attention_step_options = attention_step_options
+        self.rnn_step_options = rnn_step_options
+        self.attention_step_class = attention_step_class
+        self.rnn_step_class = rnn_step_class
+
+        self.attention_steps = []
+        self.rnn_steps = []
+        for i in range(rnn_transition_depth):
+            if (i < n_attention_hops):
+                with tf.name_scope(attention_name_scope_fn(i)):
+                    attention_step = attention_step_class(context=context,
+                                                          context_state_size=context_state_size,
+                                                          context_mask=context_mask,
+                                                          state_size=state_size,
+                                                          **attention_step_options)
+                    self.attention_steps.append(attention_step)
+            with tf.name_scope(rnn_name_scope_fn(i)):
+                rnn = rnn_step_class(input_size=(context_state_size if i < n_attention_hops else 0),
+                                     state_size=state_size,
+                                     batch_size=batch_size,
+                                     **rnn_step_options)
+            self.rnn_steps.append(rnn)
+
+    def precompute_from_x(self, x):
+        raise NotImplementedError()
+        #return self.gru_steps[0].precompute_from_x(x)
+
+    def forward(self,
+                prev_state):
+        new_state = prev_state
+        attention_context = None
+        for i, rnn_step in enumerate(self.rnn_steps):
+            if i < self.n_attention_hops:
+                attention_context = self.attention_steps[i].forward(prev_state=new_state)
+                x = attention_context
+            else:
+                x = None
+            new_state = rnn_step.forward(x=x, prev_state=new_state)
+        return attention_context, new_state
+        
 
 class Masked_cross_entropy_loss(object):
     def __init__(self,
