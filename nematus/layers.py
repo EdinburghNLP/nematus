@@ -119,7 +119,7 @@ class LayerNormLayer(object):
         # TODO: Actually, this is probably fixed now and should be tested with latest
         # TF version. See: https://github.com/tensorflow/tensorflow/issues/8101
         axis = 2 if input_is_3d else 1
-        m, v = tf.nn.moments(x, axes=[axis], keepdims=True)
+        m, v = tf.nn.moments(x, axes=[axis], keep_dims=True)
         std = tf.sqrt(v + self.eps)
         norm_x = (x-m)/std
         new_x = norm_x*self.new_std + self.new_mean
