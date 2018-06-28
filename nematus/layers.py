@@ -452,7 +452,8 @@ class AttentionStep(object):
                  hidden_size,
                  use_layer_norm=False,
                  dropout_context=None,
-                 dropout_state=None):
+                 dropout_state=None,
+                 projection_dim=-1):
         self.state_to_hidden = tf.Variable(
                                 norm_weight(state_size, hidden_size),
                                 name='state_to_hidden')
@@ -466,11 +467,24 @@ class AttentionStep(object):
                                 norm_weight(hidden_size, 1),
                                 name='hidden_to_score')
         self.use_layer_norm = use_layer_norm
+        self.apply_value_projection = (projection_dim != -1)
+        if self.apply_value_projection:
+            self.value_projection = tf.Variable(
+                                    norm_weight(context_state_size, projection_dim),
+                                    name='value_projection')
+            self.attention_context_size = projection_dim
+        else:
+            self.attention_context_size = context_state_size
+        
+
         if self.use_layer_norm:
             with tf.name_scope('hidden_context_norm'):
                 self.hidden_context_norm = LayerNormLayer(layer_size=hidden_size)
             with tf.name_scope('hidden_state_norm'):
                 self.hidden_state_norm = LayerNormLayer(layer_size=hidden_size)
+            if self.apply_value_projection:
+                with tf.name_scope('value_projection_norm'):
+                    self.value_projection_norm = LayerNormLayer(layer_size=projection_dim)
         self.context = context
         self.context_mask = context_mask
 
@@ -500,6 +514,15 @@ class AttentionStep(object):
             self.hidden_from_context = \
                 self.hidden_context_norm.forward(self.hidden_from_context, input_is_3d=True)
 
+        
+        if self.apply_value_projection:
+            self.context_value = matmul3d(self.context, self.value_projection)
+            if self.use_layer_norm:
+                self.context_value = self.value_projection_norm(self.context_value, input_is_3d=True)
+            self.context_value.set_shape([None, None, projection_dim])
+        else:
+            self.context_value = self.context
+
     def forward(self, prev_state):
         prev_state = apply_dropout_mask(prev_state,
                                         self.dropout_mask_state_to_hidden)
@@ -519,7 +542,7 @@ class AttentionStep(object):
         scores *= self.context_mask
         scores = scores / tf.reduce_sum(scores, axis=0, keepdims=True)
 
-        attention_context = self.context * tf.expand_dims(scores, axis=2)
+        attention_context = self.context_value * tf.expand_dims(scores, axis=2)
         attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
 
         return attention_context
@@ -562,11 +585,14 @@ class DeepTransitionRNNWithMultiHopAttentionStep(object):
                                                           **attention_step_options)
                     self.attention_steps.append(attention_step)
             with tf.name_scope(rnn_name_scope_fn(i)):
-                rnn = rnn_step_class(input_size=(context_state_size if i < n_attention_hops else 0),
+                rnn = rnn_step_class(input_size=(attention_step.attention_context_size if i < n_attention_hops else 0),
                                      state_size=state_size,
                                      batch_size=batch_size,
                                      **rnn_step_options)
             self.rnn_steps.append(rnn)
+        if n_attention_hops > 0:
+            self.attention_context_size = self.attention_steps[-1].attention_context_size
+         
 
     def precompute_from_x(self, x):
         raise NotImplementedError()

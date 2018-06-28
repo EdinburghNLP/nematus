@@ -501,6 +501,8 @@ def parse_args():
                          help="pass context vector (from first layer) to deep decoder layers")
     network.add_argument('--dec_attention_hops', type=int, default=1, metavar='INT',
                          help="Number of sequential attention hops in GRU decoder")
+    network.add_argument('--dec_attention_projection_dim', type=int, default=-1, metavar='INT',
+                         help="Project the context state to this size, per hop (-1 disables projection)")
     
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")

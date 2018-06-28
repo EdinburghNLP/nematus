@@ -74,8 +74,11 @@ def fill_options(options):
         else:
             options['target_embedding_size'] = options['embedding_size']
 
+    # attention options
     if not 'dec_attention_hops' in options:
         options['dec_attention_hops'] = 1
+    if not 'dec_attention_projection_dim' in options:
+        options['dec_attention_projection_dim'] = -1
 
     # set the default model version.
     if not 'model_version' in options:

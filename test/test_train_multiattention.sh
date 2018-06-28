@@ -21,5 +21,7 @@
   --no_shuffle \
   --dispFreq 500 \
   --finish_after 500 \
+  --use_layer_norm \
   --dec_base_recurrence_transition_depth 4 \
-  --dec_attention_hops 2
+  --dec_attention_hops 2 \
+  --dec_attention_projection_dim 512

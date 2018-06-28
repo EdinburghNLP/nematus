@@ -66,7 +66,8 @@ class Decoder(object):
                                     attention_step_options={'hidden_size' : 2*config.state_size,
                                                             'use_layer_norm' : config.use_layer_norm,
                                                             'dropout_context' : dropout_hidden,
-                                                            'dropout_state' : dropout_hidden},
+                                                            'dropout_state' : dropout_hidden,
+                                                            'projection_dim': config.dec_attention_projection_dim},
                                     rnn_step_options={'use_layer_norm' : config.use_layer_norm,
                                                       'nematus_compat' : True,
                                                       'dropout_input' : dropout_hidden,
@@ -96,7 +97,7 @@ class Decoder(object):
             if config.tie_decoder_embeddings:
                 W = self.y_emb_layer.get_embeddings(factor=0)
                 W = tf.transpose(W)
-            self.predictor = Predictor(config, batch_size, dropout_embedding,
+            self.predictor = Predictor(config, batch_size, self.att_grustep2.attention_context_size, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
 
 
@@ -166,7 +167,7 @@ class Decoder(object):
                             mode='CONSTANT',
                             paddings=[[1,0],[0,0],[0,0]]) # prepend zeros
 
-        init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
+        init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.att_grustep2.attention_context_size])
         init_state_att_ctx = (self.init_state, init_attended_context)
         gates_x, proposal_x = self.grustep1.precompute_from_x(y_embs)
         def step_fn(prev, x):
@@ -195,7 +196,7 @@ class Decoder(object):
         return logits
 
 class Predictor(object):
-    def __init__(self, config, batch_size, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
+    def __init__(self, config, batch_size, attention_context_size, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
         self.config = config
 
         with tf.name_scope("prev_emb_to_hidden"):
@@ -216,7 +217,7 @@ class Predictor(object):
                                     dropout_input=dropout_hidden)
         with tf.name_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = FeedForwardLayer(
-                                    in_size=2*config.state_size,
+                                    in_size=attention_context_size,
                                     out_size=config.target_embedding_size,
                                     batch_size=batch_size,
                                     non_linearity=lambda y: y,
