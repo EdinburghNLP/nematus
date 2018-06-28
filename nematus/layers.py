@@ -518,7 +518,7 @@ class AttentionStep(object):
         if self.apply_value_projection:
             self.context_value = matmul3d(self.context, self.value_projection)
             if self.use_layer_norm:
-                self.context_value = self.value_projection_norm(self.context_value, input_is_3d=True)
+                self.context_value = self.value_projection_norm.forward(self.context_value, input_is_3d=True)
             self.context_value.set_shape([None, None, projection_dim])
         else:
             self.context_value = self.context
