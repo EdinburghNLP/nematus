@@ -52,6 +52,8 @@ def fill_options(options):
         options['dim_per_factor'] = [options['embedding_size']]
     if not 'tie_decoder_embeddings' in options:
         options['tie_decoder_embeddings'] = False
+    if not 'tie_encoder_decoder_embeddings' in options:
+        options['tie_encoder_decoder_embeddings'] = False
     if not 'map_decay_c' in options:
         options['map_decay_c'] = 0.0
     if not 'enc_depth' in options:
@@ -66,6 +68,11 @@ def fill_options(options):
         options['dec_high_recurrence_transition_depth'] = 1
     if not 'dec_deep_context' in options:
         options['dec_deep_context'] = False
+    if not 'target_embedding_size' in options:
+        if options['tie_encoder_decoder_embeddings'] == True:
+            options['target_embedding_size'] = options['dim_per_factor'][0]
+        else:
+            options['target_embedding_size'] = options['embedding_size']
 
     # set the default model version.
     if not 'model_version' in options:

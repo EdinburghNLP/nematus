@@ -60,34 +60,30 @@ class FeedForwardLayer(object):
         y = self.non_linearity(y)
         return y
 
+
 class EmbeddingLayer(object):
-    def __init__(self,
-                 vocabulary_size,
-                 embedding_size):
-        self.embeddings = tf.Variable(norm_weight(vocabulary_size, embedding_size),
-                                      name='embeddings')
-
-    def forward(self, x):
-        embs = tf.nn.embedding_lookup(self.embeddings, x)
-        return embs
-
-    def get_embeddings(self):
-        return self.embeddings
-
-class EmbeddingLayerWithFactors(object):
-    def __init__(self,
-                 vocabulary_sizes,
-                 dim_per_factor):
+    def __init__(self, vocabulary_sizes, dim_per_factor):
         assert len(vocabulary_sizes) == len(dim_per_factor)
         self.embedding_matrices = [
             tf.Variable(norm_weight(vocab_size, dim), name='embeddings')
                 for vocab_size, dim in zip(vocabulary_sizes, dim_per_factor)]
 
-    def forward(self, x):
-        # Assumes that x has shape: factors, ...
-        embs = [tf.nn.embedding_lookup(matrix, x[i])
-                for i, matrix in enumerate(self.embedding_matrices)]
-        return tf.concat(embs, axis=-1)
+    def forward(self, x, factor=None):
+        if factor == None:
+            # Assumes that x has shape: factors, ...
+            embs = [tf.nn.embedding_lookup(matrix, x[i])
+                    for i, matrix in enumerate(self.embedding_matrices)]
+            return tf.concat(embs, axis=-1)
+        else:
+            matrix = self.embedding_matrices[factor]
+            return tf.nn.embedding_lookup(matrix, x)
+
+    def get_embeddings(self, factor=None):
+        if factor == None:
+            return self.embedding_matrices
+        else:
+            return self.embedding_matrices[factor]
+
 
 class RecurrentLayer(object):
     def __init__(self,
@@ -515,13 +511,13 @@ class AttentionStep(object):
 
         scores = matmul3d(hidden, self.hidden_to_score) # seqLen x batch x 1
         scores = tf.squeeze(scores, axis=2)
-        scores = scores - tf.reduce_max(scores, axis=0, keep_dims=True)
+        scores = scores - tf.reduce_max(scores, axis=0, keepdims=True)
         scores = tf.exp(scores)
         scores *= self.context_mask
-        scores = scores / tf.reduce_sum(scores, axis=0, keep_dims=True)
+        scores = scores / tf.reduce_sum(scores, axis=0, keepdims=True)
 
         attention_context = self.context * tf.expand_dims(scores, axis=2)
-        attention_context = tf.reduce_sum(attention_context, axis=0, keep_dims=False)
+        attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
 
         return attention_context
 
@@ -539,7 +535,7 @@ class Masked_cross_entropy_loss(object):
                 logits=logits)
         #cost has shape seqLen x batch
         cost *= self.y_mask
-        cost = tf.reduce_sum(cost, axis=0, keep_dims=False)
+        cost = tf.reduce_sum(cost, axis=0, keepdims=False)
         return cost
 
 class PReLU(object):

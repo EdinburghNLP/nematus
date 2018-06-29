@@ -9,8 +9,9 @@ import inference
 
 
 class Decoder(object):
-    def __init__(self, config, context, x_mask, dropout_target,
-                 dropout_embedding, dropout_hidden):
+    def __init__(self, config, context, x_mask,
+                 dropout_target, dropout_embedding, dropout_hidden,
+                 encoder_embedding_layer=None):
 
         self.dropout_target = dropout_target
         batch_size = tf.shape(x_mask)[1]
@@ -32,19 +33,22 @@ class Decoder(object):
             self.init_state = self.init_state_layer.forward(context_mean)
 
             self.translation_maxlen = config.translation_maxlen
-            self.embedding_size = config.embedding_size
+            self.embedding_size = config.target_embedding_size
             self.state_size = config.state_size
             self.target_vocab_size = config.target_vocab_size
 
         with tf.name_scope("embedding"):
-            self.y_emb_layer = EmbeddingLayer(
-                                vocabulary_size=config.target_vocab_size,
-                                embedding_size=config.embedding_size)
+            if encoder_embedding_layer == None:
+                self.y_emb_layer = EmbeddingLayer(
+                                    vocabulary_sizes=[config.target_vocab_size],
+                                    dim_per_factor=[config.target_embedding_size])
+            else:
+                self.y_emb_layer = encoder_embedding_layer
 
         with tf.name_scope("base"):
             with tf.name_scope("gru0"):
                 self.grustep1 = GRUStep(
-                                    input_size=config.embedding_size,
+                                    input_size=config.target_embedding_size,
                                     state_size=config.state_size,
                                     batch_size=batch_size,
                                     use_layer_norm=config.use_layer_norm,
@@ -93,7 +97,7 @@ class Decoder(object):
         with tf.name_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
-                W = self.y_emb_layer.get_embeddings()
+                W = self.y_emb_layer.get_embeddings(factor=0)
                 W = tf.transpose(W)
             self.predictor = Predictor(config, batch_size, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
@@ -143,7 +147,7 @@ class Decoder(object):
             new_y = tf.where(tf.equal(prev_y, tf.constant(0, dtype=tf.int32)),
                              tf.zeros_like(new_y), new_y)
             y_array = y_array.write(index=i, value=new_y)
-            new_emb = self.y_emb_layer.forward(new_y)
+            new_emb = self.y_emb_layer.forward(new_y, factor=0)
             return i+1, base_state, high_states, new_y, new_emb, y_array
 
         final_loop_vars = tf.while_loop(
@@ -158,7 +162,7 @@ class Decoder(object):
     def score(self, y):
         with tf.name_scope("y_embeddings_layer"):
             y_but_last = tf.slice(y, [0,0], [tf.shape(y)[0]-1, -1])
-            y_embs = self.y_emb_layer.forward(y_but_last)
+            y_embs = self.y_emb_layer.forward(y_but_last, factor=0)
             if self.dropout_target != None:
                 y_embs = self.dropout_target(y_embs)
             y_embs = tf.pad(y_embs,
@@ -200,8 +204,8 @@ class Predictor(object):
 
         with tf.name_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = FeedForwardLayer(
-                                in_size=config.embedding_size,
-                                out_size=config.embedding_size,
+                                in_size=config.target_embedding_size,
+                                out_size=config.target_embedding_size,
                                 batch_size=batch_size,
                                 non_linearity=lambda y: y,
                                 use_layer_norm=config.use_layer_norm,
@@ -209,7 +213,7 @@ class Predictor(object):
         with tf.name_scope("state_to_hidden"):
             self.state_to_hidden = FeedForwardLayer(
                                     in_size=config.state_size,
-                                    out_size=config.embedding_size,
+                                    out_size=config.target_embedding_size,
                                     batch_size=batch_size,
                                     non_linearity=lambda y: y,
                                     use_layer_norm=config.use_layer_norm,
@@ -217,7 +221,7 @@ class Predictor(object):
         with tf.name_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = FeedForwardLayer(
                                     in_size=2*config.state_size,
-                                    out_size=config.embedding_size,
+                                    out_size=config.target_embedding_size,
                                     batch_size=batch_size,
                                     non_linearity=lambda y: y,
                                     use_layer_norm=config.use_layer_norm,
@@ -225,11 +229,11 @@ class Predictor(object):
 
         if config.output_hidden_activation == 'prelu':
             with tf.name_scope("hidden_prelu"):
-                self.hidden_prelu = PReLU(in_size=config.embedding_size)
+                self.hidden_prelu = PReLU(in_size=config.target_embedding_size)
 
         with tf.name_scope("hidden_to_logits"):
             self.hidden_to_logits = FeedForwardLayer(
-                            in_size=config.embedding_size,
+                            in_size=config.target_embedding_size,
                             out_size=config.target_vocab_size,
                             batch_size=batch_size,
                             non_linearity=lambda y: y,
@@ -271,9 +275,8 @@ class Encoder(object):
         self.dropout_source = dropout_source
 
         with tf.name_scope("embedding"):
-            self.emb_layer = EmbeddingLayerWithFactors(
-                config.source_vocab_sizes,
-                config.dim_per_factor)
+            self.emb_layer = EmbeddingLayer(config.source_vocab_sizes,
+                                            config.dim_per_factor)
 
         with tf.name_scope("forward-stack"):
             self.forward_encoder = GRUStack(
@@ -395,14 +398,19 @@ class StandardModel(object):
             ctx = self.encoder.get_context(self.x, self.x_mask)
 
         with tf.name_scope("decoder"):
+            if config.tie_encoder_decoder_embeddings:
+                tied_embeddings = self.encoder.emb_layer
+            else:
+                tied_embeddings = None
             self.decoder = Decoder(config, ctx, self.x_mask, dropout_target,
-                                   dropout_embedding, dropout_hidden)
+                                   dropout_embedding, dropout_hidden,
+                                   tied_embeddings)
             self.logits = self.decoder.score(self.y)
 
         with tf.name_scope("loss"):
             self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
-            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keep_dims=False)
+            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keepdims=False)
             self.objective = self.mean_loss
             
             self.l2_loss = tf.constant(0.0, dtype=tf.float32)
