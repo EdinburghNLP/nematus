@@ -499,10 +499,12 @@ def parse_args():
                          help="number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: %(default)s)")
     network.add_argument('--dec_deep_context', action='store_true',
                          help="pass context vector (from first layer) to deep decoder layers")
+    network.add_argument('--dec_attention_heads', type=int, default=1, metavar='INT',
+                         help="Number of attention heads in decoder")
     network.add_argument('--dec_attention_hops', type=int, default=1, metavar='INT',
-                         help="Number of sequential attention hops in GRU decoder")
+                         help="Number of sequential attention hops in decoder")
     network.add_argument('--dec_attention_projection_dim', type=int, default=-1, metavar='INT',
-                         help="Project the context state to this size, per hop (-1 disables projection)")
+                         help="Project the context state to this size, per head per hop (-1 disables projection)")
     
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")

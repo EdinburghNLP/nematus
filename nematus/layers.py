@@ -453,7 +453,8 @@ class AttentionStep(object):
                  use_layer_norm=False,
                  dropout_context=None,
                  dropout_state=None,
-                 projection_dim=-1):
+                 projection_dim=-1,
+                 n_attention_heads=1):
         self.state_to_hidden = tf.Variable(
                                 norm_weight(state_size, hidden_size),
                                 name='state_to_hidden')
@@ -464,17 +465,18 @@ class AttentionStep(object):
                             numpy.zeros((hidden_size,)).astype('float32'),
                             name='hidden_bias')
         self.hidden_to_score = tf.Variable(
-                                norm_weight(hidden_size, 1),
+                                norm_weight(hidden_size, n_attention_heads),
                                 name='hidden_to_score')
+        self.n_attention_heads=n_attention_heads
         self.use_layer_norm = use_layer_norm
         self.apply_value_projection = (projection_dim != -1)
         if self.apply_value_projection:
             self.value_projection = tf.Variable(
-                                    norm_weight(context_state_size, projection_dim),
+                                    norm_weight(context_state_size, projection_dim*n_attention_heads),
                                     name='value_projection')
-            self.attention_context_size = projection_dim
+            self.attention_context_size = projection_dim * n_attention_heads
         else:
-            self.attention_context_size = context_state_size
+            self.attention_context_size = context_state_size * n_attention_heads
         
 
         if self.use_layer_norm:
@@ -484,7 +486,7 @@ class AttentionStep(object):
                 self.hidden_state_norm = LayerNormLayer(layer_size=hidden_size)
             if self.apply_value_projection:
                 with tf.name_scope('value_projection_norm'):
-                    self.value_projection_norm = LayerNormLayer(layer_size=projection_dim)
+                    self.value_projection_norm = LayerNormLayer(layer_size=projection_dim*n_attention_heads)
         self.context = context
         self.context_mask = context_mask
 
@@ -519,9 +521,11 @@ class AttentionStep(object):
             self.context_value = matmul3d(self.context, self.value_projection)
             if self.use_layer_norm:
                 self.context_value = self.value_projection_norm.forward(self.context_value, input_is_3d=True)
-            self.context_value.set_shape([None, None, projection_dim])
+            self.context_value = tf.reshape(self.context_value, [tf.shape(self.context_value)[0], -1, n_attention_heads, projection_dim])
+        elif n_attention_heads == 1:
+            self.context_value = tf.expand_dims(self.context, axis=2)
         else:
-            self.context_value = self.context
+            self.context_value = tf.tile(tf.expand_dims(self.context, axis=2), tf.constant([1, 1, n_attention_heads, 1]))
 
     def forward(self, prev_state):
         prev_state = apply_dropout_mask(prev_state,
@@ -535,15 +539,17 @@ class AttentionStep(object):
         # context has shape seqLen x batch x context_state_size
         # mask has shape seqLen x batch
 
-        scores = matmul3d(hidden, self.hidden_to_score) # seqLen x batch x 1
-        scores = tf.squeeze(scores, axis=2)
+        scores = matmul3d(hidden, self.hidden_to_score) # seqLen x batch x heads
+        #scores = tf.squeeze(scores, axis=2)
         scores = scores - tf.reduce_max(scores, axis=0, keepdims=True)
         scores = tf.exp(scores)
-        scores *= self.context_mask
+        scores *= tf.expand_dims(self.context_mask, axis=2)
         scores = scores / tf.reduce_sum(scores, axis=0, keepdims=True)
 
-        attention_context = self.context_value * tf.expand_dims(scores, axis=2)
+        #attention_context = self.context_value * tf.expand_dims(scores, axis=2)
+        attention_context = self.context_value * tf.expand_dims(scores, axis=3)
         attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
+        attention_context = tf.reshape(attention_context, [-1, self.attention_context_size])
 
         return attention_context
 

@@ -75,6 +75,9 @@ def fill_options(options):
             options['target_embedding_size'] = options['embedding_size']
 
     # attention options
+
+    if not 'dec_attention_heads' in options:
+        options['dec_attention_heads'] = 1
     if not 'dec_attention_hops' in options:
         options['dec_attention_hops'] = 1
     if not 'dec_attention_projection_dim' in options:
