@@ -155,18 +155,18 @@ def theano_to_tensorflow_model(in_path, out_path):
                 seen.add(tf_name)
                 tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
                 if (sess.run(tf.shape(tf_var)) != saved_model[key].shape).any():
-                    print "mismatch for", tf_name, key, saved_model[key].shape, sess.run(tf.shape(tf_var))
+                    print("mismatch for", tf_name, key, saved_model[key].shape, sess.run(tf.shape(tf_var)))
                 assign_ops.append(tf.assign(tf_var, saved_model[key]))
             else:
-                print "Not saving", key, "because no TF equivalent"
+                print("Not saving", key, "because no TF equivalent")
         sess.run(assign_ops)
         saver.save(sess, save_path=out_path)
 
-        print "The following TF variables were not assigned (excluding Adam vars):"
-        print "You should see only 'beta1_power', 'beta2_power' and 'time' variable listed"
+        print("The following TF variables were not assigned (excluding Adam vars):")
+        print("You should see only 'beta1_power', 'beta2_power' and 'time' variable listed")
         for tf_var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
             if tf_var.name not in seen and 'Adam' not in tf_var.name:
-                print tf_var.name
+                print(tf_var.name)
 
 
 def tensorflow_to_theano_model(in_path, out_path):
@@ -182,7 +182,7 @@ def tensorflow_to_theano_model(in_path, out_path):
                 try:
                     v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))
                 except:
-                    print "Skipping {} because it was not found".format(tf_name)
+                    print("Skipping {} because it was not found".format(tf_name))
                     continue
             else:
                 if th_name == 'history_errs':
@@ -194,7 +194,7 @@ def tensorflow_to_theano_model(in_path, out_path):
             assert th_name not in params, '{} is repeated!'.format(th_name)
             params[th_name] = v
     np.savez(out_path, **params)
-    print 'Saved {} params in {}'.format(len(params), out_path)
+    print('Saved {} params in {}'.format(len(params), out_path))
 
 
 if __name__ == '__main__':

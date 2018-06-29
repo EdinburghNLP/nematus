@@ -1,6 +1,6 @@
 NEMATUS
 -------
-
+This fork migrates Nematus-Tensorflow to Python 3 and Windows
 (This branch uses a Tensorflow backend. See https://github.com/EdinburghNLP/nematus/tree/master for the Theano-based version of Nematus,
 which currently supports more architecture variants.)
 

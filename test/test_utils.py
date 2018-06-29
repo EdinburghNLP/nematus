@@ -4,6 +4,7 @@
 import sys
 import os
 import requests
+import shutil
 
 sys.path.append(os.path.abspath('../nematus'))
 from theano_tf_convert import theano_to_tensorflow_model
@@ -25,7 +26,7 @@ def load_wmt16_model(src, target):
 
                 # regression test is based on Theano model - convert to TF names
                 if filename == 'model.npz.json' and not os.path.exists(os.path.join(path, 'model.npz.index')):
-                    os.copy(os.path.join(path, 'model.npz.json'), os.path.join(path, 'model-theano.npz.json'))
+                    shutil.copy(os.path.join(path, 'model.npz.json'), os.path.join(path, 'model-theano.npz.json'))
                 elif filename == 'model.npz' and not os.path.exists(os.path.join(path, 'model.npz.index')):
                     os.rename(os.path.join(path, 'model.npz'), os.path.join(path, 'model-theano.npz'))
                     theano_to_tensorflow_model(os.path.join(path, 'model-theano.npz'), os.path.join(path, 'model.npz'))

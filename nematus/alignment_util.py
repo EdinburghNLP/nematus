@@ -30,7 +30,7 @@ def get_alignments(attention, x_mask, y_mask):
 
     for target_sent_index in range(n_cols):
         #print "\n\n","*" * 40
-        print "Going through sentence", target_sent_index
+        print("Going through sentence", target_sent_index)
         #source_sent_index = source_indexes[target_sent_index]
         target_length = y_mask[:,target_sent_index].tolist().count(1)
         source_length = x_mask[:,target_sent_index].tolist().count(1)
@@ -190,7 +190,7 @@ def convert_to_nodes_edges_each_v2(data, sent_id):
     #print data
     jdata = json.loads(data)
     #jdata = json.loads(json.dumps(jdata).decode('unicode-escape').encode('utf8'))
-    print jdata
+    print(jdata)
     source_words = jdata["source_sent"].encode('unicode-escape').strip().split()
     source_words.append("EOS")
     target_words = jdata["target_sent"].strip().split()
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     convert_to_nodes_edges_v2(input_file)
 
     import sys
-    reload(sys)
+    #reload(sys)
     sys.setdefaultencoding('utf-8')
 ### Json for web visuaslization format version 1.
 ### This corresponds to convert_to_nodes_edges_each_v1; and convert_to_nodes_edges_v1.

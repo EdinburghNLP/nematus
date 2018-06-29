@@ -77,7 +77,8 @@ def fill_options(options):
     # extra config options in TF; only translation_maxlen matters for translation/scoring
     if not 'translation_maxlen' in options:
         options['translation_maxlen'] = 200
-    options['optimizer'] = 'adam'
+    if not 'optimizer' in options:
+        options['optimizer'] = 'adam'
     if not 'learning_rate' in options:
         options['learning_rate'] = 0.0001
     if not 'clip_c' in options:
