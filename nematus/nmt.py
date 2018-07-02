@@ -503,8 +503,12 @@ def parse_args():
                          help="Number of attention heads in decoder")
     network.add_argument('--dec_attention_hops', type=int, default=1, metavar='INT',
                          help="Number of sequential attention hops in decoder")
+    network.add_argument('--dec_attention_hidden_dim', type=int, default=-1, metavar='INT',
+                         help="Hidden layer size in attention score network in the decoder, per head per hop (-1 defaults to 2*state_size)")
     network.add_argument('--dec_attention_projection_dim', type=int, default=-1, metavar='INT',
                          help="Project the context state to this size, per head per hop (-1 disables projection)")
+    network.add_argument('--dec_attention_dot_product', action="store_true",
+                         help="Use dot product attention in the decoder")
     
     network.add_argument('--use_dropout', action="store_true",
                          help="use dropout layer (default: %(default)s)")

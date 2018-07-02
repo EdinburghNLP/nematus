@@ -553,6 +553,90 @@ class AttentionStep(object):
 
         return attention_context
 
+class DotProductAttentionStep(object):
+    def __init__(self,
+                 context,
+                 context_state_size,
+                 context_mask,
+                 state_size,
+                 hidden_size, 		# key projection size
+                 use_layer_norm=False,
+                 dropout_context=None,
+                 dropout_state=None,
+                 projection_dim=-1,     # value projection size
+                 n_attention_heads=1):
+        self.state_to_hidden = tf.Variable(
+                                norm_weight(state_size, hidden_size*n_attention_heads),
+                                name='state_to_hidden')
+        self.context_to_hidden = tf.Variable( 
+                                    norm_weight(context_state_size, hidden_size*n_attention_heads), 
+                                    name='context_to_hidden')
+        self.n_attention_heads=n_attention_heads
+        self.use_layer_norm = use_layer_norm
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim if projection_dim != -1 else self.hidden_size
+        self.value_projection = tf.Variable(
+                                 norm_weight(context_state_size, projection_dim*n_attention_heads),
+                                 name='value_projection')
+        self.attention_context_size = projection_dim * n_attention_heads
+
+        if self.use_layer_norm:
+            with tf.name_scope('value_projection_norm'):
+                self.value_projection_norm = LayerNormLayer(layer_size=projection_dim*n_attention_heads)
+
+        self.context = context
+        self.context_mask = tf.transpose(context_mask) 								# batch_size x seqLen
+
+        batch_size = tf.shape(context)[1]
+
+        # Create a dropout mask for context values (reused at every timestep).
+        if dropout_context == None:
+            self.dropout_mask_context_to_hidden = None
+        else:
+            ones = tf.ones([batch_size, context_state_size])
+            self.dropout_mask_context_to_hidden = dropout_context(ones)
+
+        # Create a dropout mask for state values (reused at every timestep).
+        if dropout_state == None:
+            self.dropout_mask_state_to_hidden = None
+        else:
+            ones = tf.ones([batch_size, state_size])
+            self.dropout_mask_state_to_hidden = dropout_state(ones)
+
+        # precompute these activations, they are the same at each step
+        # Ideally the compiler would have figured out that too
+        context = apply_dropout_mask(context,
+                                     self.dropout_mask_context_to_hidden, True)
+        self.hidden_from_context = matmul3d(context, self.context_to_hidden)
+        self.hidden_from_context = tf.reshape(self.hidden_from_context, [tf.shape(self.hidden_from_context)[0], -1, n_attention_heads, hidden_size])
+        self.hidden_from_context = tf.transpose(self.hidden_from_context, [1, 2, 3, 0]) 	  		# batch_size x n_attention_heads x hidden_size x seqLen
+        
+        self.context_value = matmul3d(self.context, self.value_projection)
+        if self.use_layer_norm:
+            self.context_value = self.value_projection_norm.forward(self.context_value, input_is_3d=True)
+        self.context_value = tf.reshape(self.context_value, [tf.shape(self.context_value)[0], -1, n_attention_heads, projection_dim])
+
+    def forward(self, prev_state):
+        prev_state = apply_dropout_mask(prev_state,
+                                        self.dropout_mask_state_to_hidden)
+        hidden_from_state = tf.matmul(prev_state, self.state_to_hidden)
+        hidden_from_state = tf.reshape(hidden_from_state, [-1, self.n_attention_heads, 1, self.hidden_size]) 	# batch_size x n_attention_heads x 1 x hidden_size
+
+        scores = tf.matmul(hidden_from_state, self.hidden_from_context)
+        scores = tf.squeeze(scores, axis=2)									# batch_size x n_attention_heads x seqLen
+
+        scores = scores - tf.reduce_max(scores, axis=2, keepdims=True)
+        scores = tf.exp(scores)
+        scores *= tf.expand_dims(self.context_mask, axis=1)
+        scores = scores / tf.reduce_sum(scores, axis=2, keepdims=True)
+
+        attention_context = self.context_value * tf.expand_dims(tf.transpose(scores, [2, 0, 1]), axis=3)
+        attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
+        attention_context = tf.reshape(attention_context, [-1, self.attention_context_size])
+
+        return attention_context
+
+
 class DeepTransitionRNNWithMultiHopAttentionStep(object):
     def __init__(self,
                  context,

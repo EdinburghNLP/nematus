@@ -24,5 +24,7 @@
   --dec_base_recurrence_transition_depth 4 \
   --dec_attention_hops 2 \
   --dec_attention_heads 3 \
+  --dec_attention_hidden_dim 123 \
   --dec_attention_projection_dim 256 \
-# --use_layer_norm \
+  --dec_attention_dot_product \
+  --use_layer_norm \

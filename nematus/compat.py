@@ -80,8 +80,13 @@ def fill_options(options):
         options['dec_attention_heads'] = 1
     if not 'dec_attention_hops' in options:
         options['dec_attention_hops'] = 1
+    if not 'dec_attention_hidden_dim' in options:
+        options['dec_attention_hidden_dim'] = -1
     if not 'dec_attention_projection_dim' in options:
         options['dec_attention_projection_dim'] = -1
+    if not 'dec_attention_dot_product' in options:
+        options['dec_attention_dot_product'] = False
+
 
     # set the default model version.
     if not 'model_version' in options:
