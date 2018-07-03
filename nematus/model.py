@@ -435,7 +435,7 @@ class StandardModel(object):
             sys.exit(1)
 
         self.t = tf.Variable(0, name='time', trainable=False, dtype=tf.int32)
-        grad_vars = self.optimizer.compute_gradients(self.mean_loss)
+        grad_vars = self.optimizer.compute_gradients(self.objective)
         grads, varss = zip(*grad_vars)
         clipped_grads, global_norm = tf.clip_by_global_norm(grads, clip_norm=config.clip_c)
         # Might be interesting to see how the global norm changes over time, attach a summary?
