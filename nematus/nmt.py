@@ -278,11 +278,6 @@ def train(config, sess):
                 n_sents = 0
                 n_words = 0
 
-            if config.saveFreq and progress.uidx % config.saveFreq == 0:
-                saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
-                progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
-                progress.save_to_json(progress_path)
-
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
                 samples = model.sample(sess, x_small, x_mask_small)
@@ -309,17 +304,23 @@ def train(config, sess):
                 valid_loss = sum(costs) / len(costs)
                 if (len(progress.history_errs) == 0 or
                     valid_loss < min(progress.history_errs)):
+                    progress.history_errs.append(valid_loss)
                     progress.bad_counter = 0
                     saver.save(sess, save_path=config.saveto)
                     progress_path = '{0}.progress.json'.format(config.saveto)
                     progress.save_to_json(progress_path)
                 else:
+                    progress.history_errs.append(valid_loss)
                     progress.bad_counter += 1
                     if progress.bad_counter > config.patience:
                         logging.info('Early Stop!')
                         progress.estop = True
                         break
-                progress.history_errs.append(valid_loss)
+
+            if config.saveFreq and progress.uidx % config.saveFreq == 0:
+                saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
+                progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
+                progress.save_to_json(progress_path)
 
             if config.finish_after and progress.uidx % config.finish_after == 0:
                 logging.info("Maximum number of updates reached")
