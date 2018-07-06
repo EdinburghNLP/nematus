@@ -590,6 +590,8 @@ def parse_args():
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
                          help="learning rate (default: %(default)s)")
+    training.add_argument('--label_smoothing', type=float, default=0, metavar='FLOAT',
+                         help="label smoothing (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
     training.add_argument('--keep_train_set_in_memory', action="store_true", 

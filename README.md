@@ -146,6 +146,7 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --prior_model STR    | Prior model for MAP-L2 regularization. Unless using "--reload", this will also be used for initialization. |
 | --clip_c FLOAT       |  gradient clipping threshold (default: 1) |
 | --learning_rate FLOAT |  learning rate (default: 0.0001) |
+| --label_smoothing FLOAT | label smoothing (default: 0) |
 | --no_shuffle         |  disable shuffling of training data (for each epoch) |
 | --no_sort_by_length  |  do not sort sentences in maxibatch by length |
 | --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |

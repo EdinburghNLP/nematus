@@ -408,7 +408,7 @@ class StandardModel(object):
             self.logits = self.decoder.score(self.y)
 
         with tf.name_scope("loss"):
-            self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask)
+            self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask, config.label_smoothing, training=self.training)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
             self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keepdims=False)
             self.objective = self.mean_loss
