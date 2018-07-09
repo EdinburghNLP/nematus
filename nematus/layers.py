@@ -2,7 +2,7 @@
 Layer definitions
 """
 
-from initializers import ortho_weight, norm_weight
+from initializers import ortho_weight, norm_weight, uniform_weight
 import tensorflow as tf
 import numpy
 import sys
@@ -564,16 +564,20 @@ class DotProductAttentionStep(object):
                  dropout_context=None,
                  dropout_state=None,
                  projection_dim=-1,     # value projection size
-                 n_attention_heads=1):
+                 n_attention_heads=1,
+                 scaled=True):
         self.state_to_hidden = tf.Variable(
-                                norm_weight(state_size, hidden_size*n_attention_heads),
+                                #norm_weight(state_size, hidden_size*n_attention_heads),
+                                uniform_weight(state_size, hidden_size*n_attention_heads, scale=numpy.sqrt(n_attention_heads), use_glorot=True),
                                 name='state_to_hidden')
         self.context_to_hidden = tf.Variable( 
-                                    norm_weight(context_state_size, hidden_size*n_attention_heads), 
+                                    #norm_weight(context_state_size, hidden_size*n_attention_heads), 
+                                    uniform_weight(context_state_size, hidden_size*n_attention_heads, scale=numpy.sqrt(n_attention_heads), use_glorot=True),
                                     name='context_to_hidden')
         self.n_attention_heads=n_attention_heads
         self.use_layer_norm = use_layer_norm
         self.hidden_size = hidden_size
+        self.scaled = scaled
         self.projection_dim = projection_dim if projection_dim != -1 else self.hidden_size
         self.value_projection = tf.Variable(
                                  norm_weight(context_state_size, projection_dim*n_attention_heads),
@@ -624,6 +628,8 @@ class DotProductAttentionStep(object):
 
         scores = tf.matmul(hidden_from_state, self.hidden_from_context)
         scores = tf.squeeze(scores, axis=2)									# batch_size x n_attention_heads x seqLen
+        if self.scaled:
+            scores /= numpy.sqrt(self.hidden_size)
 
         scores = scores - tf.reduce_max(scores, axis=2, keepdims=True)
         scores = tf.exp(scores)

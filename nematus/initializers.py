@@ -18,3 +18,10 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True):
         W = scale * numpy.random.randn(nin, nout)
     return W.astype('float32')
 
+def uniform_weight(nin, nout=None, scale=1.0, use_glorot=True):
+    if nout is None:
+        nout = nin
+    if use_glorot:
+        scale *= numpy.sqrt(6.0 / (nin + nout))
+    W = numpy.random.uniform(low=-scale, high=scale, size=(nin, nout))
+    return W.astype('float32')
