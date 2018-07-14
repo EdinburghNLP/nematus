@@ -7,6 +7,8 @@ import os
 import logging
 import time
 import argparse
+import subprocess
+import tempfile
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -79,6 +81,7 @@ def create_model(config, sess, ensemble_scope=None, train=False):
         progress.eidx = 0
         progress.estop = False
         progress.history_errs = []
+        progress.valid_script_scores = []
         if reload_filename and config.reload_training_progress:
             path = reload_filename + '.progress.json'
             if os.path.exists(path):
@@ -316,6 +319,20 @@ def train(config, sess):
                         logging.info('Early Stop!')
                         progress.estop = True
                         break
+                if config.valid_script is not None:
+                    score = validate_with_script(sess, model, config,
+                                                 valid_text_iterator)
+                    need_to_save = (score is not None and
+                        (len(progress.valid_script_scores) == 0 or
+                         score > max(progress.valid_script_scores)))
+                    if score is None:
+                        score = 0.0  # ensure a valid value is written
+                    progress.valid_script_scores.append(score)
+                    if need_to_save:
+                        save_path = config.saveto + ".best-valid-script"
+                        saver.save(sess, save_path=save_path)
+                        progress_path = '{}.progress.json'.format(save_path)
+                        progress.save_to_json(progress_path)
 
             if config.saveFreq and progress.uidx % config.saveFreq == 0:
                 saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
@@ -332,8 +349,10 @@ def train(config, sess):
         if progress.estop:
             break
 
-def translate(config, sess):
-    model, saver = create_model(config, sess)
+
+# TODO This function shares a lot of code with translate.Translator.  Can
+# we use that class instead (without too much painful refactoring)?
+def translate(sess, model, config, output_file=sys.stdin):
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
@@ -346,7 +365,7 @@ def translate(config, sess):
         sys.exit(1)
     in_queue, out_queue = Queue(), Queue()
     model._get_beam_search_outputs(config.beam_size)
-    
+
     def translate_worker(in_queue, out_queue, model, sess, config):
         while True:
             job = in_queue.get()
@@ -389,12 +408,42 @@ def translate(config, sess):
         beam = sorted(beam, key=lambda (sent, cost): cost)
         if config.n_best:
             for sent, cost in beam:
-                print seq2words(sent, num_to_target), '[%f]' % cost
+                line = "{} [{}]\n".format(seq2words(sent, num_to_target), cost)
+                output_file.write(line)
         else:
             best_hypo, cost = beam[0]
-            print seq2words(best_hypo, num_to_target)
+            line = seq2words(best_hypo, num_to_target) + '\n'
+            output_file.write(line)
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
+
+
+def validate_with_script(sess, model, config, valid_text_iterator):
+    if config.valid_script == None:
+        return None
+    logging.info('Starting external validation.')
+    out = tempfile.NamedTemporaryFile()
+    translate(sess, model, config, output_file=out)
+    out.flush()
+    args = [config.valid_script, out.name]
+    proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    if len(stderr) > 0:
+        logging.info("Validation script wrote the following to standard "
+                     "error:\n" + stderr)
+    if proc.returncode != 0:
+        logging.warning("Validation script failed (returned exit status of "
+                        "{}).".format(proc.returncode))
+        return None
+    try:
+        score = float(stdout.split()[0])
+    except:
+        logging.warning("Validation script output does not look like a score: "
+                        "{}".format(stdout))
+        return None
+    logging.info("Validation script score: {}".format(score))
+    return score
 
 
 def validate(config, sess, valid_text_iterator, model, normalization_alpha=0):
@@ -567,6 +616,8 @@ def parse_args():
                           help="validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: %(default)s)")
     validation.add_argument('--validFreq', type=int, default=10000, metavar='INT',
                          help="validation frequency (default: %(default)s)")
+    validation.add_argument('--valid_script', type=str, default=None, metavar='PATH',
+                         help="path to script for external validation (default: %(default)s). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output.")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
     validation.add_argument('--run_validation', action='store_true',
@@ -678,7 +729,6 @@ def parse_args():
     config.target_dict = config.dictionaries[-1]
     config.target_vocab_size = vocab_sizes[-1]
 
-
     # set the model version
     config.model_version = 0.2
 
@@ -694,7 +744,8 @@ if __name__ == "__main__":
     logging.info(config)
     with tf.Session() as sess:
         if config.translate_valid:
-            translate(config, sess)
+            model, saver = create_model(config, sess)
+            translate(sess, model, config)
         elif config.run_validation:
             validate_helper(config, sess)
         else:
