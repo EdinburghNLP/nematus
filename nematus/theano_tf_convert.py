@@ -149,6 +149,9 @@ def theano_to_tensorflow_model(in_path, out_path):
         seen = set()
         assign_ops = []
         for key in saved_model.keys():
+            # ignore adam parameters
+            if key.startswith('adam'):
+                continue
             tf_name = th2tf[key]
             if tf_name is not None:
                 assert tf_name not in seen
