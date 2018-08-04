@@ -533,23 +533,15 @@ class Masked_cross_entropy_loss(object):
         if label_smoothing:
            self.label_smoothing = True
            self.smoothing_factor = label_smoothing
-
         else:
            self.label_smoothing = False
-
-        self.smoothed_prob = tf.Variable(0,
-                                    dtype=tf.float32,
-                                    name='smoothed_prob')
-        self.uniform_prob = tf.Variable(0,
-                                    dtype=tf.float32,
-                                    name='uniform_prob')
 
 
     def forward(self, logits):
         if self.label_smoothing:
-            self.uniform_prob = self.smoothing_factor / tf.cast(tf.shape(logits)[-1], tf.float32)
-            self.smoothed_prob = 1.0-self.smoothing_factor + self.uniform_prob
-            onehot_labels = tf.one_hot(self.y_true, tf.shape(logits)[-1], on_value = self.smoothed_prob, off_value = self.uniform_prob, dtype = tf.float32)
+            uniform_prob = self.smoothing_factor / tf.cast(tf.shape(logits)[-1], tf.float32)
+            smoothed_prob = 1.0-self.smoothing_factor + uniform_prob
+            onehot_labels = tf.one_hot(self.y_true, tf.shape(logits)[-1], on_value = smoothed_prob, off_value = uniform_prob, dtype = tf.float32)
             cost = tf.losses.softmax_cross_entropy(
                 onehot_labels=onehot_labels,
                 logits=logits,
