@@ -73,6 +73,8 @@ def fill_options(options):
             options['target_embedding_size'] = options['dim_per_factor'][0]
         else:
             options['target_embedding_size'] = options['embedding_size']
+    if not 'label_smoothing' in options:
+        options['label_smoothing'] = 0.0
 
     # set the default model version.
     if not 'model_version' in options:
