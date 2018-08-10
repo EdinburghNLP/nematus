@@ -51,8 +51,6 @@ Content-Type: application/json
 | ``character_level`` | ``boolean``           | ``false`` | Enables character- rather than subword-level translation. |
 | ``n_best``          | ``int``               | ``1``     | Return n best translations per segment. |
 | ``suppress_unk``    | ``boolean``           | ``false`` | Suppress hypotheses containing UNK. |
-| ``return_word_alignment`` | ``boolean``     | ``false`` | Return word alignment (source to target language) for each segment. |
-| ``return_word_probabilities`` | ``boolean`` | ``false`` | Return the probability of each word (target language) for each segment. |
 
 Sample request:
 
@@ -62,8 +60,6 @@ Sample request:
 		["I", "can", "resist", "everything", "except", "temptation", "."],
 		["The", "truth", "is", "rarely", "pure", "and", "never", "simple", "."]
 	],
-	"return_word_alignment": false,
-	"return_word_probabilities": true
 }
 ```
 
@@ -77,11 +73,9 @@ If successful, the response body contains a JSON object with the following struc
     "data": [
         {
             "translation": ["ich", "kann", "dem", "alles", "außer", "Versuchung", "widerstehen", "."],
-            "word_probabilities": [0.7646325826644897, 0.9430494904518127, 0.38647976517677307, 0.26613569259643555, 0.6460939645767212, 0.13612061738967896, 0.8265654444694519, 0.9531617760658264, 0.9988221526145935]
         },
         {
             "translation": ["die", "Wahrheit", "ist", "selten", "rein", "und", "nie", "einfach", "."],
-            "word_probabilities": [0.5854464173316956, 0.9951469302177429, 0.9804221987724304, 0.8840637803077698, 0.5384426712989807, 0.9914865493774414, 0.6368535161018372, 0.6743759512901306, 0.988534152507782, 0.9986005425453186]
         }
     ]
 }

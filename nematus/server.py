@@ -77,8 +77,6 @@ class NematusServer(object):
         response_data = {
             'status': TranslationResponse.STATUS_OK,
             'segments': [translation.target_words for translation in translations],
-            'word_alignments': [translation.get_alignment_json(as_string=False) for translation in translations] if translation_request.settings.get_alignment else None,
-            'word_probabilities': [translation.target_probs for translation in translations] if translation_request.settings.get_word_probs else None,
         }
         translation_response = response_provider(self._style, **response_data)
         logging.debug("RESPONSE - " + repr(translation_response))
