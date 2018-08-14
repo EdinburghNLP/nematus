@@ -2,9 +2,9 @@
 Layer definitions
 """
 
-from initializers import ortho_weight, norm_weight
 import tensorflow as tf
-import numpy
+
+import initializers
 
 def matmul3d(x3d, matrix):
     shape = tf.shape(x3d)
@@ -34,9 +34,11 @@ class FeedForwardLayer(object):
                  use_layer_norm=False,
                  dropout_input=None):
         if W is None:
-            W = tf.Variable(norm_weight(in_size, out_size), name='W')
+            init = initializers.norm_weight(in_size, out_size)
+            W = tf.get_variable('W', initializer=init)
         self.W = W
-        self.b = tf.Variable(numpy.zeros((out_size,)).astype('float32'), name='b')
+        self.b = tf.get_variable('b', [out_size],
+                                 initializer=tf.zeros_initializer)
         self.non_linearity = non_linearity
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
@@ -64,9 +66,13 @@ class FeedForwardLayer(object):
 class EmbeddingLayer(object):
     def __init__(self, vocabulary_sizes, dim_per_factor):
         assert len(vocabulary_sizes) == len(dim_per_factor)
-        self.embedding_matrices = [
-            tf.Variable(norm_weight(vocab_size, dim), name='embeddings')
-                for vocab_size, dim in zip(vocabulary_sizes, dim_per_factor)]
+        self.embedding_matrices = []
+        for i in range(len(vocabulary_sizes)):
+            vocab_size, dim = vocabulary_sizes[i], dim_per_factor[i]
+            var_name = 'embeddings' if i == 0 else 'embeddings_' + str(i)
+            init = initializers.norm_weight(vocab_size, dim)
+            matrix = tf.get_variable(var_name, initializer=init)
+            self.embedding_matrices.append(matrix)
 
     def forward(self, x, factor=None):
         if factor == None:
@@ -104,14 +110,10 @@ class LayerNormLayer(object):
                  layer_size,
                  eps=1e-5):
         #TODO: If nematus_compat is true, then eps must be 1e-5!
-        new_mean = numpy.zeros(shape=[layer_size], dtype=numpy.float32)
-        self.new_mean = tf.Variable(new_mean,
-                                    dtype=tf.float32,
-                                    name='new_mean')
-        new_std = numpy.ones(shape=[layer_size], dtype=numpy.float32)
-        self.new_std = tf.Variable(new_std,
-                                   dtype=tf.float32,
-                                   name='new_std')
+        self.new_mean = tf.get_variable('new_mean', [layer_size],
+                                        initializer=tf.zeros_initializer)
+        self.new_std = tf.get_variable('new_std', [layer_size],
+                                       initializer=tf.constant_initializer(1))
         self.eps = eps
     def forward(self, x, input_is_3d=False):
         # NOTE: tf.nn.moments does not support axes=[-1] or axes=[tf.rank(x)-1] :-(
@@ -133,45 +135,41 @@ class GRUStep(object):
                  nematus_compat=False,
                  dropout_input=None,
                  dropout_state=None):
-        self.state_to_gates = tf.Variable(
-                                numpy.concatenate(
-                                    [ortho_weight(state_size),
-                                     ortho_weight(state_size)],
-                                    axis=1), 
-                                name='state_to_gates')
+        init = tf.concat([initializers.ortho_weight(state_size),
+                          initializers.ortho_weight(state_size)],
+                         axis=1)
+        self.state_to_gates = tf.get_variable('state_to_gates',
+                                              initializer=init)
         if input_size > 0:
-            self.input_to_gates = tf.Variable(
-                                    numpy.concatenate(
-                                        [norm_weight(input_size, state_size),
-                                         norm_weight(input_size, state_size)],
-                                        axis=1),
-                                    name='input_to_gates')
-        self.gates_bias = tf.Variable(
-                            numpy.zeros((2*state_size,)).astype('float32'),
-                            name='gates_bias')
+            init = tf.concat([initializers.norm_weight(input_size, state_size),
+                              initializers.norm_weight(input_size, state_size)],
+                             axis=1)
+            self.input_to_gates = tf.get_variable('input_to_gates',
+                                                  initializer=init)
+        self.gates_bias = tf.get_variable('gates_bias', [2*state_size],
+                                          initializer=tf.zeros_initializer)
 
-        self.state_to_proposal = tf.Variable(
-                                    ortho_weight(state_size),
-                                    name = 'state_to_proposal')
+        init = initializers.ortho_weight(state_size)
+        self.state_to_proposal = tf.get_variable('state_to_proposal',
+                                                 initializer=init)
         if input_size > 0:
-            self.input_to_proposal = tf.Variable(
-                                        norm_weight(input_size, state_size),
-                                        name = 'input_to_proposal')
-        self.proposal_bias = tf.Variable(
-                                    numpy.zeros((state_size,)).astype('float32'),
-                                    name='proposal_bias')
+            init = initializers.norm_weight(input_size, state_size)
+            self.input_to_proposal = tf.get_variable('input_to_proposal',
+                                                     initializer=init)
+        self.proposal_bias = tf.get_variable('proposal_bias', [state_size],
+                                             initializer=tf.zeros_initializer)
         self.nematus_compat = nematus_compat
         self.use_layer_norm = use_layer_norm
 
         if self.use_layer_norm:
-            with tf.name_scope('gates_state_norm'):
+            with tf.variable_scope('gates_state_norm'):
                 self.gates_state_norm = LayerNormLayer(2*state_size)
-            with tf.name_scope('proposal_state_norm'):
+            with tf.variable_scope('proposal_state_norm'):
                 self.proposal_state_norm = LayerNormLayer(state_size)
             if input_size > 0:
-                with tf.name_scope('gates_x_norm'):
+                with tf.variable_scope('gates_x_norm'):
                     self.gates_x_norm = LayerNormLayer(2*state_size)
-                with tf.name_scope('proposal_x_norm'):
+                with tf.variable_scope('proposal_x_norm'):
                     self.proposal_x_norm = LayerNormLayer(state_size)
 
         # Create dropout masks for input values (reused at every timestep).
@@ -290,10 +288,10 @@ class DeepTransitionGRUStep(object):
                  dropout_input=None,
                  dropout_state=None,
                  transition_depth=1,
-                 name_scope_fn=lambda i: "gru{0}".format(i)):
+                 var_scope_fn=lambda i: "gru{0}".format(i)):
         self.gru_steps = []
         for i in range(transition_depth):
-            with tf.name_scope(name_scope_fn(i)):
+            with tf.variable_scope(var_scope_fn(i)):
                 gru = GRUStep(input_size=(input_size if i == 0 else 0),
                               state_size=state_size,
                               batch_size=batch_size,
@@ -350,7 +348,7 @@ class GRUStack(object):
         self.grus = []
         for i in range(stack_depth):
             in_size = (input_size if i == 0 else state_size) + context_state_size
-            with tf.name_scope("level{0}".format(i)):
+            with tf.variable_scope("level{0}".format(i)):
                 self.grus.append(DeepTransitionGRUStep(
                     input_size=in_size,
                     state_size=state_size,
@@ -450,23 +448,23 @@ class AttentionStep(object):
                  use_layer_norm=False,
                  dropout_context=None,
                  dropout_state=None):
-        self.state_to_hidden = tf.Variable(
-                                norm_weight(state_size, hidden_size),
-                                name='state_to_hidden')
-        self.context_to_hidden = tf.Variable( #TODO: Nematus uses ortho_weight here - important?
-                                    norm_weight(context_state_size, hidden_size), 
-                                    name='context_to_hidden')
-        self.hidden_bias = tf.Variable(
-                            numpy.zeros((hidden_size,)).astype('float32'),
-                            name='hidden_bias')
-        self.hidden_to_score = tf.Variable(
-                                norm_weight(hidden_size, 1),
-                                name='hidden_to_score')
+        init = initializers.norm_weight(state_size, hidden_size)
+        self.state_to_hidden = tf.get_variable('state_to_hidden',
+                                               initializer=init)
+        #TODO: Nematus uses ortho_weight here - important?
+        init = initializers.norm_weight(context_state_size, hidden_size)
+        self.context_to_hidden = tf.get_variable('context_to_hidden',
+                                                 initializer=init)
+        self.hidden_bias = tf.get_variable('hidden_bias', [hidden_size],
+                                           initializer=tf.zeros_initializer)
+        init = initializers.norm_weight(hidden_size, 1)
+        self.hidden_to_score = tf.get_variable('hidden_to_score',
+                                               initializer=init)
         self.use_layer_norm = use_layer_norm
         if self.use_layer_norm:
-            with tf.name_scope('hidden_context_norm'):
+            with tf.variable_scope('hidden_context_norm'):
                 self.hidden_context_norm = LayerNormLayer(layer_size=hidden_size)
-            with tf.name_scope('hidden_state_norm'):
+            with tf.variable_scope('hidden_state_norm'):
                 self.hidden_state_norm = LayerNormLayer(layer_size=hidden_size)
         self.context = context
         self.context_mask = context_mask
@@ -561,8 +559,8 @@ class PReLU(object):
     def __init__(self,
                  in_size,
                  initial_slope = 1.0):
-
-        self.slope = tf.Variable(initial_slope * numpy.ones((in_size,)).astype('float32'), name='slope')
+        init = initial_slope * tf.ones([in_size])
+        self.slope = tf.get_variable('slope', initializer=init)
 
     def forward(self, x):
         pos = tf.nn.relu(x)

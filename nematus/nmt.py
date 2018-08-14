@@ -46,8 +46,12 @@ def create_model(config, sess, ensemble_scope=None, train=False):
         name = v.name.split(':')[0]
         if ensemble_scope == None:
             saved_name = name
-        elif v.name.startswith(ensemble_scope):
-            saved_name = name[len(ensemble_scope):]
+        elif v.name.startswith(ensemble_scope.name + "/"):
+            saved_name = name[len(ensemble_scope.name)+1:]
+            # The ensemble scope is repeated for Adam variables. See
+            # https://github.com/tensorflow/tensorflow/issues/8120
+            if saved_name.startswith(ensemble_scope.name + "/"):
+                saved_name = saved_name[len(ensemble_scope.name)+1:]
         else: # v belongs to a different model in the ensemble.
             continue
         if config.model_version == 0.1:
@@ -130,7 +134,7 @@ def load_prior(config, sess, saver):
      prior_variables = tf.get_collection_ref('prior_variables')
      prior_variables_dict = dict([(v.name, v) for v in prior_variables])
      assign_tensors = []
-     with tf.name_scope('prior'):
+     with tf.variable_scope('prior'):
          for v in tf.trainable_variables():
              prior_name = 'loss/prior/'+v.name
              prior_variable = prior_variables_dict[prior_name]

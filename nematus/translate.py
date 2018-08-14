@@ -120,7 +120,7 @@ class Translator(object):
         import tensorflow as tf
         models = []
         for i, options in enumerate(self._options):
-            with tf.name_scope("model%d" % i) as scope:
+            with tf.variable_scope("model%d" % i) as scope:
                 model, saver = create_model(options, sess, ensemble_scope=scope)
                 models.append(model)
 
