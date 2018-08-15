@@ -240,6 +240,25 @@ class Predictor(object):
                             W=hidden_to_logits_W,
                             dropout_input=dropout_embedding)
 
+        if config.softmax_mixture_size > 1:
+            with tf.variable_scope("hidden_to_pi_logits"):
+                self.hidden_to_pi_logits = FeedForwardLayer(
+                    in_size=config.target_embedding_size,
+                    out_size=config.softmax_mixture_size,
+                    batch_size=batch_size,
+                    non_linearity=lambda y: y,
+                    dropout_input=dropout_embedding)
+            self.hidden_to_mos_hidden = []
+            for k in range(config.softmax_mixture_size):
+                with tf.variable_scope("hidden_to_mos_hidden_{}".format(k)):
+                    layer = FeedForwardLayer(
+                        in_size=config.target_embedding_size,
+                        out_size=config.target_embedding_size,
+                        batch_size=batch_size,
+                        use_layer_norm=config.use_layer_norm,
+                        dropout_input=dropout_embedding)
+                    self.hidden_to_mos_hidden.append(layer)
+
     def get_logits(self, y_embs, states, attended_states, multi_step=True):
         with tf.variable_scope("prev_emb_to_hidden"):
             hidden_emb = self.prev_emb_to_hidden.forward(y_embs, input_is_3d=multi_step)
@@ -262,9 +281,28 @@ class Predictor(object):
         else:
             assert False, 'Unknown output activation function "%s"' % self.config.output_hidden_activation
 
-        with tf.variable_scope("hidden_to_logits"):
-            logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
-        
+        if self.config.softmax_mixture_size == 1:
+            with tf.variable_scope("hidden_to_logits"):
+                logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
+        else:
+            assert self.config.softmax_mixture_size > 1
+            pi_logits = self.hidden_to_pi_logits.forward(hidden,
+                                                         input_is_3d=multi_step)
+            pi = tf.nn.softmax(pi_logits)
+            probs = None
+            for k in range(self.config.softmax_mixture_size):
+                hidden_k = self.hidden_to_mos_hidden[k].forward(hidden,
+                    input_is_3d=multi_step)
+                logits_k = self.hidden_to_logits.forward(hidden_k,
+                    input_is_3d=multi_step)
+                probs_k = tf.nn.softmax(logits_k)
+                weight = pi[..., k:k+1]
+                if k == 0:
+                    probs = probs_k * weight
+                else:
+                    probs += probs_k * weight
+            logits = tf.log(probs)
+
         return logits 
 
 

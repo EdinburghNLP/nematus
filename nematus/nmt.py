@@ -572,6 +572,8 @@ def parse_args():
     network.add_argument('--output_hidden_activation', type=str, default='tanh',
                          choices=['tanh', 'relu', 'prelu', 'linear'],
                          help='activation function in hidden layer of the output network (default: %(default)s)')
+    network.add_argument('--softmax_mixture_size', type=int, default=1, metavar="INT",
+                         help="number of softmax components to use (default: %(default)s)")
 
     training = parser.add_argument_group('training parameters')
     training.add_argument('--maxlen', type=int, default=100, metavar='INT',
