@@ -23,28 +23,30 @@ from settings import ScorerSettings
 import tensorflow as tf
 
 def score_model(source_file, target_file, scorer_settings, options):
-
     scores = []
     for option in options:
-        with tf.Session() as sess:
-            model, saver = create_model(option, sess)
+        g = tf.Graph()
+        with g.as_default():
+            with tf.Session() as sess:
+                model, saver = create_model(option, sess)
 
-            valid_text_iterator = TextIterator(
-                        source=source_file.name,
-                        target=target_file.name,
-                        source_dicts=option.source_dicts,
-                        target_dict=option.target_dict,
-                        batch_size=scorer_settings.b,
-                        maxlen=float('inf'),
-                        source_vocab_sizes=option.source_vocab_sizes,
-                        target_vocab_size=option.target_vocab_size,
-                        use_factor=(option.factors > 1),
-                        sort_by_length=False)
+                valid_text_iterator = TextIterator(
+                    source=source_file.name,
+                    target=target_file.name,
+                    source_dicts=option.source_dicts,
+                    target_dict=option.target_dict,
+                    batch_size=scorer_settings.b,
+                    maxlen=float('inf'),
+                    source_vocab_sizes=option.source_vocab_sizes,
+                    target_vocab_size=option.target_vocab_size,
+                    use_factor=(option.factors > 1),
+                    sort_by_length=False)
 
-            score = validate(option, sess, valid_text_iterator, model, normalization_alpha=scorer_settings.normalization_alpha)
-            scores.append(score)
-
+                score = validate(option, sess, valid_text_iterator, model,
+                    normalization_alpha=scorer_settings.normalization_alpha)
+                scores.append(score)
     return scores
+
 
 def write_scores(source_file, target_file, scores, output_file, scorer_settings):
 
