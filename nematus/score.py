@@ -17,7 +17,7 @@ from util import load_config
 from alignment_util import combine_source_target_text_1to1
 from compat import fill_options
 
-from nmt import create_model, validate
+import nmt
 from settings import ScorerSettings
 
 import tensorflow as tf
@@ -28,9 +28,9 @@ def score_model(source_file, target_file, scorer_settings, options):
         g = tf.Graph()
         with g.as_default():
             with tf.Session() as sess:
-                model, saver = create_model(option, sess)
+                model, saver = nmt.create_model(option, sess)
 
-                valid_text_iterator = TextIterator(
+                text_iterator = TextIterator(
                     source=source_file.name,
                     target=target_file.name,
                     source_dicts=option.source_dicts,
@@ -42,9 +42,14 @@ def score_model(source_file, target_file, scorer_settings, options):
                     use_factor=(option.factors > 1),
                     sort_by_length=False)
 
-                score = validate(option, sess, valid_text_iterator, model,
+                losses = nmt.calc_loss_per_sentence(
+                    option,
+                    sess,
+                    text_iterator,
+                    model,
                     normalization_alpha=scorer_settings.normalization_alpha)
-                scores.append(score)
+
+                scores.append(losses)
     return scores
 
 

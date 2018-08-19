@@ -450,13 +450,12 @@ def validate_with_script(sess, model, config, valid_text_iterator):
     return score
 
 
-def validate(config, sess, valid_text_iterator, model, normalization_alpha=0):
-    costs = []
-    total_loss = 0.
-    total_seen = 0
+def calc_loss_per_sentence(config, sess, text_iterator, model,
+                           normalization_alpha=0):
+    losses = []
     x,x_mask,y,y_mask,training = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
-    for x_v, y_v in valid_text_iterator:
+    for x_v, y_v in text_iterator:
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
             sys.exit(1)
@@ -469,12 +468,20 @@ def validate(config, sess, valid_text_iterator, model, normalization_alpha=0):
             adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_v_mask_in.T])
             loss_per_sentence_out /= adjusted_lengths
 
-        total_loss += loss_per_sentence_out.sum()
-        total_seen += x_v_in.shape[2]
-        costs += list(loss_per_sentence_out)
-        logging.info( "Seen {0}".format(total_seen))
-    logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(total_loss/total_seen, total_loss, total_seen))
-    return costs
+        losses += list(loss_per_sentence_out)
+        logging.info( "Seen {0}".format(len(losses)))
+    return losses
+
+
+def validate(config, sess, text_iterator, model, normalization_alpha=0):
+    losses = calc_loss_per_sentence(config, sess, text_iterator, model,
+                                    normalization_alpha)
+    num_sents = len(losses)
+    total_loss = sum(losses)
+    logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
+        total_loss/num_sents, total_loss, num_sents))
+    return losses
+
 
 def validate_helper(config, sess):
     model, saver = create_model(config, sess)
