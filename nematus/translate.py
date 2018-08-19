@@ -358,6 +358,6 @@ if __name__ == "__main__":
     input_file = translation_settings.input
     output_file = translation_settings.output
     # start logging
-    level = logging.DEBUG if translation_settings.verbose else logging.WARNING
+    level = logging.DEBUG if translation_settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
     main(input_file, output_file, translation_settings)
