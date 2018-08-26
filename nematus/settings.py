@@ -26,6 +26,8 @@ class BaseSettings(object):
         """
         Console arguments used in all modes
         """
+        self._parser.add_argument('-b', type=int, default=80,
+                                  help="Minibatch size (default: %(default)s))")
         self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True, metavar="MODEL",
                                   help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
         self._parser.add_argument('-p', dest='num_processes', type=int, default=1,
@@ -112,8 +114,6 @@ class ScorerBaseSettings(BaseSettings):
 
     def _add_console_arguments(self):
         super(ScorerBaseSettings, self)._add_console_arguments()
-        self._parser.add_argument('-b', type=int, default=80,
-                                  help="Minibatch size (default: %(default)s))")
         self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
                                   help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
         if self._from_console_arguments: # don't open files if no console arguments are parsed

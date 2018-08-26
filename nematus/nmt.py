@@ -189,7 +189,7 @@ def load_dictionaries(config):
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
 
-def read_all_lines(config, sentences):
+def read_all_lines(config, sentences, batch_size):
     source_to_num, _, _, _ = load_dictionaries(config)
     lines = []
     for sent in sentences:
@@ -214,8 +214,8 @@ def read_all_lines(config, sentences):
 
     #merge into batches
     batches = []
-    for i in range(0, len(lines), config.valid_batch_size):
-        batch = lines[i:i+config.valid_batch_size]
+    for i in range(0, len(lines), batch_size):
+        batch = lines[i:i+batch_size]
         batches.append(batch)
 
     return batches, idxs
@@ -356,14 +356,16 @@ def train(config, sess):
 
 # TODO This function shares a lot of code with translate.Translator.  Can
 # we use that class instead (without too much painful refactoring)?
-def translate(sess, model, config, output_file=sys.stdin):
+def translate_validation_set(sess, model, config, output_file=sys.stdin):
     start_time = time.time()
     _, _, _, num_to_target = load_dictionaries(config)
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
     n_sent = 0
     try:
-        batches, idxs = read_all_lines(config, open(config.valid_source_dataset, 'r').readlines())
+        sentences = open(config.valid_source_dataset, 'r').readlines()
+        batches, idxs = read_all_lines(config, sentences,
+                                       config.valid_batch_size)
     except exception.Error as x:
         logging.error(x.msg)
         sys.exit(1)
@@ -427,7 +429,7 @@ def validate_with_script(sess, model, config, valid_text_iterator):
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile()
-    translate(sess, model, config, output_file=out)
+    translate_validation_set(sess, model, config, output_file=out)
     out.flush()
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,

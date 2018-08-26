@@ -54,6 +54,7 @@ class Translator(object):
         self._num_processes = settings.num_processes
         self._verbose = settings.verbose
         self._retrieved_translations = defaultdict(dict)
+        self._batch_size = settings.b
 
         # load model options
         self._load_model_options()
@@ -178,7 +179,8 @@ class Translator(object):
         source_batches = []
 
         try:
-            batches, idxs = read_all_lines(self._options[0], input_)
+            batches, idxs = read_all_lines(self._options[0], input_,
+                                           self._batch_size)
         except exception.Error as x:
             logging.error(x.msg)
             for process in self._processes:
