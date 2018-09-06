@@ -59,14 +59,14 @@ class RNNModel(object):
         with tf.variable_scope("encoder"):
             self.encoder = Encoder(config, batch_size, dropout_source,
                                    dropout_embedding, dropout_hidden)
-            ctx = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
+            ctx, embs = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
 
         with tf.variable_scope("decoder"):
             if config.tie_encoder_decoder_embeddings:
                 tied_embeddings = self.encoder.emb_layer
             else:
                 tied_embeddings = None
-            self.decoder = Decoder(config, ctx, self.inputs.x_mask,
+            self.decoder = Decoder(config, ctx, embs, self.inputs.x_mask,
                                    dropout_target, dropout_embedding,
                                    dropout_hidden, tied_embeddings)
             self.logits = self.decoder.score(self.inputs.y)
@@ -90,7 +90,7 @@ class RNNModel(object):
 
 
 class Decoder(object):
-    def __init__(self, config, context, x_mask,
+    def __init__(self, config, context, x_embs, x_mask,
                  dropout_target, dropout_embedding, dropout_hidden,
                  encoder_embedding_layer=None):
 
@@ -112,6 +112,7 @@ class Decoder(object):
                 use_layer_norm=config.rnn_layer_normalization,
                 dropout_input=dropout_hidden)
             self.init_state = self.init_state_layer.forward(context_mean)
+            self.x_embs = x_embs
 
             self.translation_maxlen = config.translation_maxlen
             self.embedding_size = config.target_embedding_size
@@ -187,6 +188,18 @@ class Decoder(object):
                     residual_connections=True,
                     first_residual_output=0)
 
+        if config.rnn_lexical_model:
+            with tf.variable_scope("lexical"):
+                self.lexical_layer = layers.LexicalModel(
+                    in_size=config.embedding_size,
+                    out_size=config.embedding_size,
+                    batch_size=batch_size,
+                    use_layer_norm=config.rnn_layer_normalization,
+                    dropout_embedding=dropout_embedding,
+                    dropout_hidden=dropout_hidden)
+        else:
+            self.lexical_layer = None
+
         with tf.variable_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
@@ -207,32 +220,39 @@ class Decoder(object):
                             paddings=[[1,0],[0,0],[0,0]]) # prepend zeros
 
         init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
-        init_state_att_ctx = (self.init_state, init_attended_context)
+        init_att_alphas = tf.zeros([tf.shape(self.x_embs)[0], tf.shape(self.x_embs)[1]])
+        init_state_att_ctx = (self.init_state, init_attended_context, init_att_alphas)
         gates_x, proposal_x = self.grustep1.precompute_from_x(y_embs)
         def step_fn(prev, x):
             prev_state = prev[0]
             prev_att_ctx = prev[1]
+            prev_lexical_state = prev[2]
             gates_x2d = x[0]
             proposal_x2d = x[1]
             state = self.grustep1.forward(
                         prev_state,
                         gates_x=gates_x2d,
                         proposal_x=proposal_x2d)
-            att_ctx = self.attstep.forward(state) 
+            att_ctx, att_alphas = self.attstep.forward(state) 
             state = self.grustep2.forward(state, att_ctx)
             #TODO: write att_ctx to tensorArray instead of having it as output of scan?
-            return (state, att_ctx)
+            return (state, att_ctx, att_alphas)
 
         layer = layers.RecurrentLayer(initial_state=init_state_att_ctx,
                                       step_fn=step_fn)
-        states, attended_states = layer.forward((gates_x, proposal_x))
+        states, attended_states, attention_weights = layer.forward((gates_x, proposal_x))
 
         if self.high_gru_stack != None:
             states = self.high_gru_stack.forward(
                 states,
                 context_layer=(attended_states if self.high_gru_stack.context_state_size > 0 else None))
 
-        logits = self.predictor.get_logits(y_embs, states, attended_states, multi_step=True)
+        if self.lexical_layer is not None:
+            lexical_states = self.lexical_layer.forward(self.x_embs, attention_weights, multi_step=True)
+        else:
+            lexical_states = None
+
+        logits = self.predictor.get_logits(y_embs, states, attended_states, lexical_states, multi_step=True)
         return logits
 
 class Predictor(object):
@@ -296,7 +316,16 @@ class Predictor(object):
                         dropout_input=dropout_embedding)
                     self.hidden_to_mos_hidden.append(layer)
 
-    def get_logits(self, y_embs, states, attended_states, multi_step=True):
+        if config.rnn_lexical_model:
+            with tf.variable_scope("lexical_to_logits"):
+                self.lexical_to_logits = layers.FeedForwardLayer(
+                                in_size=config.target_embedding_size,
+                                out_size=config.target_vocab_size,
+                                batch_size=batch_size,
+                                non_linearity=lambda y: y,
+                                dropout_input=dropout_embedding)
+
+    def get_logits(self, y_embs, states, attended_states, lexical_states, multi_step=True):
         with tf.variable_scope("prev_emb_to_hidden"):
             hidden_emb = self.prev_emb_to_hidden.forward(y_embs, input_is_3d=multi_step)
 
@@ -321,6 +350,11 @@ class Predictor(object):
         if self.config.softmax_mixture_size == 1:
             with tf.variable_scope("hidden_to_logits"):
                 logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
+
+            if self.config.rnn_lexical_model:
+                with tf.variable_scope("lexical_to_logits"):
+                    logits += self.lexical_to_logits.forward(lexical_states, input_is_3d=multi_step)
+
         else:
             assert self.config.softmax_mixture_size > 1
             pi_logits = self.hidden_to_pi_logits.forward(hidden,
@@ -410,4 +444,4 @@ class Encoder(object):
             concat_states = tf.concat([bwd_states, fwd_states], axis=2)
         else:
             concat_states = tf.concat([fwd_states, bwd_states], axis=2)
-        return concat_states
+        return concat_states, embs

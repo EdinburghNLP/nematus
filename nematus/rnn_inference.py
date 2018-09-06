@@ -174,7 +174,7 @@ def construct_sampling_ops(model):
     def body(i, prev_base_state, prev_high_states, prev_y, prev_emb,
              y_array):
         state1 = decoder.grustep1.forward(prev_base_state, prev_emb)
-        att_ctx = decoder.attstep.forward(state1)
+        att_ctx, att_alphas = decoder.attstep.forward(state1)
         base_state = decoder.grustep2.forward(state1, att_ctx)
         if decoder.high_gru_stack == None:
             output = base_state
@@ -186,7 +186,13 @@ def construct_sampling_ops(model):
             else:
                 output, high_states = decoder.high_gru_stack.forward_single(
                     prev_high_states, base_state, context=att_ctx)
-        logits = decoder.predictor.get_logits(prev_emb, output, att_ctx,
+
+        if decoder.lexical_layer is not None:
+            lexical_state = decoder.lexical_layer.forward(decoder.x_embs, att_alphas)
+        else:
+           lexical_state = None
+
+        logits = decoder.predictor.get_logits(prev_emb, output, att_ctx, lexical_state,
                                            multi_step=False)
         logits = model.sampling_utils.adjust_logits(logits)
         new_y = tf.multinomial(logits, num_samples=1)
@@ -278,7 +284,7 @@ def construct_beam_search_ops(models, beam_size):
         for j in range(len(models)):
             d = models[j].decoder
             states1 = d.grustep1.forward(prev_base_states[j], prev_embs[j])
-            att_ctx = d.attstep.forward(states1)
+            att_ctx, att_alphas = d.attstep.forward(states1)
             base_states[j] = d.grustep2.forward(states1, att_ctx)
             if d.high_gru_stack == None:
                 stack_output = base_states[j]
@@ -290,8 +296,14 @@ def construct_beam_search_ops(models, beam_size):
                 else:
                     stack_output, high_states[j] = d.high_gru_stack.forward_single(
                         prev_high_states[j], base_states[j], context=att_ctx)
+
+            if d.lexical_layer is not None:
+                lexical_state = d.lexical_layer.forward(d.x_embs, att_alphas)
+            else:
+                lexical_state = None
+
             logits = d.predictor.get_logits(prev_embs[j], stack_output,
-                                            att_ctx, multi_step=False)
+                                            att_ctx, lexical_state, multi_step=False)
             log_probs = tf.nn.log_softmax(logits) # shape (batch, vocab_size)
             if sum_log_probs == None:
                 sum_log_probs = log_probs

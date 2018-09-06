@@ -14,6 +14,7 @@ Notable features include:
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
      - layer normalisation (Ba et al, 2016) https://arxiv.org/abs/1607.06450
      - mixture of softmaxes (Yang et al., 2017) https://arxiv.org/abs/1711.03953
+     - lexical model (Nguyen and Chiang, 2018) https://www.aclweb.org/anthology/N18-1031
 
  - training features:
      - multi-GPU support [documentation](doc/multi_gpu_training.md)
@@ -155,6 +156,7 @@ An updated version of these scripts that uses the Transformer model can be found
 | --rnn_dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
 | --rnn_dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
 | --rnn_layer_normalisation | Set to use layer normalization in encoder and decoder |
+| --rnn_lexical_model | Enable feedforward lexical model (Nguyen and Chiang, 2018) |
 
 #### network parameters (transformer-specific)
 | parameter | description |

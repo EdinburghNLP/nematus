@@ -574,7 +574,7 @@ class AttentionStep(object):
         attention_context = self.context * tf.expand_dims(scores, axis=2)
         attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
 
-        return attention_context
+        return attention_context, scores
 
 class Masked_cross_entropy_loss(object):
     def __init__(self,
@@ -611,6 +611,36 @@ class Masked_cross_entropy_loss(object):
 
         cost = tf.reduce_sum(cost, axis=0, keepdims=False)
         return cost
+
+class LexicalModel(object):
+    def __init__(self,
+                 in_size,
+                 out_size,
+                 batch_size,
+                 use_layer_norm=False,
+                 dropout_embedding=None,
+                 dropout_hidden=None):
+
+        self.ff = FeedForwardLayer(
+                    in_size=in_size,
+                    out_size=out_size,
+                    batch_size=batch_size,
+                    use_layer_norm=use_layer_norm,
+                    dropout_input=dropout_hidden)
+
+        if dropout_embedding is None:
+            self.dropout_mask_embedding = None
+        else:
+            ones = tf.ones([batch_size, in_size])
+            self.dropout_mask_embedding = dropout_embedding(ones)
+
+    def forward(self, x_embs, att_alphas, multi_step=False):
+        x_embs = apply_dropout_mask(x_embs, self.dropout_mask_embedding, input_is_3d=True)
+        x_emb_weighted = x_embs * tf.expand_dims(att_alphas, axis=(3 if multi_step else 2))
+        x_emb_weighted = tf.nn.tanh(tf.reduce_sum(x_emb_weighted, axis=(1 if multi_step else 0), keepdims=False))
+        lexical_state = self.ff.forward(x_emb_weighted, input_is_3d=multi_step) + x_emb_weighted
+
+        return lexical_state
 
 class PReLU(object):
     def __init__(self,
