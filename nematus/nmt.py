@@ -256,7 +256,7 @@ def train(config, sess):
             if len(source_sents[0][0]) != config.factors:
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(config.factors, len(source_sents[0][0])))
                 sys.exit(1)
-            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, maxlen=None)
+            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, config.factors, maxlen=None)
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
@@ -379,7 +379,7 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
                 break
             idx, x = job
             y_dummy = numpy.zeros(shape=(len(x),1))
-            x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
+            x, x_mask, _, _ = prepare_data(x, y_dummy, config.factors, maxlen=None)
             try:
                 samples = model.beam_search(sess, x, x_mask, config.beam_size)
                 out_queue.put((idx, samples))
@@ -461,7 +461,7 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
             sys.exit(1)
-        x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, maxlen=None)
+        x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, config.factors, maxlen=None)
         feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in, training:False}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
 

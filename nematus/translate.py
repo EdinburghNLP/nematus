@@ -164,7 +164,7 @@ class Translator(object):
         #max_ratio = input_item.max_ratio
 
         y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = prepare_data(x, y_dummy, maxlen=None)
+        x, x_mask, _, _ = prepare_data(x, y_dummy, self._options[0].factors, maxlen=None)
 
         sample = inference.beam_search(models, sess, x, x_mask, k)
 
