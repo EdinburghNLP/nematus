@@ -371,31 +371,40 @@ class Encoder(object):
         return concat_states
 
 
-class StandardModel(object):
+class ModelInputs(object):
     def __init__(self, config):
-
-        #variable dimensions
-        seqLen = None
-        batch_size = None
+        # variable dimensions
+        seq_len, batch_size = None, None
 
         self.x = tf.placeholder(
-                    dtype=tf.int32,
-                    name='x',
-                    shape=(config.factors, seqLen, batch_size))
+            name='x',
+            shape=(config.factors, seq_len, batch_size),
+            dtype=tf.int32)
+
         self.x_mask = tf.placeholder(
-                        dtype=tf.float32,
-                        name='x_mask',
-                        shape=(seqLen, batch_size))
+            name='x_mask',
+            shape=(seq_len, batch_size),
+            dtype=tf.float32)
+
         self.y = tf.placeholder(
-                    dtype=tf.int32,
-                    name='y',
-                    shape=(seqLen, batch_size))
+            name='y',
+            shape=(seq_len, batch_size),
+            dtype=tf.int32)
+
         self.y_mask = tf.placeholder(
-                        dtype=tf.float32,
-                        name='y_mask',
-                        shape=(seqLen, batch_size))
+            name='y_mask',
+            shape=(seq_len, batch_size),
+            dtype=tf.float32)
+
         self.training = tf.placeholder_with_default(
-            False, name='training', shape=())
+            False,
+            name='training',
+            shape=())
+
+
+class StandardModel(object):
+    def __init__(self, config):
+        self.inputs = ModelInputs(config)
 
         # Dropout functions for words.
         # These probabilistically zero-out all embedding values for individual
@@ -405,12 +414,12 @@ class StandardModel(object):
             def dropout_source(x):
                 return tf.layers.dropout(
                     x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
-                    rate=config.dropout_source, training=self.training)
+                    rate=config.dropout_source, training=self.inputs.training)
         if config.use_dropout and config.dropout_target > 0.0:
             def dropout_target(y):
                 return tf.layers.dropout(
                     y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
-                    rate=config.dropout_target, training=self.training)
+                    rate=config.dropout_target, training=self.inputs.training)
 
         # Dropout functions for use within FF, GRU, and attention layers.
         # We use Gal and Ghahramani (2016)-style dropout, so these functions
@@ -421,36 +430,37 @@ class StandardModel(object):
             def dropout_embedding(e):
                 return tf.layers.dropout(e, noise_shape=tf.shape(e),
                                          rate=config.dropout_embedding,
-                                         training=self.training)
+                                         training=self.inputs.training)
         if config.use_dropout and config.dropout_hidden > 0.0:
             def dropout_hidden(h):
                 return tf.layers.dropout(h, noise_shape=tf.shape(h),
                                          rate=config.dropout_hidden,
-                                         training=self.training)
+                                         training=self.inputs.training)
 
-        batch_size = tf.shape(self.x)[-1]  # dynamic value
+        batch_size = tf.shape(self.inputs.x)[-1]  # dynamic value
 
         with tf.variable_scope("encoder"):
             self.encoder = Encoder(config, batch_size, dropout_source,
                                    dropout_embedding, dropout_hidden)
-            ctx = self.encoder.get_context(self.x, self.x_mask)
+            ctx = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
 
         with tf.variable_scope("decoder"):
             if config.tie_encoder_decoder_embeddings:
                 tied_embeddings = self.encoder.emb_layer
             else:
                 tied_embeddings = None
-            self.decoder = Decoder(config, ctx, self.x_mask, dropout_target,
-                                   dropout_embedding, dropout_hidden,
-                                   tied_embeddings)
-            self.logits = self.decoder.score(self.y)
+            self.decoder = Decoder(config, ctx, self.inputs.x_mask,
+                                   dropout_target, dropout_embedding,
+                                   dropout_hidden, tied_embeddings)
+            self.logits = self.decoder.score(self.inputs.y)
 
         with tf.variable_scope("loss"):
-            self.loss_layer = Masked_cross_entropy_loss(self.y, self.y_mask, config.label_smoothing, training=self.training)
+            self.loss_layer = Masked_cross_entropy_loss(
+                self.inputs.y, self.inputs.y_mask, config.label_smoothing,
+                training=self.inputs.training)
             self.loss_per_sentence = self.loss_layer.forward(self.logits)
-            self.mean_loss = tf.reduce_mean(self.loss_per_sentence, keepdims=False)
-            self.objective = self.mean_loss
-            
+            self.objective = tf.reduce_mean(self.loss_per_sentence,
+                                            keepdims=False)
             self.l2_loss = tf.constant(0.0, dtype=tf.float32)
             if config.decay_c > 0.0:
                 self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]) * tf.constant(config.decay_c, dtype=tf.float32)
@@ -469,44 +479,14 @@ class StandardModel(object):
                 self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
                 self.objective += self.l2_loss
 
-        if config.optimizer == 'adam':
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
-        else:
-            logging.error('No valid optimizer defined: {0}'.format(config.optimizer))
-            sys.exit(1)
-
-        init = tf.zeros_initializer(dtype=tf.int32)
-        self.t = tf.get_variable('time', [], initializer=init, trainable=False)
-        grad_vars = self.optimizer.compute_gradients(self.objective)
-        grads, varss = zip(*grad_vars)
-        clipped_grads, global_norm = tf.clip_by_global_norm(grads, clip_norm=config.clip_c)
-        # Might be interesting to see how the global norm changes over time, attach a summary?
-        grad_vars = zip(clipped_grads, varss)
-        self.apply_grads = self.optimizer.apply_gradients(grad_vars, global_step=self.t)
-
         self.sampled_ys = None
         self.beam_size, self.beam_ys, self.parents, self.cost = None, None, None, None
 
-    def get_score_inputs(self):
-        return self.x, self.x_mask, self.y, self.y_mask, self.training
-    
     def get_loss(self):
         return self.loss_per_sentence
 
-    def get_mean_loss(self):
-        return self.mean_loss
-
     def get_objective(self):
         return self.objective
-
-    def get_global_step(self):
-        return self.t
-
-    def reset_global_step(self, value, session):
-        self.t.load(value, session)
-
-    def get_apply_grads(self):
-        return self.apply_grads
 
     def _get_samples(self):
         if self.sampled_ys == None:
@@ -515,7 +495,7 @@ class StandardModel(object):
 
     def sample(self, session, x_in, x_mask_in):
         sampled_ys = self._get_samples()
-        feeds = {self.x : x_in, self.x_mask : x_mask_in}
+        feeds = {self.inputs.x: x_in, self.inputs.x_mask: x_mask_in}
         sampled_ys_out = session.run(sampled_ys, feed_dict=feeds)
         sampled_ys_out = sampled_ys_out.T
         samples = []
@@ -524,8 +504,6 @@ class StandardModel(object):
             sample.append(0)
             samples.append(sample)
         return samples
-
-
 
     def _get_beam_search_outputs(self, beam_size):
         if beam_size != self.beam_size:
@@ -539,7 +517,7 @@ class StandardModel(object):
         # x_mask is a numpy array with shape (seqLen, batch)
         x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
         x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=-1)
-        feeds = {self.x : x_in, self.x_mask : x_mask_in}
+        feeds = {self.inputs.x: x_in, self.inputs.x_mask: x_mask_in}
         beam_ys, parents, cost = self._get_beam_search_outputs(beam_size)
         beam_ys_out, parents_out, cost_out = session.run(
                                                     [beam_ys, parents, cost],

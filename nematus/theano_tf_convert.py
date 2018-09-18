@@ -9,6 +9,7 @@ import tensorflow as tf
 import compat
 import nmt
 import util
+from model import StandardModel
 
 def construct_parameter_map(config):
     def drt_tag(i):
@@ -145,7 +146,9 @@ def theano_to_tensorflow_model(in_path, out_path):
     th2tf = construct_parameter_map(config)
 
     with tf.Session() as sess:
-        model, saver = nmt.create_model(config, sess)
+        logging.info('Building model...')
+        model = StandardModel(config)
+        saver = nmt.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
         for key in saved_model.keys():

@@ -15,12 +15,13 @@ from multiprocessing import Process, Queue
 from collections import defaultdict
 from Queue import Empty
 
+from model import StandardModel
 from util import load_dict, load_config, seq2words, prepare_data
 from compat import fill_options
 from hypgraph import HypGraphRenderer
 from settings import TranslationSettings
 
-from nmt import create_model, load_dictionaries, read_all_lines
+from nmt import init_or_restore_variables, load_dictionaries, read_all_lines
 
 import inference
 import exception
@@ -122,7 +123,9 @@ class Translator(object):
         models = []
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
-                model, saver = create_model(options, sess, ensemble_scope=scope)
+                model = StandardModel(options)
+                saver = init_or_restore_variables(options, sess,
+                                                  ensemble_scope=scope)
                 models.append(model)
 
         logging.info("NOTE: Length of translations is capped to {}".format(self._options[0].translation_maxlen))

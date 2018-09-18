@@ -21,16 +21,14 @@ from collections import OrderedDict
 from layers import *
 from data_iterator import TextIterator
 
-from model import *
+from model import StandardModel
+from model_updater import ModelUpdater
 from util import *
 import training_progress
 import exception
 import compat
 
-def create_model(config, sess, ensemble_scope=None, train=False):
-    logging.info('Building model...')
-    model = StandardModel(config)
-
+def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
     # Construct a mapping between saved variable names and names in the current
     # scope. There are two reasons why names might be different:
     #
@@ -109,22 +107,14 @@ def create_model(config, sess, ensemble_scope=None, train=False):
     else:
         logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
         saver.restore(sess, os.path.abspath(reload_filename))
-        if train:
-            # The global step is currently recorded in two places:
-            #   1. model.t, a tf.Variable read and updated by the optimizer
-            #   2. progress.uidx, a Python integer updated by train()
-            # We reset model.t to the value recorded in progress to allow the
-            # value to be controlled by the user (either explicitly by
-            # configuring the value in the progress file or implicitly by using
-            # --no_reload_training_progress).
-            model.reset_global_step(progress.uidx, sess)
 
     logging.info('Done')
 
     if train:
-        return model, saver, progress
+        return saver, progress
     else:
-        return model, saver
+        return saver
+
 
 def load_prior(config, sess, saver):
      logging.info('Loading prior model parameters from file ' + os.path.abspath(config.prior_model))
@@ -225,20 +215,30 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
-    model, saver, progress = create_model(config, sess, train=True)
+    logging.info('Building model...')
+    model = StandardModel(config)
 
-    x,x_mask,y,y_mask,training = model.get_score_inputs()
-    apply_grads = model.get_apply_grads()
-    t = model.get_global_step()
-    loss_per_sentence = model.get_loss()
-    objective = model.get_objective()
+    if config.optimizer == 'adam':
+        optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+    else:
+        logging.error('No valid optimizer defined: {}'.format(config.optimizer))
+        sys.exit(1)
+
+    init = tf.zeros_initializer(dtype=tf.int32)
+    global_step = tf.get_variable('time', [], initializer=init, trainable=False)
 
     if config.summaryFreq:
-        summary_dir = config.summary_dir if (config.summary_dir != None) else (os.path.abspath(os.path.dirname(config.saveto)))
+        summary_dir = (config.summary_dir if config.summary_dir is not None
+                       else os.path.abspath(os.path.dirname(config.saveto)))
         writer = tf.summary.FileWriter(summary_dir, sess.graph)
-    tf.summary.scalar(name='mean_cost', tensor=objective)
-    tf.summary.scalar(name='t', tensor=t)
-    merged = tf.summary.merge_all()
+    else:
+        writer = None
+
+    updater = ModelUpdater(config, model, optimizer, global_step, writer)
+
+    saver, progress = init_or_restore_variables(config, sess, train=True)
+
+    global_step.load(progress.uidx, sess)
 
     #save model options
     config_as_dict = OrderedDict(sorted(vars(config).items()))
@@ -262,19 +262,13 @@ def train(config, sess):
                 continue
             write_summary_for_this_batch = config.summaryFreq and ((progress.uidx % config.summaryFreq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (factors, seqLen, batch_size) = x_in.shape
-            inn = {x:x_in, y:y_in, x_mask:x_mask_in, y_mask:y_mask_in, training:True}
-            out = [t, apply_grads, objective]
-            if write_summary_for_this_batch:
-                out += [merged]
-            out_values = sess.run(out, feed_dict=inn)
-            objective_value = out_values[2]
-            total_loss += objective_value*batch_size
+
+            loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in,
+                                  write_summary_for_this_batch)
+            total_loss += loss
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
             progress.uidx += 1
-
-            if write_summary_for_this_batch:
-                writer.add_summary(out_values[3], out_values[0])
 
             if config.dispFreq and progress.uidx % config.dispFreq == 0:
                 duration = time.time() - last_time
@@ -455,14 +449,18 @@ def validate_with_script(sess, model, config, valid_text_iterator):
 def calc_loss_per_sentence(config, sess, text_iterator, model,
                            normalization_alpha=0):
     losses = []
-    x,x_mask,y,y_mask,training = model.get_score_inputs()
     loss_per_sentence = model.get_loss()
     for x_v, y_v in text_iterator:
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
             sys.exit(1)
-        x_v_in, x_v_mask_in, y_v_in, y_v_mask_in = prepare_data(x_v, y_v, config.factors, maxlen=None)
-        feeds = {x:x_v_in, x_mask:x_v_mask_in, y:y_v_in, y_mask:y_v_mask_in, training:False}
+        x, x_mask, y, y_mask = prepare_data(x_v, y_v, config.factors,
+                                            maxlen=None)
+        feeds = {model.inputs.x: x,
+                 model.inputs.x_mask: x_mask,
+                 model.inputs.y: y,
+                 model.inputs.y_mask: y_mask,
+                 model.inputs.training: False}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
 
         # normalize scores according to output length
@@ -486,7 +484,9 @@ def validate(config, sess, text_iterator, model, normalization_alpha=0):
 
 
 def validate_helper(config, sess):
-    model, saver = create_model(config, sess)
+    logging.info('Building model...')
+    model = StandardModel(options)
+    saver = init_or_restore_variables(config, sess)
     valid_text_iterator = TextIterator(
                         source=config.valid_source_dataset,
                         target=config.valid_target_dataset,
@@ -761,7 +761,9 @@ if __name__ == "__main__":
     logging.info(config)
     with tf.Session() as sess:
         if config.translate_valid:
-            model, saver = create_model(config, sess)
+            logging.info('Building model...')
+            model = StandardModel(config)
+            saver = init_or_restore_variables(config, sess)
             translate(sess, model, config)
         elif config.run_validation:
             validate_helper(config, sess)

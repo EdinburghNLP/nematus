@@ -9,8 +9,8 @@ def beam_search(models, session, x_in, x_mask_in, beam_size):
     feeds = {}
     for model in models:
         # change init_state, context, context_in_attention_layer
-        feeds[model.x] = x_in
-        feeds[model.x_mask] = x_mask_in
+        feeds[model.inputs.x] = x_in
+        feeds[model.inputs.x_mask] = x_mask_in
     beam_ys, parents, cost = construct_beam_search_functions(models, beam_size)
     beam_ys_out, parents_out, cost_out = session.run(
                                                     [beam_ys, parents, cost],
