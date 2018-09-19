@@ -9,7 +9,10 @@ import time
 import argparse
 import subprocess
 import tempfile
+import json
+import sys
 
+import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
@@ -18,12 +21,11 @@ from Queue import Queue
 from datetime import datetime
 from collections import OrderedDict
 
-from layers import *
 from data_iterator import TextIterator
 
 from model import StandardModel
 from model_updater import ModelUpdater
-from util import *
+import util
 import training_progress
 import exception
 import compat
@@ -173,10 +175,10 @@ def load_data(config):
     return text_iterator, valid_text_iterator
 
 def load_dictionaries(config):
-    source_to_num = [load_dict(d) for d in config.source_dicts]
-    target_to_num = load_dict(config.target_dict)
-    num_to_source = [reverse_dict(d) for d in source_to_num]
-    num_to_target = reverse_dict(target_to_num)
+    source_to_num = [util.load_dict(d) for d in config.source_dicts]
+    target_to_num = util.load_dict(config.target_dict)
+    num_to_source = [util.reverse_dict(d) for d in source_to_num]
+    num_to_target = util.reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
 
 def read_all_lines(config, sentences, batch_size):
@@ -256,7 +258,8 @@ def train(config, sess):
             if len(source_sents[0][0]) != config.factors:
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(config.factors, len(source_sents[0][0])))
                 sys.exit(1)
-            x_in, x_mask_in, y_in, y_mask_in = prepare_data(source_sents, target_sents, config.factors, maxlen=None)
+            x_in, x_mask_in, y_in, y_mask_in = util.prepare_data(
+                source_sents, target_sents, config.factors, maxlen=None)
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
@@ -284,9 +287,12 @@ def train(config, sess):
                 samples = model.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    logging.info('SOURCE: {0}'.format(factoredseq2words(xx, num_to_source)))
-                    logging.info('TARGET: {0}'.format(seq2words(yy, num_to_target)))
-                    logging.info('SAMPLE: {0}'.format(seq2words(ss, num_to_target)))
+                    source = util.factoredseq2words(xx, num_to_source)
+                    target = util.seq2words(yy, num_to_target)
+                    sample = util.seq2words(ss, num_to_target)
+                    logging.info('SOURCE: {}'.format(source))
+                    logging.info('TARGET: {}'.format(target))
+                    logging.info('SAMPLE: {}'.format(sample))
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
@@ -294,10 +300,15 @@ def train(config, sess):
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    logging.info('SOURCE: {0}'.format(factoredseq2words(xx, num_to_source)))
-                    logging.info('TARGET: {0}'.format(seq2words(yy, num_to_target)))
-                    for i, (sample, cost) in enumerate(ss):
-                        logging.info('SAMPLE {0}: {1} Cost/Len/Avg {2}/{3}/{4}'.format(i, seq2words(sample, num_to_target), cost, len(sample), cost/len(sample)))
+                    source = util.factoredseq2words(xx, num_to_source)
+                    target = util.seq2words(yy, num_to_target)
+                    logging.info('SOURCE: {}'.format(source))
+                    logging.info('TARGET: {}'.format(target))
+                    for i, (sample_seq, cost) in enumerate(ss):
+                        sample = util.seq2words(sample_seq, num_to_target)
+                        msg = 'SAMPLE {}: {} Cost/Len/Avg {}/{}/{}'.format(
+                            i, sample, cost, len(sample), cost/len(sample))
+                        logging.info(msg)
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
                 costs = validate(config, sess, valid_text_iterator, model)
@@ -373,7 +384,8 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
                 break
             idx, x = job
             y_dummy = numpy.zeros(shape=(len(x),1))
-            x, x_mask, _, _ = prepare_data(x, y_dummy, config.factors, maxlen=None)
+            x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
+                                                maxlen=None)
             try:
                 samples = model.beam_search(sess, x, x_mask, config.beam_size)
                 out_queue.put((idx, samples))
@@ -408,11 +420,12 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
         beam = sorted(beam, key=lambda (sent, cost): cost)
         if config.n_best:
             for sent, cost in beam:
-                line = "{} [{}]\n".format(seq2words(sent, num_to_target), cost)
+                translation = util.seq2words(sent, num_to_target)
+                line = "{} [{}]\n".format(translation, cost)
                 output_file.write(line)
         else:
             best_hypo, cost = beam[0]
-            line = seq2words(best_hypo, num_to_target) + '\n'
+            line = util.seq2words(best_hypo, num_to_target) + '\n'
             output_file.write(line)
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
@@ -454,8 +467,8 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
             sys.exit(1)
-        x, x_mask, y, y_mask = prepare_data(x_v, y_v, config.factors,
-                                            maxlen=None)
+        x, x_mask, y, y_mask = util.prepare_data(x_v, y_v, config.factors,
+                                                 maxlen=None)
         feeds = {model.inputs.x: x,
                  model.inputs.x_mask: x_mask,
                  model.inputs.y: y,
@@ -736,7 +749,7 @@ def parse_args():
         if vocab_size >= 0:
             continue
         try:
-            d = load_dict(config.dictionaries[i])
+            d = util.load_dict(config.dictionaries[i])
         except:
             logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
         vocab_sizes[i] = max(d.values()) + 1
