@@ -477,7 +477,7 @@ class StandardModel(object):
                         dtype=v.initialized_value().dtype)
                     map_l2_acc.append(tf.nn.l2_loss(v - prior_v))
                 self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
-                self.objective += self.l2_loss
+                self.objective += self.map_l2_loss
 
         self.sampled_ys = None
         self.beam_size, self.beam_ys, self.parents, self.cost = None, None, None, None
