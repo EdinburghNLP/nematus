@@ -82,6 +82,8 @@ class TranslationSettings(BaseSettings):
 
         self._parser.add_argument('--n-best', action="store_true",
                                   help="Write n-best list (of size k)")
+        self._parser.add_argument('--source-embedding-id', type=str, default="src")
+        self._parser.add_argument('--target-embedding-id', type=str, default="tgt")
 
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()

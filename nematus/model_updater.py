@@ -29,7 +29,7 @@ class ModelUpdater(object):
         tf.summary.scalar(name='t', tensor=self.global_step)
         self.merged = tf.summary.merge_all()
 
-    def update(self, session, x, x_mask, y, y_mask, write_summary):
+    def update(self, session, x, x_mask, y, y_mask, target_lang, write_summary):
         """Update the model for a single minibatch."""
         batch_size = x.shape[-1]
         assert batch_size > 0
@@ -39,6 +39,7 @@ class ModelUpdater(object):
         feed_dict[self.model.inputs.x_mask] = x_mask
         feed_dict[self.model.inputs.y] = y
         feed_dict[self.model.inputs.y_mask] = y_mask
+        feed_dict[self.model.inputs.target_lang_id] = target_lang
         feed_dict[self.model.inputs.training] = True
 
         out = [self.global_step, self.apply_grads, self.objective]

@@ -9,7 +9,7 @@ import layers
 
 
 class Decoder(object):
-    def __init__(self, config, context, x_mask,
+    def __init__(self, config, context, x_mask, target_lang_id,
                  dropout_target, dropout_embedding, dropout_hidden,
                  encoder_embedding_layer=None):
 
@@ -39,9 +39,10 @@ class Decoder(object):
 
         with tf.variable_scope("embedding"):
             if encoder_embedding_layer == None:
-                self.y_emb_layer = layers.EmbeddingLayer(
-                    vocabulary_sizes=[config.target_vocab_size],
-                    dim_per_factor=[config.target_embedding_size])
+                self.y_emb_layer = layers.MultiTargetEmbeddingLayer(
+                    vocabulary_size=config.target_vocab_size,
+                    embedding_size=config.target_embedding_size,
+                    num_langs=len(config.target_embedding_ids))
             else:
                 self.y_emb_layer = encoder_embedding_layer
 
@@ -97,13 +98,13 @@ class Decoder(object):
         with tf.variable_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
-                W = self.y_emb_layer.get_embeddings(factor=0)
+                W = self.y_emb_layer.get_tied_embeddings(target_lang_id)
                 W = tf.transpose(W)
             self.predictor = Predictor(config, batch_size, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
 
 
-    def sample(self):
+    def sample(self, target_lang_id):
         batch_size = tf.shape(self.init_state)[0]
         high_depth = 0 if self.high_gru_stack == None \
                        else len(self.high_gru_stack.grus)
@@ -147,7 +148,13 @@ class Decoder(object):
             new_y = tf.where(tf.equal(prev_y, tf.constant(0, dtype=tf.int32)),
                              tf.zeros_like(new_y), new_y)
             y_array = y_array.write(index=i, value=new_y)
-            new_emb = self.y_emb_layer.forward(new_y, factor=0)
+            new_emb = self.y_emb_layer.forward(new_y, target_lang_id)
+            # We need to specify the shape of new_emb to avoid a shape invariant
+            # failure - it seems that TensorFlow can't fully infer the shape
+            # under certain circumstances (specifically, if we're using tied
+            # encoder-decoder embeddings and y_emb_layer.forward involves a
+            # slice).
+            new_emb.set_shape([None, self.embedding_size])
             return i+1, base_state, high_states, new_y, new_emb, y_array
 
         final_loop_vars = tf.while_loop(
@@ -159,10 +166,10 @@ class Decoder(object):
         sampled_ys = y_array.gather(tf.range(0, i))
         return sampled_ys
 
-    def score(self, y):
+    def score(self, y, target_lang_id):
         with tf.variable_scope("y_embeddings_layer"):
             y_but_last = tf.slice(y, [0,0], [tf.shape(y)[0]-1, -1])
-            y_embs = self.y_emb_layer.forward(y_but_last, factor=0)
+            y_embs = self.y_emb_layer.forward(y_but_last, target_lang_id)
             if self.dropout_target != None:
                 y_embs = self.dropout_target(y_embs)
             y_embs = tf.pad(y_embs,
@@ -313,8 +320,10 @@ class Encoder(object):
         self.dropout_source = dropout_source
 
         with tf.variable_scope("embedding"):
-            self.emb_layer = layers.EmbeddingLayer(config.source_vocab_sizes,
-                                                   config.dim_per_factor)
+            self.emb_layer = layers.MultiSourceEmbeddingLayer(
+                config.source_vocab_sizes,
+                config.dim_per_factor,
+                config.tie_encoder_decoder_embeddings)
 
         with tf.variable_scope("forward-stack"):
             self.forward_encoder = layers.GRUStack(
@@ -396,6 +405,11 @@ class ModelInputs(object):
             shape=(seq_len, batch_size),
             dtype=tf.float32)
 
+        self.target_lang_id = tf.placeholder(
+            name='target_lang_id',
+            shape=(),
+            dtype=tf.int32)
+
         self.training = tf.placeholder_with_default(
             False,
             name='training',
@@ -450,9 +464,11 @@ class StandardModel(object):
             else:
                 tied_embeddings = None
             self.decoder = Decoder(config, ctx, self.inputs.x_mask,
-                                   dropout_target, dropout_embedding,
-                                   dropout_hidden, tied_embeddings)
-            self.logits = self.decoder.score(self.inputs.y)
+                                   self.inputs.target_lang_id, dropout_target,
+                                   dropout_embedding, dropout_hidden,
+                                   tied_embeddings)
+            self.logits = self.decoder.score(self.inputs.y,
+                                             self.inputs.target_lang_id)
 
         with tf.variable_scope("loss"):
             self.loss_layer = layers.Masked_cross_entropy_loss(
@@ -490,12 +506,14 @@ class StandardModel(object):
 
     def _get_samples(self):
         if self.sampled_ys == None:
-            self.sampled_ys = self.decoder.sample()
+            self.sampled_ys = self.decoder.sample(self.inputs.target_lang_id)
         return self.sampled_ys
 
-    def sample(self, session, x_in, x_mask_in):
+    def sample(self, session, x_in, x_mask_in, target_lang):
         sampled_ys = self._get_samples()
-        feeds = {self.inputs.x: x_in, self.inputs.x_mask: x_mask_in}
+        feeds = {self.inputs.x: x_in,
+                 self.inputs.x_mask: x_mask_in,
+                 self.inputs.target_lang_id: target_lang}
         sampled_ys_out = session.run(sampled_ys, feed_dict=feeds)
         sampled_ys_out = sampled_ys_out.T
         samples = []
@@ -512,12 +530,14 @@ class StandardModel(object):
         return self.beam_ys, self.parents, self.cost
 
 
-    def beam_search(self, session, x_in, x_mask_in, beam_size):
+    def beam_search(self, session, x_in, x_mask_in, target_lang, beam_size):
         # x_in is a numpy array with shape (factors, seqLen, batch)
         # x_mask is a numpy array with shape (seqLen, batch)
         x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
         x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=-1)
-        feeds = {self.inputs.x: x_in, self.inputs.x_mask: x_mask_in}
+        feeds = {self.inputs.x: x_in,
+                 self.inputs.x_mask: x_mask_in,
+                 self.inputs.target_lang_id: target_lang}
         beam_ys, parents, cost = self._get_beam_search_outputs(beam_size)
         beam_ys_out, parents_out, cost_out = session.run(
                                                     [beam_ys, parents, cost],

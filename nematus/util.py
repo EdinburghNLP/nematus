@@ -80,17 +80,19 @@ def seq2words(seq, inverse_dictionary, join=True):
     assert len(seq.shape) == 1
     return factoredseq2words(seq.reshape([seq.shape[0], 1]),
                              [inverse_dictionary],
+                             [[0]],
                              join)
 
-def factoredseq2words(seq, inverse_dictionaries, join=True):
+def factoredseq2words(seq, inverse_dictionaries, sentinels, join=True):
     assert len(seq.shape) == 2
-    assert len(inverse_dictionaries) == seq.shape[1]
+    assert len(inverse_dictionaries) == seq.shape[1]  # one dict per factor
+    assert len(sentinels) == seq.shape[1]             # one list per factor
     words = []
     for i, w in enumerate(seq):
         factors = []
         for j, f in enumerate(w):
-            if f == 0:
-                assert (i == len(seq) - 1) or (seq[i+1][j] == 0), \
+            if f in sentinels[j]:
+                assert (i == len(seq) - 1) or (seq[i+1][j] in sentinels[j]), \
                        ('Zero not at the end of sequence', seq)
             elif f in inverse_dictionaries[j]:
                 factors.append(inverse_dictionaries[j][f])
@@ -104,3 +106,24 @@ def reverse_dict(dictt):
     keys, values = zip(*dictt.items())
     r_dictt = dict(zip(values, keys))
     return r_dictt
+
+
+def combine_source_dicts(num_to_source_dicts, num_factors, vocab_sizes):
+    assert len(num_to_source_dicts) % num_factors == 0
+    num_langs = len(num_to_source_dicts) / num_factors
+
+    def merge_dict(combined, d, offset, vocab_size):
+        for key, value in d.items():
+            if key < vocab_size:
+                combined[key+offset] = value
+
+    combined_dicts = [{}] * num_factors
+    offsets = [[0]] * num_factors
+    for i, d in enumerate(num_to_source_dicts):
+        lang_idx = i / num_factors
+        factor_idx = i % num_factors
+        offset = offsets[factor_idx][-1]
+        merge_dict(combined_dicts[factor_idx], d, offset, vocab_sizes[i])
+        if len(offsets[factor_idx]) < num_langs:
+            offsets[factor_idx].append(offset+vocab_sizes[i])
+    return combined_dicts, offsets

@@ -91,6 +91,77 @@ class EmbeddingLayer(object):
             return self.embedding_matrices[factor]
 
 
+
+class MultiSourceEmbeddingLayer(object):
+    def __init__(self, vocabulary_sizes, dim_per_factor,
+                 tied_encoder_decoder=False):
+        self.tied_encoder_decoder = tied_encoder_decoder
+        num_factors = len(dim_per_factor)
+        assert len(vocabulary_sizes) % num_factors == 0
+        self.num_langs = len(vocabulary_sizes) / num_factors
+        vocab_sizes_by_factor = [
+            vocabulary_sizes[i*self.num_langs:(i+1)*self.num_langs]
+            for i in range(num_factors)]
+        self.embedding_matrices = []
+        for i in range(num_factors):
+            combined_vocab_size = sum(vocab_sizes_by_factor[i])
+            dim = dim_per_factor[i]
+            var_name = 'embeddings' if i == 0 else 'embeddings_' + str(i)
+            init = initializers.norm_weight(combined_vocab_size, dim)
+            matrix = tf.get_variable(var_name, initializer=init)
+            self.embedding_matrices.append(matrix)
+        if self.tied_encoder_decoder:
+            first_factor_vocab_size = vocab_sizes_by_factor[0][0]
+            for i in range(1, self.num_langs):
+                # All languages must have the same vocabulary size for factor 0
+                assert vocab_sizes_by_factor[0][i] == first_factor_vocab_size
+            begin_points = []
+            for i in range(self.num_langs):
+                offset = i * first_factor_vocab_size
+                tmp = tf.constant([offset, 0], dtype=tf.int32)
+                begin_points.append(tf.expand_dims(tmp, 0))
+            self.slice_begin = tf.concat(begin_points, 0)
+            self.slice_size = tf.constant([first_factor_vocab_size,
+                                           dim_per_factor[0]], dtype=tf.int32)
+
+    def forward(self, x, target_lang_id=None):
+        if target_lang_id == None:
+            # Assumes that x has shape: factors, ...
+            embs = [tf.nn.embedding_lookup(matrix, x[i])
+                    for i, matrix in enumerate(self.embedding_matrices)]
+            return tf.concat(embs, axis=-1)
+        else:
+            assert self.tied_encoder_decoder
+            matrix = tf.slice(self.embedding_matrices[0],
+                              begin=self.slice_begin[target_lang_id],
+                              size=self.slice_size)
+            return tf.nn.embedding_lookup(matrix, x)
+
+    def get_tied_embeddings(self, target_lang_id):
+        assert self.tied_encoder_decoder
+        return tf.slice(self.embedding_matrices[0],
+                        begin=self.slice_begin[target_lang_id],
+                        size=self.slice_size)
+
+
+class MultiTargetEmbeddingLayer(object):
+    def __init__(self, vocabulary_size, embedding_size, num_langs):
+        matrices = []
+        for i in range(num_langs):
+            var_name = 'embeddings' if i == 0 else 'embeddings_' + str(i)
+            init = initializers.norm_weight(vocabulary_size, embedding_size)
+            tmp = tf.get_variable(var_name, initializer=init)
+            matrices.append(tf.expand_dims(tmp, 0))
+        self.embedding_matrices = tf.concat(matrices, 0)
+
+    def forward(self, x, target_lang_id):
+        matrix = self.embedding_matrices[target_lang_id]
+        return tf.nn.embedding_lookup(matrix, x)
+
+    def get_tied_embeddings(self, target_lang_id):
+        return self.embedding_matrices[target_lang_id]
+
+
 class RecurrentLayer(object):
     def __init__(self,
                  initial_state,

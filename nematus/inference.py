@@ -1,7 +1,7 @@
 import numpy
 import tensorflow as tf
 
-def beam_search(models, session, x_in, x_mask_in, beam_size):
+def beam_search(models, session, x_in, x_mask_in, beam_size, target_lang):
     # x_in is a numpy array with shape (factors, seqLen, batch)
     # x_mask is a numpy array with shape (seqLen, batch)
     x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
@@ -11,6 +11,7 @@ def beam_search(models, session, x_in, x_mask_in, beam_size):
         # change init_state, context, context_in_attention_layer
         feeds[model.inputs.x] = x_in
         feeds[model.inputs.x_mask] = x_mask_in
+        feeds[model.inputs.target_lang_id] = target_lang
     beam_ys, parents, cost = construct_beam_search_functions(models, beam_size)
     beam_ys_out, parents_out, cost_out = session.run(
                                                     [beam_ys, parents, cost],
@@ -127,7 +128,14 @@ def construct_beam_search_functions(models, beam_size):
         new_ys = indices % target_vocab_size
         survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
         new_ys = tf.reshape(new_ys, shape=[batch_size])
-        new_embs = [m.decoder.y_emb_layer.forward(new_ys, factor=0) for m in models]
+        new_embs = [m.decoder.y_emb_layer.forward(new_ys, m.inputs.target_lang_id) for m in models]
+        for new_emb in new_embs:
+            # We need to specify the shape of new_emb to avoid a shape invariant
+            # failure - it seems that TensorFlow can't fully infer the shape
+            # under certain circumstances (specifically, if we're using tied
+            # encoder-decoder embeddings and y_emb_layer.forward involves a
+            # slice).
+            new_emb.set_shape([None, embedding_size])
         new_base_states = [tf.gather(s, indices=survivor_idxs) for s in base_states]
         new_high_states = [[tf.gather(s, indices=survivor_idxs) for s in states] for states in high_states]
         new_cost = tf.where(tf.equal(new_ys, 0), tf.abs(new_cost), new_cost)

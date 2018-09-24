@@ -31,10 +31,6 @@ def fill_options(options):
     if not 'state_size' in options:
         options['state_size'] = options['dim']
 
-    # handle vocab dictionaries
-    options['source_dicts'] = options['dictionaries'][:-1]
-    options['target_dict'] = options['dictionaries'][-1]
-
     # set defaults for newer options that may not be present
     if not 'use_dropout' in options:
         options['use_dropout'] = False
@@ -73,10 +69,26 @@ def fill_options(options):
             options['target_embedding_size'] = options['dim_per_factor'][0]
         else:
             options['target_embedding_size'] = options['embedding_size']
+    if not 'source_embeddings' in options:
+        options['source_embeddings'] = ['src']
+    if not 'target_embeddings' in options:
+        options['target_embeddings'] = ['tgt']
+    if not 'embedding_map' in options:
+        options['embedding_map'] = None
     if not 'label_smoothing' in options:
         options['label_smoothing'] = 0.0
     if not 'softmax_mixture_size' in options:
         options['softmax_mixture_size'] = 1
+
+    # handle vocab dictionaries
+    if not 'source_dicts' in options:
+        assert not 'target_dicts' in options
+        assert 'dictionaries' in options
+        assert 'factors' in options
+        num_factors = options['factors']
+        assert len(options['dictionaries']) == num_factors + 1
+        options['source_dicts'] = options['dictionaries'][:num_factors]
+        options['target_dicts'] = options['dictionaries'][num_factors:]
 
     # set the default model version.
     if not 'model_version' in options:

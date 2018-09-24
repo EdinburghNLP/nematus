@@ -61,6 +61,20 @@ class Translator(object):
         self._load_model_options()
         # set up queues
         self._init_queues()
+        # determine source and target language IDs
+        self.source_lang, self.target_lang = None, None
+        for i, lang in enumerate(self._options[0].source_embedding_ids):
+            if lang == settings.source_embedding_id:
+                self.source_lang = i
+                break
+        if self.source_lang == None:
+            assert False
+        for i, lang in enumerate(self._options[0].target_embedding_ids):
+            if lang == settings.target_embedding_id:
+                self.target_lang = i
+                break
+        if self.target_lang == None:
+            assert False
         # init worker processes
         self._init_processes()
 
@@ -169,7 +183,7 @@ class Translator(object):
         y_dummy = numpy.zeros(shape=(len(x),1))
         x, x_mask, _, _ = prepare_data(x, y_dummy, self._options[0].factors, maxlen=None)
 
-        sample = inference.beam_search(models, sess, x, x_mask, k)
+        sample = inference.beam_search(models, sess, x, x_mask, k, self.target_lang)
 
         return sample
 
@@ -183,7 +197,7 @@ class Translator(object):
 
         try:
             batches, idxs = read_all_lines(self._options[0], input_,
-                                           self._batch_size)
+                                           self._batch_size, self.source_lang)
         except exception.Error as x:
             logging.error(x.msg)
             for process in self._processes:
@@ -266,17 +280,17 @@ class Translator(object):
                 for j, (sent, cost) in enumerate(beam):
                     translation = Translation(sentence_id=i,
                                               source_words=source_segments[i],
-                                              target_words=seq2words(sent, self._num_to_target, join=False),
+                                              target_words=seq2words(sent, self._num_to_target[self.target_lang], join=False),
                                               score=cost,
                                               hypothesis_id=j)
                     n_best_list.append(translation)
                 translations.append(n_best_list)
             else:
                 best_hypo, cost = beam[0]
-                target_words = seq2words(best_hypo, self._num_to_target)
+                target_words = seq2words(best_hypo, self._num_to_target[self.target_lang])
                 translation = Translation(sentence_id=i,
                                             source_words=source_segments[i],
-                                            target_words=seq2words(best_hypo, self._num_to_target, join=False),
+                                            target_words=seq2words(best_hypo, self._num_to_target[self.target_lang], join=False),
                                             score=cost)
                 translations.append(translation)
 

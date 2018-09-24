@@ -21,7 +21,7 @@ from Queue import Queue
 from datetime import datetime
 from collections import OrderedDict
 
-from data_iterator import TextIterator
+from data_iterator import TextIterator, MultiTargetIterator
 
 from model import StandardModel
 from model_updater import ModelUpdater
@@ -136,11 +136,14 @@ def load_prior(config, sess, saver):
 
 def load_data(config):
     logging.info('Reading data...')
-    text_iterator = TextIterator(
+    text_iterator = MultiTargetIterator(
                         source=config.source_dataset,
                         target=config.target_dataset,
+                        source_langs=config.source_embedding_ids,
+                        target_langs=config.target_embedding_ids,
                         source_dicts=config.source_dicts,
-                        target_dict=config.target_dict,
+                        target_dicts=config.target_dicts,
+                        embedding_map=config.embedding_map,
                         batch_size=config.batch_size,
                         maxlen=config.maxlen,
                         source_vocab_sizes=config.source_vocab_sizes,
@@ -154,11 +157,14 @@ def load_data(config):
                         keep_data_in_memory=config.keep_train_set_in_memory)
 
     if config.validFreq and config.valid_source_dataset and config.valid_target_dataset:
-        valid_text_iterator = TextIterator(
+        valid_text_iterator = MultiTargetIterator(
                             source=config.valid_source_dataset,
                             target=config.valid_target_dataset,
+                            source_langs=config.source_embedding_ids,
+                            target_langs=config.target_embedding_ids,
                             source_dicts=config.source_dicts,
-                            target_dict=config.target_dict,
+                            target_dicts=config.target_dicts,
+                            embedding_map=config.valid_embedding_map,
                             batch_size=config.valid_batch_size,
                             maxlen=config.maxlen,
                             source_vocab_sizes=config.source_vocab_sizes,
@@ -176,12 +182,20 @@ def load_data(config):
 
 def load_dictionaries(config):
     source_to_num = [util.load_dict(d) for d in config.source_dicts]
-    target_to_num = util.load_dict(config.target_dict)
+    target_to_num = [util.load_dict(d) for d in config.target_dicts]
     num_to_source = [util.reverse_dict(d) for d in source_to_num]
-    num_to_target = util.reverse_dict(target_to_num)
+    num_to_target = [util.reverse_dict(d) for d in target_to_num]
     return source_to_num, target_to_num, num_to_source, num_to_target
 
-def read_all_lines(config, sentences, batch_size):
+def read_all_lines(config, sentences, batch_size, src_lang_idx=0):
+    def adjust_source_indices(w, src_lang_idx, vocab_sizes):
+        num_factors = len(w)
+        num_langs = len(vocab_sizes) / num_factors
+        offsets = [0] * num_factors
+        for i in range(num_factors):
+            for j in range(src_lang_idx):
+                offsets[i] += vocab_sizes[i * num_langs + j]
+        return [index + offsets[i] for i, index in enumerate(w)]
     source_to_num, _, _, _ = load_dictionaries(config)
     lines = []
     for sent in sentences:
@@ -196,6 +210,8 @@ def read_all_lines(config, sentences, batch_size):
                     raise exception.Error(
                         'Expected {0} factors, but input word has {1}\n'.format(
                             config.factors, len(w)))
+            w = adjust_source_indices(w, src_lang_idx,
+                                      config.source_vocab_sizes)
             line.append(w)
         lines.append(line)
     lines = numpy.array(lines)
@@ -248,13 +264,15 @@ def train(config, sess):
 
     text_iterator, valid_text_iterator = load_data(config)
     _, _, num_to_source, num_to_target = load_dictionaries(config)
+    num_to_multi_source, vocab_offsets = util.combine_source_dicts(
+        num_to_source, config.factors, config.source_vocab_sizes)
     total_loss = 0.
     n_sents, n_words = 0, 0
     last_time = time.time()
     logging.info("Initial uidx={}".format(progress.uidx))
     for progress.eidx in xrange(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
-        for source_sents, target_sents in text_iterator:
+        for source_sents, target_sents, target_lang in text_iterator:
             if len(source_sents[0][0]) != config.factors:
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(config.factors, len(source_sents[0][0])))
                 sys.exit(1)
@@ -267,7 +285,7 @@ def train(config, sess):
             (factors, seqLen, batch_size) = x_in.shape
 
             loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in,
-                                  write_summary_for_this_batch)
+                                  target_lang, write_summary_for_this_batch)
             total_loss += loss
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
@@ -284,28 +302,31 @@ def train(config, sess):
 
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
-                samples = model.sample(sess, x_small, x_mask_small)
+                samples = model.sample(sess, x_small, x_mask_small, target_lang)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    source = util.factoredseq2words(xx, num_to_source)
-                    target = util.seq2words(yy, num_to_target)
-                    sample = util.seq2words(ss, num_to_target)
+                    source = util.factoredseq2words(xx, num_to_multi_source,
+                                                    vocab_offsets)
+                    target = util.seq2words(yy, num_to_target[target_lang])
+                    sample = util.seq2words(ss, num_to_target[target_lang])
                     logging.info('SOURCE: {}'.format(source))
                     logging.info('TARGET: {}'.format(target))
                     logging.info('SAMPLE: {}'.format(sample))
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
-                samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
+                samples = model.beam_search(sess, x_small, x_mask_small, target_lang, config.beam_size)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
-                    source = util.factoredseq2words(xx, num_to_source)
-                    target = util.seq2words(yy, num_to_target)
+                    source = util.factoredseq2words(xx, num_to_multi_source,
+                                                    vocab_offsets)
+                    target = util.seq2words(yy, num_to_target[target_lang])
                     logging.info('SOURCE: {}'.format(source))
                     logging.info('TARGET: {}'.format(target))
                     for i, (sample_seq, cost) in enumerate(ss):
-                        sample = util.seq2words(sample_seq, num_to_target)
+                        sample = util.seq2words(sample_seq,
+                                                num_to_target[target_lang])
                         msg = 'SAMPLE {}: {} Cost/Len/Avg {}/{}/{}'.format(
                             i, sample, cost, len(sample), cost/len(sample))
                         logging.info(msg)
@@ -463,7 +484,7 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
                            normalization_alpha=0):
     losses = []
     loss_per_sentence = model.get_loss()
-    for x_v, y_v in text_iterator:
+    for x_v, y_v, target_lang in text_iterator:
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
             sys.exit(1)
@@ -473,6 +494,7 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
                  model.inputs.x_mask: x_mask,
                  model.inputs.y: y,
                  model.inputs.y_mask: y_mask,
+                 model.inputs.target_lang_id: target_lang,
                  model.inputs.training: False}
         loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
 
@@ -497,6 +519,7 @@ def validate(config, sess, text_iterator, model, normalization_alpha=0):
 
 
 def validate_helper(config, sess):
+    # FIXME multi target
     logging.info('Building model...')
     model = StandardModel(options)
     saver = init_or_restore_variables(config, sess)
@@ -532,8 +555,21 @@ def parse_args():
     # parallel training corpus (source and target). Hidden option for backward compatibility
     data.add_argument('--datasets', type=str, metavar='PATH', nargs=2,
                          help=argparse.SUPPRESS)
-    data.add_argument('--dictionaries', type=str, required=True, metavar='PATH', nargs="+",
-                         help="network vocabularies (one per source factor, plus target vocabulary)")
+    data_dicts = data.add_mutually_exclusive_group(required=True)
+    data_dicts.add_argument('--dictionaries', type=str, metavar='PATH', nargs="+",
+                          help="network vocabularies (one per source factor, plus target vocabulary)")
+    data_dicts.add_argument('--source_dicts', type=str, nargs='+', metavar='STR',
+                          help="list of source language vocabularies, one per factor or one per (embedding, factor) pair if using multiple source embeddings (use embedding-major order)")
+    data.add_argument('--source_embedding_ids', type=str, default=["src"], nargs='+', metavar='STR',
+                         help="list of source embedding identifiers, e.g. --source_embedding_ids en de nl ro (default: src)")
+    data.add_argument('--target_dicts', type=str, nargs='+', metavar='STR',
+                         help="list of target language vocabularies (one per embedding)")
+    data.add_argument('--target_embedding_ids', type=str, default=["tgt"], nargs='+', metavar='STR',
+                         help="list of target language identifiers, e.g. --target_embedding_ids en de nl ro (default: tgt)")
+    data.add_argument('--embedding_map', type=str, default=None, metavar='STR',
+                         help="file listing source-target embedding identifiers for each sentence pair in the training corpus")
+    data.add_argument('--valid_embedding_map', type=str, default=None, metavar='STR',
+                         help="file listing source-target embedding identifiers for each sentence pair in the validation set")
     data.add_argument('--saveFreq', type=int, default=30000, metavar='INT',
                          help="save frequency (default: %(default)s)")
     data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
@@ -552,11 +588,9 @@ def parse_args():
                          help="embedding layer size (default: %(default)s)")
     network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
                          help="hidden state size (default: %(default)s)")
-
     network.add_argument('--source_vocab_sizes', '--n_words_src', type=int, default=None, nargs='+', metavar='INT',
-                         help="source vocabulary sizes (one per input factor) (default: %(default)s)")
-
-    network.add_argument('--target_vocab_size', '--n_words', type=int, default=-1, metavar='INT',
+                         help="source vocabulary sizes (default: %(default)s)")
+    network.add_argument('--target_vocab_size', '--n_words', type=int, default=None, metavar='INT',
                          help="target vocabulary size (default: %(default)s)")
     network.add_argument('--factors', type=int, default=1, metavar='INT',
                          help="number of input factors (default: %(default)s)")
@@ -717,8 +751,29 @@ def parse_args():
         logging.error('mismatch between \'--embedding_size\' ({0}) and \'--dim_per_factor\' (sums to {1})\n'.format(config.embedding_size, sum(config.dim_per_factor)))
         sys.exit(1)
 
-    if len(config.dictionaries) != config.factors + 1:
-        logging.error('\'--dictionaries\' must specify one dictionary per source factor and one target dictionary\n')
+    # allow --dictionaries for backward compatibility
+    if config.dictionaries != None:
+        config.source_dicts = config.dictionaries[:config.factors]
+        config.target_dict = config.dictionaries[-1]
+    else:
+        if len(config.target_dicts) == 0:
+            logging.error('\'--target_dicts\' is required if using \'--source_dicts\'\n')
+            sys.exit(1)
+
+    # check embedding-related options are consistent
+
+    if (len(config.source_embedding_ids) > 1 or
+        len(config.target_embedding_ids) > 1):
+        if config.embedding_map == None:
+            logging.error('\'--embedding_map\' is required if using more than one source or target embedding\n')
+            sys.exit(1)
+
+    if len(config.source_dicts) != (len(config.source_embedding_ids) * config.factors):
+        logging.error('\'--source_dicts\' must specify one dictionary per source factor, for each source embedding\n')
+        sys.exit(1)
+
+    if len(config.target_dicts) != len(config.target_embedding_ids):
+        logging.error('\'--target_dicts\' must specify one dictionary per target embedding\n')
         sys.exit(1)
 
     # determine target_embedding_size
@@ -727,37 +782,61 @@ def parse_args():
     else:
         config.target_embedding_size = config.embedding_size
 
-    # set vocabulary sizes
-    vocab_sizes = []
-    if config.source_vocab_sizes == None:
-        vocab_sizes = [-1] * config.factors
-    elif len(config.source_vocab_sizes) == config.factors:
-        vocab_sizes = config.source_vocab_sizes
-    elif len(config.source_vocab_sizes) < config.factors:
-        num_missing = config.factors - len(config.source_vocab_sizes)
-        vocab_sizes += config.source_vocab_sizes + [-1] * num_missing
-    else:
-        logging.error('too many values supplied to \'--source_vocab_sizes\' option (expected one per factor = {0})'.format(config.factors))
+    if config.source_vocab_sizes != None or config.target_vocab_size != None:
+        logging.error('\'--source_vocab_sizes\' and \'--target_vocab_size\' are not currently supported in this branch\n')
         sys.exit(1)
-    if config.target_vocab_size == -1:
-        vocab_sizes.append(-1)
-    else:
-        vocab_sizes.append(config.target_vocab_size)
 
-    # for unspecified vocabulary sizes, determine sizes from vocabulary dictionaries
-    for i, vocab_size in enumerate(vocab_sizes):
-        if vocab_size >= 0:
-            continue
+#    # set vocabulary sizes
+#    vocab_sizes = []
+#    if config.source_vocab_sizes == None:
+#        vocab_sizes = [-1] * config.factors
+#    elif len(config.source_vocab_sizes) == config.factors:
+#        vocab_sizes = config.source_vocab_sizes
+#    elif len(config.source_vocab_sizes) < config.factors:
+#        num_missing = config.factors - len(config.source_vocab_sizes)
+#        vocab_sizes += config.source_vocab_sizes + [-1] * num_missing
+#    else:
+#        logging.error('too many values supplied to \'--source_vocab_sizes\' option (expected one per factor = {0})'.format(config.factors))
+#        sys.exit(1)
+#    if config.target_vocab_size == -1:
+#        vocab_sizes.append(-1)
+#    else:
+#        vocab_sizes.append(config.target_vocab_size)
+#
+#    # for unspecified vocabulary sizes, determine sizes from vocabulary dictionaries
+#    for i, vocab_size in enumerate(vocab_sizes):
+#        if vocab_size >= 0:
+#            continue
+#        try:
+#            d = load_dict(config.dictionaries[i])
+#        except:
+#            logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
+#        vocab_sizes[i] = max(d.values()) + 1
+#
+#    config.source_dicts = config.dictionaries[:config.factors]
+#    config.source_vocab_sizes = vocab_sizes[:-1]
+#    config.target_dicts = config.dictionaries[config.factors:]
+#    config.target_vocab_size = vocab_sizes[-1]
+
+    def get_vocab_size_or_die(path):
         try:
-            d = util.load_dict(config.dictionaries[i])
+            d = util.load_dict(path)
         except:
-            logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
-        vocab_sizes[i] = max(d.values()) + 1
+            logging.error('failed to determine vocabulary size from file: {0}'.format(path))
+        return max(d.values()) + 1
 
-    config.source_dicts = config.dictionaries[:-1]
-    config.source_vocab_sizes = vocab_sizes[:-1]
-    config.target_dict = config.dictionaries[-1]
-    config.target_vocab_size = vocab_sizes[-1]
+    config.source_vocab_sizes = []
+    for i in range(len(config.source_embedding_ids)):
+        for j in range(config.factors):
+            path = config.source_dicts[i * config.factors + j]
+            vocab_size = get_vocab_size_or_die(path)
+            config.source_vocab_sizes.append(vocab_size)
+
+    config.target_vocab_size = 0
+    for i in range(len(config.target_embedding_ids)):
+        path = config.target_dicts[i]
+        vocab_size = get_vocab_size_or_die(path)
+        config.target_vocab_size = max(config.target_vocab_size, vocab_size)
 
     # set the model version
     config.model_version = 0.2
