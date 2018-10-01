@@ -36,6 +36,8 @@ def fill_options(options):
     options['target_dict'] = options['dictionaries'][-1]
 
     # set defaults for newer options that may not be present
+    if not 'theano_compat' in options:
+        options['theano_compat'] = from_theano_version
     if not 'use_dropout' in options:
         options['use_dropout'] = False
     if not 'dropout_embedding' in options:
