@@ -761,6 +761,7 @@ def parse_args():
 
     # set the model version
     config.model_version = 0.2
+    config.theano_compat = False
 
     return config
 
