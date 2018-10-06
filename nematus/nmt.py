@@ -581,9 +581,9 @@ def parse_args():
                          help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
     network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
                          help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
+    network.add_argument('--dropout_source', type=float, default=0.0, metavar="FLOAT",
                          help="dropout source words (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
+    network.add_argument('--dropout_target', type=float, default=0.0, metavar="FLOAT",
                          help="dropout target words (0: no dropout) (default: %(default)s)")
     network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
@@ -608,17 +608,17 @@ def parse_args():
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
                          help="maximum number of updates (minibatches) (default: %(default)s)")
-    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--decay_c', type=float, default=0.0, metavar='FLOAT',
                          help="L2 regularization penalty (default: %(default)s)")
-    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--map_decay_c', type=float, default=0.0, metavar='FLOAT',
                          help="MAP-L2 regularization penalty towards original weights (default: %(default)s)")
     training.add_argument('--prior_model', type=str, metavar='PATH',
                          help="Prior model for MAP-L2 regularization. Unless using \"--reload\", this will also be used for initialization.")
-    training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
+    training.add_argument('--clip_c', type=float, default=1.0, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
                          help="learning rate (default: %(default)s)")
-    training.add_argument('--label_smoothing', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--label_smoothing', type=float, default=0.0, metavar='FLOAT',
                          help="label smoothing (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
