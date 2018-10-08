@@ -183,6 +183,15 @@ def load_dictionaries(config):
 
 def read_all_lines(config, sentences, batch_size):
     source_to_num, _, _, _ = load_dictionaries(config)
+
+    if config.source_vocab_sizes != None:
+        assert len(config.source_vocab_sizes) == len(source_to_num)
+        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
+            if vocab_size != None and vocab_size > 0:
+                for key, idx in d.items():
+                    if idx >= vocab_size:
+                        del d[key]
+
     lines = []
     for sent in sentences:
         line = []
