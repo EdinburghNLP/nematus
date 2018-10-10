@@ -15,6 +15,7 @@ import sys
 import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+#import tensorflow.contrib.framework as slim ???
 
 from threading import Thread
 from Queue import Queue
@@ -226,8 +227,16 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
+    # Construct the graph, with one model replica per GPU
+
+    num_replicas = len(util.get_available_gpus())
+
     logging.info('Building model...')
-    model = StandardModel(config)
+    replicas = []
+    for i in range(num_replicas):
+        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
+                replicas.append(StandardModel(config))
 
     if config.optimizer == 'adam':
         optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
@@ -245,7 +254,7 @@ def train(config, sess):
     else:
         writer = None
 
-    updater = ModelUpdater(config, model, optimizer, global_step, writer)
+    updater = ModelUpdater(config, replicas, optimizer, global_step, writer)
 
     saver, progress = init_or_restore_variables(config, sess, train=True)
 
@@ -293,7 +302,7 @@ def train(config, sess):
 
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
-                samples = model.sample(sess, x_small, x_mask_small)
+                samples = replicas[0].sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
                     source = util.factoredseq2words(xx, num_to_source)
@@ -305,7 +314,7 @@ def train(config, sess):
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
-                samples = model.beam_search(sess, x_small, x_mask_small, config.beam_size)
+                samples = replicas[0].beam_search(sess, x_small, x_mask_small, config.beam_size)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
@@ -320,7 +329,7 @@ def train(config, sess):
                         logging.info(msg)
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
-                costs = validate(config, sess, valid_text_iterator, model)
+                costs = validate(config, sess, valid_text_iterator, replicas[0])
                 # validation loss is mean of normalized sentence log probs
                 valid_loss = sum(costs) / len(costs)
                 if (len(progress.history_errs) == 0 or
@@ -338,7 +347,7 @@ def train(config, sess):
                         progress.estop = True
                         break
                 if config.valid_script is not None:
-                    score = validate_with_script(sess, model, config,
+                    score = validate_with_script(sess, replicas[0], config,
                                                  valid_text_iterator)
                     need_to_save = (score is not None and
                         (len(progress.valid_script_scores) == 0 or
@@ -468,6 +477,7 @@ def validate_with_script(sess, model, config, valid_text_iterator):
     return score
 
 
+# TODO Support for multiple GPUs
 def calc_loss_per_sentence(config, sess, text_iterator, model,
                            normalization_alpha=0):
     losses = []
@@ -782,7 +792,9 @@ if __name__ == "__main__":
 
     config = parse_args()
     logging.info(config)
-    with tf.Session() as sess:
+    tf_config = tf.ConfigProto()
+    tf_config.allow_soft_placement = True
+    with tf.Session(config=tf_config) as sess:
         if config.translate_valid:
             logging.info('Building model...')
             model = StandardModel(config)

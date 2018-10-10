@@ -15,7 +15,6 @@ from util import load_config
 from alignment_util import combine_source_target_text
 from compat import fill_options
 
-from nmt import create_model, validate
 from settings import RescorerSettings
 from score import score_model
 
