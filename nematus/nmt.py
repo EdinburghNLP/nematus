@@ -558,11 +558,11 @@ def parse_args():
     data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
-                         help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --saveto")
+                         help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --model")
     data.add_argument('--no_reload_training_progress', action='store_false',  dest='reload_training_progress',
                          help="don't reload training progress (only used if --reload is enabled)")
     data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
-                         help="directory for saving summaries (default: same directory as the --saveto file)")
+                         help="directory for saving summaries (default: same directory as the --model file)")
     data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
                          help="Save summaries after INT updates, if 0 do not save summaries (default: %(default)s)")
 
