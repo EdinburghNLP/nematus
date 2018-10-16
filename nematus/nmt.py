@@ -17,8 +17,6 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 #import tensorflow.contrib.framework as slim ???
 
-from threading import Thread
-from Queue import Queue
 from datetime import datetime
 from collections import OrderedDict
 
@@ -381,10 +379,9 @@ def train(config, sess):
 # we use that class instead (without too much painful refactoring)?
 def translate_validation_set(sess, model, config, output_file=sys.stdin):
     start_time = time.time()
-    _, _, _, num_to_target = load_dictionaries(config)
+
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
-    n_sent = 0
     try:
         sentences = open(config.valid_source_dataset, 'r').readlines()
         batches, idxs = read_all_lines(config, sentences,
@@ -392,47 +389,22 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
     except exception.Error as x:
         logging.error(x.msg)
         sys.exit(1)
-    in_queue, out_queue = Queue(), Queue()
-    model._get_beam_search_outputs(config.beam_size)
 
-    def translate_worker(in_queue, out_queue, model, sess, config):
-        while True:
-            job = in_queue.get()
-            if job is None:
-                break
-            idx, x = job
-            y_dummy = numpy.zeros(shape=(len(x),1))
-            x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
-                                                maxlen=None)
-            try:
-                samples = model.beam_search(sess, x, x_mask, config.beam_size)
-                out_queue.put((idx, samples))
-            except:
-                in_queue.put(job)
+    beams = []
+    for x in batches:
+        y_dummy = numpy.zeros(shape=(len(x),1))
+        x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
+                                            maxlen=None)
+        sample = model.beam_search(sess, x, x_mask, config.beam_size)
+        beams.extend(sample)
+        logging.info('Translated {} sents'.format(len(beams)))
 
-    threads = [None] * config.n_threads
-    for i in xrange(config.n_threads):
-        threads[i] = Thread(
-                        target=translate_worker,
-                        args=(in_queue, out_queue, model, sess, config))
-        threads[i].deamon = True
-        threads[i].start()
+    # Put beams into the order of the original sentences.
+    tmp = numpy.array(beams, dtype=numpy.object)
+    ordered_beams = tmp[idxs.argsort()]
 
-    for i, batch in enumerate(batches):
-        in_queue.put((i,batch))
-    outputs = [None]*len(batches)
-    for _ in range(len(batches)):
-        i, samples = out_queue.get()
-        outputs[i] = list(samples)
-        n_sent += len(samples)
-        logging.info('Translated {} sents'.format(n_sent))
-    for _ in range(config.n_threads):
-        in_queue.put(None)
-    outputs = [beam for batch in outputs for beam in batch]
-    outputs = numpy.array(outputs, dtype=numpy.object)
-    outputs = outputs[idxs.argsort()]
-
-    for beam in outputs:
+    _, _, _, num_to_target = load_dictionaries(config)
+    for beam in ordered_beams:
         if config.normalize:
             beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
         beam = sorted(beam, key=lambda (sent, cost): cost)
@@ -445,8 +417,11 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
             best_hypo, cost = beam[0]
             line = util.seq2words(best_hypo, num_to_target) + '\n'
             output_file.write(line)
+
     duration = time.time() - start_time
-    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
+    num_sents = len(ordered_beams)
+    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
+        num_sents, duration, num_sents/duration))
 
 
 def validate_with_script(sess, model, config, valid_text_iterator):
@@ -689,8 +664,6 @@ def parse_args():
                             help="Cost of sentences will not be normalized by length")
     translate.add_argument('--n_best', action='store_true', dest='n_best',
                             help="Print full beam")
-    translate.add_argument('--n_threads', type=int, default=5, metavar='INT',
-                         help="Number of threads to use for beam search (default: %(default)s)")
     translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
                          help="Maximum length of translation output sentence (default: %(default)s)")
     config = parser.parse_args()
