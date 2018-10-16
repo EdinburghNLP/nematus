@@ -181,7 +181,6 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --translate_valid | Translate source dataset instead of training |
 | --no_normalize | Cost of sentences will not be normalized by length |
 | --n_best | Print full beam |
-| --n_threads INT | Number of threads to use for beam search (default: 5) |
 | --translation_maxlen INT | Maximum length of translation output sentence (default: 200) |
 
 #### `nematus/translate.py` : use an existing model to translate a source text
