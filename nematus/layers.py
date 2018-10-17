@@ -6,6 +6,11 @@ import tensorflow as tf
 
 import initializers
 
+class LegacyBiasType:
+    THEANO = 1
+    NEMATUS_COMPAT_TRUE = 2
+    NEMATUS_COMPAT_FALSE = 3
+
 def matmul3d(x3d, matrix):
     shape = tf.shape(x3d)
     mat_shape = tf.shape(matrix)
@@ -58,7 +63,7 @@ class FeedForwardLayer(object):
         else:
             y = tf.matmul(x, self.W) + self.b
         if self.use_layer_norm:
-            y = self.layer_norm.forward(y, input_is_3d=input_is_3d)
+            y = self.layer_norm.forward(y)
         y = self.non_linearity(y)
         return y
 
@@ -186,24 +191,21 @@ class LayerNormLayer(object):
         self.new_std = tf.get_variable('new_std', [layer_size],
                                        initializer=tf.constant_initializer(1))
         self.eps = eps
-    def forward(self, x, input_is_3d=False):
-        # NOTE: tf.nn.moments does not support axes=[-1] or axes=[tf.rank(x)-1] :-(
-        # TODO: Actually, this is probably fixed now and should be tested with latest
-        # TF version. See: https://github.com/tensorflow/tensorflow/issues/8101
-        axis = 2 if input_is_3d else 1
-        m, v = tf.nn.moments(x, axes=[axis], keep_dims=True)
+
+    def forward(self, x):
+        m, v = tf.nn.moments(x, axes=[-1], keep_dims=True)
         std = tf.sqrt(v + self.eps)
         norm_x = (x-m)/std
         new_x = norm_x*self.new_std + self.new_mean
         return new_x
-    
+
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
                  state_size,
                  batch_size,
                  use_layer_norm=False,
-                 nematus_compat=False,
+                 legacy_bias_type=LegacyBiasType.NEMATUS_COMPAT_FALSE,
                  dropout_input=None,
                  dropout_state=None):
         init = tf.concat([initializers.ortho_weight(state_size),
@@ -229,9 +231,13 @@ class GRUStep(object):
                                                      initializer=init)
         self.proposal_bias = tf.get_variable('proposal_bias', [state_size],
                                              initializer=tf.zeros_initializer)
-        self.nematus_compat = nematus_compat
+        self.legacy_bias_type = legacy_bias_type
         self.use_layer_norm = use_layer_norm
 
+        self.gates_state_norm = None
+        self.proposal_state_norm = None
+        self.gates_x_norm = None
+        self.proposal_x_norm = None
         if self.use_layer_norm:
             with tf.variable_scope('gates_state_norm'):
                 self.gates_state_norm = LayerNormLayer(2*state_size)
@@ -267,21 +273,19 @@ class GRUStep(object):
             gates_x = matmul3d(x, self.input_to_gates)
         else:
             gates_x = tf.matmul(x, self.input_to_gates)
-        if not self.nematus_compat:
-            gates_x += self.gates_bias
-        if self.use_layer_norm:
-            gates_x = self.gates_x_norm.forward(gates_x, input_is_3d=input_is_3d)
-        return gates_x
+        return self._layer_norm_and_bias(x=gates_x,
+                                         b=self.gates_bias,
+                                         layer_norm=self.gates_x_norm,
+                                         x_is_input=True)
 
     def _get_gates_state(self, prev_state):
         prev_state = apply_dropout_mask(prev_state,
                                         self.dropout_mask_state_to_gates)
         gates_state = tf.matmul(prev_state, self.state_to_gates)
-        if self.nematus_compat:
-            gates_state += self.gates_bias
-        if self.use_layer_norm:
-            gates_state = self.gates_state_norm.forward(gates_state)
-        return gates_state
+        return self._layer_norm_and_bias(x=gates_state,
+                                         b=self.gates_bias,
+                                         layer_norm=self.gates_state_norm,
+                                         x_is_input=False)
 
     def _get_proposal_x(self,x, input_is_3d=False):
         x = apply_dropout_mask(x, self.dropout_mask_input_to_proposal,
@@ -290,22 +294,42 @@ class GRUStep(object):
             proposal_x = matmul3d(x, self.input_to_proposal)
         else:
             proposal_x = tf.matmul(x, self.input_to_proposal)
-        if not self.nematus_compat:
-            proposal_x += self.proposal_bias
-        if self.use_layer_norm:
-            proposal_x = self.proposal_x_norm.forward(proposal_x, input_is_3d=input_is_3d)
-        return proposal_x
+        return self._layer_norm_and_bias(x=proposal_x,
+                                         b=self.proposal_bias,
+                                         layer_norm=self.proposal_x_norm,
+                                         x_is_input=True)
 
     def _get_proposal_state(self, prev_state):
         prev_state = apply_dropout_mask(prev_state,
                                         self.dropout_mask_state_to_proposal)
         proposal_state = tf.matmul(prev_state, self.state_to_proposal)
-        # placing the bias here is unorthodox, but we're keeping this behavior for compatibility with dl4mt-tutorial
-        if self.nematus_compat:
-            proposal_state += self.proposal_bias
-        if self.use_layer_norm:
-            proposal_state = self.proposal_state_norm.forward(proposal_state)
-        return proposal_state
+        return self._layer_norm_and_bias(x=proposal_state,
+                                         b=self.proposal_bias,
+                                         layer_norm=self.proposal_state_norm,
+                                         x_is_input=False)
+
+    def _layer_norm_and_bias(self, x, b, layer_norm, x_is_input):
+        assert self.use_layer_norm == (layer_norm is not None)
+        if self.legacy_bias_type == LegacyBiasType.THEANO:
+            # This emulates the Theano version of Nematus.
+            if not self.use_layer_norm:
+                return x + b
+            if x_is_input:
+                return layer_norm.forward(x+b)
+            else:
+                return layer_norm.forward(x) + b
+        if self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_TRUE:
+            if x_is_input:
+                return layer_norm.forward(x) if self.use_layer_norm else x
+            else:
+                return layer_norm.forward(x+b) if self.use_layer_norm else x+b
+        elif self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE:
+            if x_is_input:
+                return layer_norm.forward(x+b) if self.use_layer_norm else x+b
+            else:
+                return layer_norm.forward(x) if self.use_layer_norm else x
+        else:
+            assert False
 
     def precompute_from_x(self, x):
         # compute gates_x and proposal_x in one big matrix multiply
@@ -355,7 +379,7 @@ class DeepTransitionGRUStep(object):
                  state_size,
                  batch_size,
                  use_layer_norm=False,
-                 nematus_compat=False,
+                 legacy_bias_type=LegacyBiasType.NEMATUS_COMPAT_FALSE,
                  dropout_input=None,
                  dropout_state=None,
                  transition_depth=1,
@@ -367,7 +391,7 @@ class DeepTransitionGRUStep(object):
                               state_size=state_size,
                               batch_size=batch_size,
                               use_layer_norm=use_layer_norm,
-                              nematus_compat=nematus_compat,
+                              legacy_bias_type=legacy_bias_type,
                               dropout_input=(dropout_input if i == 0 else None),
                               dropout_state=dropout_state)
             self.gru_steps.append(gru)
@@ -399,7 +423,7 @@ class GRUStack(object):
                  state_size,
                  batch_size,
                  use_layer_norm=False,
-                 nematus_compat=False,
+                 legacy_bias_type=LegacyBiasType.NEMATUS_COMPAT_FALSE,
                  dropout_input=None,
                  dropout_state=None,
                  stack_depth=1,
@@ -425,7 +449,7 @@ class GRUStack(object):
                     state_size=state_size,
                     batch_size=batch_size,
                     use_layer_norm=use_layer_norm,
-                    nematus_compat=nematus_compat,
+                    legacy_bias_type=legacy_bias_type,
                     dropout_input=(dropout_input if i == 0 else dropout_state),
                     dropout_state=dropout_state,
                     transition_depth=transition_depth))
@@ -564,7 +588,7 @@ class AttentionStep(object):
         self.hidden_from_context += self.hidden_bias
         if self.use_layer_norm:
             self.hidden_from_context = \
-                self.hidden_context_norm.forward(self.hidden_from_context, input_is_3d=True)
+                self.hidden_context_norm.forward(self.hidden_from_context)
 
     def forward(self, prev_state):
         prev_state = apply_dropout_mask(prev_state,
@@ -572,7 +596,7 @@ class AttentionStep(object):
         hidden_from_state = tf.matmul(prev_state, self.state_to_hidden)
         if self.use_layer_norm:
             hidden_from_state = \
-                self.hidden_state_norm.forward(hidden_from_state, input_is_3d=False)
+                self.hidden_state_norm.forward(hidden_from_state)
         hidden = self.hidden_from_context + hidden_from_state
         hidden = tf.nn.tanh(hidden)
         # context has shape seqLen x batch x context_state_size

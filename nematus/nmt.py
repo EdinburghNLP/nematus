@@ -15,9 +15,8 @@ import sys
 import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+#import tensorflow.contrib.framework as slim ???
 
-from threading import Thread
-from Queue import Queue
 from datetime import datetime
 from collections import OrderedDict
 
@@ -197,6 +196,15 @@ def read_all_lines(config, sentences, batch_size, src_lang_idx=0):
                 offsets[i] += vocab_sizes[i * num_langs + j]
         return [index + offsets[i] for i, index in enumerate(w)]
     source_to_num, _, _, _ = load_dictionaries(config)
+
+    if config.source_vocab_sizes != None:
+        assert len(config.source_vocab_sizes) == len(source_to_num)
+        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
+            if vocab_size != None and vocab_size > 0:
+                for key, idx in d.items():
+                    if idx >= vocab_size:
+                        del d[key]
+
     lines = []
     for sent in sentences:
         line = []
@@ -233,8 +241,16 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
+    # Construct the graph, with one model replica per GPU
+
+    num_replicas = len(util.get_available_gpus())
+
     logging.info('Building model...')
-    model = StandardModel(config)
+    replicas = []
+    for i in range(num_replicas):
+        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
+                replicas.append(StandardModel(config))
 
     if config.optimizer == 'adam':
         optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
@@ -252,7 +268,7 @@ def train(config, sess):
     else:
         writer = None
 
-    updater = ModelUpdater(config, model, optimizer, global_step, writer)
+    updater = ModelUpdater(config, replicas, optimizer, global_step, writer)
 
     saver, progress = init_or_restore_variables(config, sess, train=True)
 
@@ -302,7 +318,7 @@ def train(config, sess):
 
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
-                samples = model.sample(sess, x_small, x_mask_small, target_lang)
+                samples = replicas[0].sample(sess, x_small, x_mask_small, target_lang)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
                     source = util.factoredseq2words(xx, num_to_multi_source,
@@ -315,7 +331,7 @@ def train(config, sess):
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
-                samples = model.beam_search(sess, x_small, x_mask_small, target_lang, config.beam_size)
+                samples = replicas[0].beam_search(sess, x_small, x_mask_small, target_lang, config.beam_size)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
@@ -332,7 +348,7 @@ def train(config, sess):
                         logging.info(msg)
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
-                costs = validate(config, sess, valid_text_iterator, model)
+                costs = validate(config, sess, valid_text_iterator, replicas[0])
                 # validation loss is mean of normalized sentence log probs
                 valid_loss = sum(costs) / len(costs)
                 if (len(progress.history_errs) == 0 or
@@ -350,7 +366,7 @@ def train(config, sess):
                         progress.estop = True
                         break
                 if config.valid_script is not None:
-                    score = validate_with_script(sess, model, config,
+                    score = validate_with_script(sess, replicas[0], config,
                                                  valid_text_iterator)
                     need_to_save = (score is not None and
                         (len(progress.valid_script_scores) == 0 or
@@ -384,10 +400,9 @@ def train(config, sess):
 # we use that class instead (without too much painful refactoring)?
 def translate_validation_set(sess, model, config, output_file=sys.stdin):
     start_time = time.time()
-    _, _, _, num_to_target = load_dictionaries(config)
+
     logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
 
-    n_sent = 0
     try:
         sentences = open(config.valid_source_dataset, 'r').readlines()
         batches, idxs = read_all_lines(config, sentences,
@@ -395,47 +410,22 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
     except exception.Error as x:
         logging.error(x.msg)
         sys.exit(1)
-    in_queue, out_queue = Queue(), Queue()
-    model._get_beam_search_outputs(config.beam_size)
 
-    def translate_worker(in_queue, out_queue, model, sess, config):
-        while True:
-            job = in_queue.get()
-            if job is None:
-                break
-            idx, x = job
-            y_dummy = numpy.zeros(shape=(len(x),1))
-            x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
-                                                maxlen=None)
-            try:
-                samples = model.beam_search(sess, x, x_mask, config.beam_size)
-                out_queue.put((idx, samples))
-            except:
-                in_queue.put(job)
+    beams = []
+    for x in batches:
+        y_dummy = numpy.zeros(shape=(len(x),1))
+        x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
+                                            maxlen=None)
+        sample = model.beam_search(sess, x, x_mask, config.beam_size)
+        beams.extend(sample)
+        logging.info('Translated {} sents'.format(len(beams)))
 
-    threads = [None] * config.n_threads
-    for i in xrange(config.n_threads):
-        threads[i] = Thread(
-                        target=translate_worker,
-                        args=(in_queue, out_queue, model, sess, config))
-        threads[i].deamon = True
-        threads[i].start()
+    # Put beams into the order of the original sentences.
+    tmp = numpy.array(beams, dtype=numpy.object)
+    ordered_beams = tmp[idxs.argsort()]
 
-    for i, batch in enumerate(batches):
-        in_queue.put((i,batch))
-    outputs = [None]*len(batches)
-    for _ in range(len(batches)):
-        i, samples = out_queue.get()
-        outputs[i] = list(samples)
-        n_sent += len(samples)
-        logging.info('Translated {} sents'.format(n_sent))
-    for _ in range(config.n_threads):
-        in_queue.put(None)
-    outputs = [beam for batch in outputs for beam in batch]
-    outputs = numpy.array(outputs, dtype=numpy.object)
-    outputs = outputs[idxs.argsort()]
-
-    for beam in outputs:
+    _, _, _, num_to_target = load_dictionaries(config)
+    for beam in ordered_beams:
         if config.normalize:
             beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
         beam = sorted(beam, key=lambda (sent, cost): cost)
@@ -448,8 +438,11 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
             best_hypo, cost = beam[0]
             line = util.seq2words(best_hypo, num_to_target) + '\n'
             output_file.write(line)
+
     duration = time.time() - start_time
-    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
+    num_sents = len(ordered_beams)
+    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
+        num_sents, duration, num_sents/duration))
 
 
 def validate_with_script(sess, model, config, valid_text_iterator):
@@ -480,6 +473,7 @@ def validate_with_script(sess, model, config, valid_text_iterator):
     return score
 
 
+# TODO Support for multiple GPUs
 def calc_loss_per_sentence(config, sess, text_iterator, model,
                            normalization_alpha=0):
     losses = []
@@ -575,11 +569,11 @@ def parse_args():
     data.add_argument('--model', '--saveto', type=str, default='model', metavar='PATH', dest='saveto',
                          help="model file name (default: %(default)s)")
     data.add_argument('--reload', type=str, default=None, metavar='PATH',
-                         help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --saveto")
+                         help="load existing model from this path. Set to \"latest_checkpoint\" to reload the latest checkpoint in the same directory of --model")
     data.add_argument('--no_reload_training_progress', action='store_false',  dest='reload_training_progress',
                          help="don't reload training progress (only used if --reload is enabled)")
     data.add_argument('--summary_dir', type=str, required=False, metavar='PATH', 
-                         help="directory for saving summaries (default: same directory as the --saveto file)")
+                         help="directory for saving summaries (default: same directory as the --model file)")
     data.add_argument('--summaryFreq', type=int, default=0, metavar='INT',
                          help="Save summaries after INT updates, if 0 do not save summaries (default: %(default)s)")
 
@@ -615,9 +609,9 @@ def parse_args():
                          help="dropout for input embeddings (0: no dropout) (default: %(default)s)")
     network.add_argument('--dropout_hidden', type=float, default=0.2, metavar="FLOAT",
                          help="dropout for hidden layer (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_source', type=float, default=0, metavar="FLOAT",
+    network.add_argument('--dropout_source', type=float, default=0.0, metavar="FLOAT",
                          help="dropout source words (0: no dropout) (default: %(default)s)")
-    network.add_argument('--dropout_target', type=float, default=0, metavar="FLOAT",
+    network.add_argument('--dropout_target', type=float, default=0.0, metavar="FLOAT",
                          help="dropout target words (0: no dropout) (default: %(default)s)")
     network.add_argument('--use_layer_norm', '--layer_normalisation', action="store_true", dest="use_layer_norm",
                          help="Set to use layer normalization in encoder and decoder")
@@ -642,17 +636,17 @@ def parse_args():
                          help="maximum number of epochs (default: %(default)s)")
     training.add_argument('--finish_after', type=int, default=10000000, metavar='INT',
                          help="maximum number of updates (minibatches) (default: %(default)s)")
-    training.add_argument('--decay_c', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--decay_c', type=float, default=0.0, metavar='FLOAT',
                          help="L2 regularization penalty (default: %(default)s)")
-    training.add_argument('--map_decay_c', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--map_decay_c', type=float, default=0.0, metavar='FLOAT',
                          help="MAP-L2 regularization penalty towards original weights (default: %(default)s)")
     training.add_argument('--prior_model', type=str, metavar='PATH',
                          help="Prior model for MAP-L2 regularization. Unless using \"--reload\", this will also be used for initialization.")
-    training.add_argument('--clip_c', type=float, default=1, metavar='FLOAT',
+    training.add_argument('--clip_c', type=float, default=1.0, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
     training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
                          help="learning rate (default: %(default)s)")
-    training.add_argument('--label_smoothing', type=float, default=0, metavar='FLOAT',
+    training.add_argument('--label_smoothing', type=float, default=0.0, metavar='FLOAT',
                          help="label smoothing (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
                          help="disable shuffling of training data (for each epoch)")
@@ -704,8 +698,6 @@ def parse_args():
                             help="Cost of sentences will not be normalized by length")
     translate.add_argument('--n_best', action='store_true', dest='n_best',
                             help="Print full beam")
-    translate.add_argument('--n_threads', type=int, default=5, metavar='INT',
-                         help="Number of threads to use for beam search (default: %(default)s)")
     translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
                          help="Maximum length of translation output sentence (default: %(default)s)")
     config = parser.parse_args()
@@ -840,6 +832,7 @@ def parse_args():
 
     # set the model version
     config.model_version = 0.2
+    config.theano_compat = False
 
     return config
 
@@ -851,7 +844,9 @@ if __name__ == "__main__":
 
     config = parse_args()
     logging.info(config)
-    with tf.Session() as sess:
+    tf_config = tf.ConfigProto()
+    tf_config.allow_soft_placement = True
+    with tf.Session(config=tf_config) as sess:
         if config.translate_valid:
             logging.info('Building model...')
             model = StandardModel(config)

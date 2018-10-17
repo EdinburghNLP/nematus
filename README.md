@@ -97,80 +97,91 @@ for training a full-scale system, consider the training scripts at http://data.s
 #### `nematus/nmt.py` : use to train a new model
 
 #### data sets; model loading and saving
-| parameter            | description |
-|---                   |--- |
-| --source_dataset PATH |  parallel training corpus (source side) |
-| --target_dataset PATH |  parallel training corpus (target side) |
+| parameter | description |
+|---        |---          |
+| --source_dataset PATH | parallel training corpus (source) |
+| --target_dataset PATH | parallel training corpus (target) |
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
-| --model PATH         |  model file name (default: model.npz) |
-| --saveFreq INT       |  save frequency (default: 30000) |
-| --reload             |  load existing model (if '--model' points to existing model) |
+| --saveFreq INT | save frequency (default: 30000) |
+| --model PATH, --saveto PATH | model file name (default: model) |
+| --reload PATH | load existing model from this path. Set to "latest_checkpoint" to reload the latest checkpoint in the same directory of --saveto |
 | --no_reload_training_progress | don't reload training progress (only used if --reload is enabled) |
-| --summary_dir        |  directory for saving summaries (default: same directory as the --saveto file) |
-| --summaryFreq        |  Save summaries after INT updates, if 0 do not save summaries (default: 0) |
+| --summary_dir PATH | directory for saving summaries (default: same directory as the --saveto file) |
+| --summaryFreq INT | Save summaries after INT updates, if 0 do not save summaries (default: 0) |
 
 #### network parameters
-| parameter            | description |
-|---                       |--- |
-| --embedding_size INT     |  embedding layer size (default: 512) |
-| --state_size INT         |  hidden layer size (default: 1000) |
-| --source_vocab_sizes INT |  source vocabulary sizes (one per input factor) (default: None) |
-| --target_vocab_size INT  |  target vocabulary size (default: None) |
-| --factors INT        |  number of input factors (default: 1) |
+| parameter | description |
+|---        |---          |
+| --embedding_size INT, --dim_word INT | embedding layer size (default: 512) |
+| --state_size INT, --dim INT | hidden state size (default: 1000) |
+| --source_vocab_sizes INT [INT ...], --n_words_src INT [INT ...] | source vocabulary sizes (one per input factor) (default: None) |
+| --target_vocab_size INT, --n_words INT | target vocabulary size (default: -1) |
+| --factors INT | number of input factors (default: 1) |
 | --dim_per_factor INT [INT ...] | list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: None) |
-| --use_dropout        |  use dropout layer (default: False) |
+| --enc_depth INT | number of encoder layers (default: 1) |
+| --enc_recurrence_transition_depth INT | number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru). (default: 1) |
+| --dec_depth INT | number of decoder layers (default: 1) |
+| --dec_base_recurrence_transition_depth INT | number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond). (default: 2) |
+| --dec_high_recurrence_transition_depth INT | number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: 1) |
+| --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
+| --use_dropout | use dropout layer (default: False) |
 | --dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: 0.2) |
 | --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
-| --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0) |
-| --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0) |
-| --layer_normalisation    | use layer normalisation (default: False) |
+| --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
+| --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
+| --use_layer_norm, --layer_normalisation | Set to use layer normalization in encoder and decoder |
+| --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must be the same |
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
-| --enc_depth INT           | number of encoder layers (default: 1) |
-| --enc_recurrence_transition_depth | number of GRU transition operations applied in an encoder layer (default: 1) |
-| --dec_depth INT           | number of decoder layers (default: 1) |
-| --dec_base_recurrence_transition_depth | number of GRU transition operations applied in first decoder layer (default: 2) |
-| --dec_high_recurrence_transition_depth | number of GRU transition operations applied in decoder layers after the first (default: 1) |
-| --dec_deep_context        | pass context vector (from first layer) to deep decoder layers |
-| --output_hidden_activation | activation function in hidden layer of the output network (default: tanh) |
+| --output_hidden_activation {tanh,relu,prelu,linear} | activation function in hidden layer of the output network (default: tanh) |
+| --softmax_mixture_size INT | number of softmax components to use (default: 1) |
 
 #### training parameters
-| parameter            | description |
-|---                   |--- |
-| --maxlen INT         |  maximum sequence length (default: 100) |
-| --batch_size INT     | minibatch size (default: 80) |
-| --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. |
-| --max_epochs INT     | maximum number of epochs (default: 5000) |
-| --finish_after INT   | maximum number of updates (minibatches) (default: 10000000) |
-| --decay_c FLOAT      |  L2 regularization penalty (default: 0) |
-| --map_decay_c FLOAT  | MAP-L2 regularization penalty towards original weights (default: 0) |
-| --prior_model STR    | Prior model for MAP-L2 regularization. Unless using "--reload", this will also be used for initialization. |
-| --clip_c FLOAT       |  gradient clipping threshold (default: 1) |
-| --learning_rate FLOAT |  learning rate (default: 0.0001) |
-| --label_smoothing FLOAT | label smoothing (default: 0) |
-| --no_shuffle         |  disable shuffling of training data (for each epoch) |
-| --no_sort_by_length  |  do not sort sentences in maxibatch by length |
-| --maxibatch_size INT |  size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
-| --optimizer | optimizer (default: adam) |
+| parameter | description |
+|---        |---          |
+| --maxlen INT | maximum sequence length for training and validation (default: 100) |
+| --batch_size INT | minibatch size (default: 80) |
+| --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: 0) |
+| --max_epochs INT | maximum number of epochs (default: 5000) |
+| --finish_after INT | maximum number of updates (minibatches) (default: 10000000) |
+| --decay_c FLOAT | L2 regularization penalty (default: 0.0) |
+| --map_decay_c FLOAT | MAP-L2 regularization penalty towards original weights (default: 0.0) |
+| --prior_model PATH | Prior model for MAP-L2 regularization. Unless using " --reload", this will also be used for initialization. |
+| --clip_c FLOAT | gradient clipping threshold (default: 1.0) |
+| --learning_rate FLOAT, --lrate FLOAT | learning rate (default: 0.0001) |
+| --label_smoothing FLOAT | label smoothing (default: 0.0) |
+| --no_shuffle | disable shuffling of training data (for each epoch) |
 | --keep_train_set_in_memory | Keep training dataset lines stores in RAM during training |
+| --no_sort_by_length | do not sort sentences in maxibatch by length |
+| --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
+| --optimizer {adam} | optimizer (default: adam) |
+| --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
 
 #### validation parameters
-| parameter            | description |
-|---                   |--- |
-| --valid_source_dataset PATH | parallel validation corpus (source side)| (default: None) |
-| --valid_target_dataset PATH | parallel validation corpus (target side)| (default: None) |
+| parameter | description |
+|---        |---          |
+| --valid_source_dataset PATH | source validation corpus (default: None) |
+| --valid_target_dataset PATH | target validation corpus (default: None) |
 | --valid_batch_size INT | validation minibatch size (default: 80) |
-| --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. |
-| --validFreq INT       | validation frequency (default: 10000) |
-| --patience INT        | early stopping patience (default: 10) |
+| --validFreq INT | validation frequency (default: 10000) |
+| --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
+| --patience INT | early stopping patience (default: 10) |
 | --run_validation | Compute validation score on validation dataset |
 
 #### display parameters
-| parameter            | description |
-|---                   |--- |
-| --dispFreq INT       | display loss after INT updates (default: 1000) |
-| --sampleFreq INT     | display some samples after INT updates (default: 10000) |
-| --beamFreq INT       | display some beam_search samples after INT updates (default: 10000) |
-| --beam_size INT      | size of the beam (default: 12) |
+| parameter | description |
+|---        |---          |
+| --dispFreq INT | display loss after INT updates (default: 1000) |
+| --sampleFreq INT | display some samples after INT updates (default: 10000) |
+| --beamFreq INT | display some beam_search samples after INT updates (default: 10000) |
+| --beam_size INT | size of the beam (default: 12) |
+
+#### translate parameters
+| parameter | description |
+|---        |---          |
+| --translate_valid | Translate source dataset instead of training |
+| --no_normalize | Cost of sentences will not be normalized by length |
+| --n_best | Print full beam |
+| --translation_maxlen INT | Maximum length of translation output sentence (default: 200) |
 
 #### `nematus/translate.py` : use an existing model to translate a source text
 

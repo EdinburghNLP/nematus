@@ -1,21 +1,39 @@
 import numpy
 import tensorflow as tf
 
-"""Helper class for model training.
+"""Helper class for training using multiple GPUs.
 
-Currently, ModelUpdater just gathers together the code for processing a
-minibatch and updating the model. It will soon be replaced with a multiple
-GPU version.
+Given a set of model replicas and an optimizer, it takes care of splitting
+minibatches, feeding them to the individual replicas, and then combining and
+applying the resulting gradients (and losses).
 """
 class ModelUpdater(object):
-    def __init__(self, config, model, optimizer, global_step,
+    def __init__(self, config, replicas, optimizer, global_step,
                  summary_writer=None):
-        self.model = model
+        self.replicas = replicas
         self.global_step = global_step
         self.summary_writer = summary_writer
 
-        self.objective = self.model.get_objective()
-        grad_vars = optimizer.compute_gradients(self.objective)
+        self.replica_weights = []
+        for i in range(len(self.replicas)):
+            name = 'replica_weight_{}'.format(i)
+            placeholder = tf.placeholder(name=name, shape=(), dtype=tf.float32)
+            self.replica_weights.append(placeholder)
+
+        weighted_objectives = []
+        all_grad_vars = []
+        for i in range(len(self.replicas)):
+            with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+                with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
+                    objective = replicas[i].get_objective()
+                    gradients = optimizer.compute_gradients(objective)
+                    all_grad_vars.append(gradients)
+                    weight = self.replica_weights[i]
+                    weighted_objectives.append(objective*weight)
+
+        self.objective = sum(weighted_objectives) / sum(self.replica_weights)
+
+        grad_vars = self._average_gradients(all_grad_vars, self.replica_weights)
         grads, varss = zip(*grad_vars)
         clipped_grads, global_norm = tf.clip_by_global_norm(
             grads, clip_norm=config.clip_c)
@@ -34,13 +52,31 @@ class ModelUpdater(object):
         batch_size = x.shape[-1]
         assert batch_size > 0
 
+        num_replicas = len(self.replicas)
+
+        # Split the minibatch into sub-minibatches, one per replica. If the
+        # minibatch contains fewer items than there are replicas, then the
+        # last sub-minibatches will be empty, which requires special handling.
+        split_x = numpy.array_split(x, num_replicas, axis=-1)
+        split_x_mask = numpy.array_split(x_mask, num_replicas, axis=-1)
+        split_y = numpy.array_split(y, num_replicas, axis=-1)
+        split_y_mask = numpy.array_split(y_mask, num_replicas, axis=-1)
+
         feed_dict = {}
-        feed_dict[self.model.inputs.x] = x
-        feed_dict[self.model.inputs.x_mask] = x_mask
-        feed_dict[self.model.inputs.y] = y
-        feed_dict[self.model.inputs.y_mask] = y_mask
-        feed_dict[self.model.inputs.target_lang_id] = target_lang
-        feed_dict[self.model.inputs.training] = True
+        for i in range(num_replicas):
+            # If the sub-minibatch is empty then replace it with a non-empty
+            # dummy one.
+            is_dummy = (i >= batch_size)
+            assert (split_x[i].shape[-1] == 0) == is_dummy
+            weight = 0.0 if is_dummy else float(split_x[i].shape[-1])
+            feed_dict[self.replica_weights[i]] = weight
+            j = 0 if is_dummy else i
+            feed_dict[self.replicas[i].inputs.x] = split_x[j]
+            feed_dict[self.replicas[i].inputs.x_mask] = split_x_mask[j]
+            feed_dict[self.replicas[i].inputs.y] = split_y[j]
+            feed_dict[self.replicas[i].inputs.y_mask] = split_y_mask[j]
+            feed_dict[self.replicas[i].inputs.target_lang_id] = target_lang
+            feed_dict[self.replicas[i].inputs.training] = True
 
         out = [self.global_step, self.apply_grads, self.objective]
         if write_summary:
@@ -51,3 +87,44 @@ class ModelUpdater(object):
             self.writer.add_summary(out_values[3], out_values[0])
         loss = out_values[2] * batch_size
         return loss
+
+    def _average_gradients(self, all_grad_vars, replica_weights):
+        # all_grad_vars is a list of lists of tuples.  The outer list contains
+        # one list for each replica. Each inner list is the optimizer's
+        # grad_vars list for that replica. Each replica has an associated
+        # weight (to allow for replicas receiving batches of different sizes).
+
+        normalized_weights = []
+        for w in replica_weights:
+            normalized_weights.append(w / sum(replica_weights))
+
+        # Create a dictionary mapping from each variable name to a list of
+        # (grad, var) pairs (one pair from each replica).
+        d = {}
+        for grad_vars in all_grad_vars:
+            for g, v in grad_vars:
+                if v.name not in d:
+                    d[v.name] = []
+                d[v.name].append((g, v))
+        # For each variable, average the gradients from all replicas and store
+        # the result in avg_grad_vars.
+        avg_grad_vars = []
+        for var_name, gv_list in d.items():
+            var = gv_list[0][1]
+            found_none_value = False
+            for g, v in gv_list:
+                if g == None:
+                    found_none_value = True
+                    break
+            if found_none_value:
+                avg_grad_vars.append((None, var))
+            else:
+                weighted_grads = []
+                for i, (g, v) in enumerate(gv_list):
+                    assert v == var
+                    expanded = tf.expand_dims(g * normalized_weights[i], 0)
+                    weighted_grads.append(expanded)
+                tmp = tf.concat(axis=0, values=weighted_grads)
+                avg_grad = tf.reduce_sum(tmp, 0)
+                avg_grad_vars.append((avg_grad, var))
+        return avg_grad_vars

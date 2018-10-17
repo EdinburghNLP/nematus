@@ -48,12 +48,16 @@ class Decoder(object):
 
         with tf.variable_scope("base"):
             with tf.variable_scope("gru0"):
+                if config.theano_compat:
+                    bias_type = layers.LegacyBiasType.THEANO
+                else:
+                    bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
                 self.grustep1 = layers.GRUStep(
                                     input_size=config.target_embedding_size,
                                     state_size=config.state_size,
                                     batch_size=batch_size,
                                     use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=False,
+                                    legacy_bias_type=bias_type,
                                     dropout_input=dropout_embedding,
                                     dropout_state=dropout_hidden)
             with tf.variable_scope("attention"):
@@ -66,12 +70,16 @@ class Decoder(object):
                                 use_layer_norm=config.use_layer_norm,
                                 dropout_context=dropout_hidden,
                                 dropout_state=dropout_hidden)
+            if config.theano_compat:
+                bias_type = layers.LegacyBiasType.THEANO
+            else:
+                bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_TRUE
             self.grustep2 = layers.DeepTransitionGRUStep(
                                     input_size=2*config.state_size,
                                     state_size=config.state_size,
                                     batch_size=batch_size,
                                     use_layer_norm=config.use_layer_norm,
-                                    nematus_compat=True,
+                                    legacy_bias_type=bias_type,
                                     dropout_input=dropout_hidden,
                                     dropout_state=dropout_hidden,
                                     transition_depth=config.dec_base_recurrence_transition_depth-1,
@@ -81,12 +89,16 @@ class Decoder(object):
             if config.dec_depth == 1:
                 self.high_gru_stack = None
             else:
+                if config.theano_compat:
+                    bias_type = layers.LegacyBiasType.THEANO
+                else:
+                    bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_TRUE
                 self.high_gru_stack = layers.GRUStack(
                     input_size=config.state_size,
                     state_size=config.state_size,
                     batch_size=batch_size,
                     use_layer_norm=config.use_layer_norm,
-                    nematus_compat=True,
+                    legacy_bias_type=bias_type,
                     dropout_input=dropout_hidden,
                     dropout_state=dropout_hidden,
                     stack_depth=config.dec_depth-1,
@@ -325,13 +337,18 @@ class Encoder(object):
                 config.dim_per_factor,
                 config.tie_encoder_decoder_embeddings)
 
+        if config.theano_compat:
+            bias_type = layers.LegacyBiasType.THEANO
+        else:
+            bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
+
         with tf.variable_scope("forward-stack"):
             self.forward_encoder = layers.GRUStack(
                     input_size=config.embedding_size,
                     state_size=config.state_size,
                     batch_size=batch_size,
                     use_layer_norm=config.use_layer_norm,
-                    nematus_compat=False,
+                    legacy_bias_type=bias_type,
                     dropout_input=dropout_embedding,
                     dropout_state=dropout_hidden,
                     stack_depth=config.enc_depth,
@@ -346,7 +363,7 @@ class Encoder(object):
                     state_size=config.state_size,
                     batch_size=batch_size,
                     use_layer_norm=config.use_layer_norm,
-                    nematus_compat=False,
+                    legacy_bias_type=bias_type,
                     dropout_input=dropout_embedding,
                     dropout_state=dropout_hidden,
                     stack_depth=config.enc_depth,

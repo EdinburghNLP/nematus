@@ -153,7 +153,9 @@ class Translator(object):
 
         # load TF functionality
         import tensorflow as tf
-        sess = tf.Session()
+        tf_config = tf.ConfigProto()
+        tf_config.allow_soft_placement = True
+        sess = tf.Session(config=tf_config)
         models = self._load_models(process_id, sess)
 
         # listen to queue in while loop, translate items

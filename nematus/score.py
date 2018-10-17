@@ -28,7 +28,9 @@ def score_model(source_file, target_file, scorer_settings, options):
     for option in options:
         g = tf.Graph()
         with g.as_default():
-            with tf.Session() as sess:
+            tf_config = tf.ConfigProto()
+            tf_config.allow_soft_placement = True
+            with tf.Session(config=tf_config) as sess:
                 logging.info('Building model...')
                 model = StandardModel(option)
                 saver = nmt.init_or_restore_variables(option, sess)
