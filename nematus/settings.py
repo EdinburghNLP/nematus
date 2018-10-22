@@ -30,8 +30,6 @@ class BaseSettings(object):
                                   help="Minibatch size (default: %(default)s))")
         self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True, metavar="MODEL",
                                   help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
-        self._parser.add_argument('-p', dest='num_processes', type=int, default=1,
-                                  help="Number of processes (default: %(default)s))")
         self._parser.add_argument('-v', dest='verbose', action="store_true", help="verbose mode.")
 
     def _set_console_arguments(self):
@@ -85,6 +83,7 @@ class TranslationSettings(BaseSettings):
 
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
+        self.num_processes = 1
 
 class ServerSettings(BaseSettings):
     """
@@ -104,6 +103,9 @@ class ServerSettings(BaseSettings):
                                   help='Host port (default: 8080)')
         self._parser.add_argument('--threads', type=int, default=4,
                                   help='Number of threads (default: 4)')
+        self._parser.add_argument(
+            '-p', dest='num_processes', type=int, default=1,
+            help="Number of processes (default: %(default)s))")
 
 
 class ScorerBaseSettings(BaseSettings):
