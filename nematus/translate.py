@@ -1,384 +1,170 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-'''
-Translates a source file using a translation model.
-'''
-import sys
-import numpy
-import json
-import os
-import logging
+
+"""Translates a source file using a translation model (or ensemble)."""
+
 import argparse
+import logging
+import sys
 import time
 
-from multiprocessing import Process, Queue
-from collections import defaultdict
-from Queue import Empty
+import numpy
+import tensorflow as tf
 
-from model import StandardModel
-from util import load_dict, load_config, seq2words, prepare_data
-from compat import fill_options
-from hypgraph import HypGraphRenderer
-from settings import TranslationSettings
-
-from nmt import init_or_restore_variables, load_dictionaries, read_all_lines
-
-import inference
+import compat
 import exception
+import inference
+from model import StandardModel
+import nmt
+from settings import TranslationSettings
+import util
 
-class Translation(object):
+
+def translate_file(input_file, output_file, session, models, config,
+                   beam_size=12, nbest=False, minibatch_size=80,
+                   maxibatch_size=20, normalization_alpha=1.0):
+    """Translates a source file using a translation model (or ensemble).
+
+    Args:
+        input_file: file object from which source sentences will be read.
+        output_file: file object to which translations will be written.
+        session: TensorFlow session.
+        models: list of model objects to use for ensemble beam search.
+        config: model config (must be valid for all models).
+        beam_size: beam width.
+        nbest: if True, produce n-best output with scores; otherwise 1-best.
+        minibatch_size: minibatch size in sentences.
+        maxibatch_size: number of minibatches to read and sort, pre-translation.
+        normalization_alpha: alpha parameter for length normalization.
     """
-    Models a translated segment.
-    """
-    def __init__(self, source_words, target_words, sentence_id=None, score=0, hypothesis_id=None):
-        self.source_words = source_words
-        self.target_words = target_words
-        self.sentence_id = sentence_id
-        self.score = score
-        self.hypothesis_id = hypothesis_id
 
+    def normalize(sent, cost):
+        return (sent, cost / (len(sent) ** normalization_alpha))
 
-class QueueItem(object):
-    """
-    Models items in a queue.
-    """
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+    def translate_maxibatch(maxibatch, num_to_target, num_prev_translated):
+        """Translates an individual maxibatch.
 
-class Translator(object):
-
-    def __init__(self, settings):
-        """
-        Loads translation models.
-        """
-        self._models = settings.models
-        self._num_processes = settings.num_processes
-        self._verbose = settings.verbose
-        self._retrieved_translations = defaultdict(dict)
-        self._batch_size = settings.b
-
-        # load model options
-        self._load_model_options()
-        # set up queues
-        self._init_queues()
-        # determine source and target language IDs
-        self.source_lang, self.target_lang = None, None
-        for i, lang in enumerate(self._options[0].source_embedding_ids):
-            if lang == settings.source_embedding_id:
-                self.source_lang = i
-                break
-        if self.source_lang == None:
-            assert False
-        for i, lang in enumerate(self._options[0].target_embedding_ids):
-            if lang == settings.target_embedding_id:
-                self.target_lang = i
-                break
-        if self.target_lang == None:
-            assert False
-        # init worker processes
-        self._init_processes()
-
-    def _load_model_options(self):
-        """
-        Loads config options for each model.
+        Args:
+            maxibatch: a list of sentences.
+            num_to_target: dictionary mapping target vocabulary IDs to strings.
+            num_prev_translated: the number of previously translated sentences.
         """
 
-        self._options = []
-        for model in self._models:
-            config = load_config(model)
-            # backward compatibility
-            fill_options(config)
-            config['reload'] = model
-            self._options.append(argparse.Namespace(**config))
-
-        _, _, _, self._num_to_target = load_dictionaries(self._options[0])
-
-    def _init_queues(self):
-        """
-        Sets up shared queues for inter-process communication.
-        """
-        self._input_queue = Queue()
-        self._output_queue = Queue()
-
-    def shutdown(self):
-        """
-        Executed from parent process to terminate workers,
-        method: "poison pill".
-        """
-        for process in self._processes:
-            self._input_queue.put(None)
-
-    def _init_processes(self):
-        """
-        Starts child (worker) processes.
-        """
-        processes = [None] * self._num_processes
-        for process_id in xrange(self._num_processes):
-            processes[process_id] = Process(
-                target=self._start_worker,
-                args=(process_id,)
-                )
-            processes[process_id].start()
-
-        self._processes = processes
-
-
-    ### MODEL LOADING AND TRANSLATION IN CHILD PROCESS ###
-
-
-
-    def _load_models(self, process_id, sess):
-        """
-        Loads models and returns them
-        """
-        logging.debug("Process '%s' - Loading models\n" % (process_id))
-
-        import tensorflow as tf
-        models = []
-        for i, options in enumerate(self._options):
-            with tf.variable_scope("model%d" % i) as scope:
-                model = StandardModel(options)
-                saver = init_or_restore_variables(options, sess,
-                                                  ensemble_scope=scope)
-                models.append(model)
-
-        logging.info("NOTE: Length of translations is capped to {}".format(self._options[0].translation_maxlen))
-        return models
-
-    def _start_worker(self, process_id):
-        """
-        Function executed by each worker once started. Do not execute in
-        the parent process.
-        """
-
-        # load TF functionality
-        import tensorflow as tf
-        tf_config = tf.ConfigProto()
-        tf_config.allow_soft_placement = True
-        sess = tf.Session(config=tf_config)
-        models = self._load_models(process_id, sess)
-
-        # listen to queue in while loop, translate items
-        while True:
-            input_item = self._input_queue.get()
-
-            if input_item is None:
-                break
-            idx = input_item.idx
-            request_id = input_item.request_id
-
-            output_item = self._translate(process_id, input_item, models, sess)
-            self._output_queue.put((request_id, idx, output_item))
-
-        return
-
-    def _translate(self, process_id, input_item, models, sess):
-        """
-        Actual translation (model sampling).
-        """
-
-        # unpack input item attributes
-        k = input_item.k
-        x = input_item.batch
-        #max_ratio = input_item.max_ratio
-
-        y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = prepare_data(x, y_dummy, self._options[0].factors, maxlen=None)
-
-        sample = inference.beam_search(models, sess, x, x_mask, k, self.target_lang)
-
-        return sample
-
-
-    ### WRITING TO AND READING FROM QUEUES ###
-
-    def _send_jobs(self, input_, translation_settings):
-        """
-        """
-        source_batches = []
-
+        # Sort the maxibatch by length and split into minibatches.
         try:
-            batches, idxs = read_all_lines(self._options[0], input_,
-                                           self._batch_size, self.source_lang)
+            minibatches, idxs = nmt.read_all_lines(config, maxibatch,
+                                                   minibatch_size)
         except exception.Error as x:
             logging.error(x.msg)
-            for process in self._processes:
-                process.terminate()
             sys.exit(1)
 
-        for idx, batch in enumerate(batches):
+        # Translate the minibatches and store the resulting beam (i.e.
+        # translations and scores) for each sentence.
+        beams = []
+        for x in minibatches:
+            y_dummy = numpy.zeros(shape=(len(x),1))
+            x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
+                                                maxlen=None)
+            sample = inference.beam_search(models, session, x, x_mask,
+                                           beam_size)
+            beams.extend(sample)
+            num_translated = num_prev_translated + len(beams)
+            logging.info('Translated {} sents'.format(num_translated))
 
-            input_item = QueueItem(verbose=self._verbose,
-                                   k=translation_settings.beam_width,
-                                   normalization_alpha=translation_settings.normalization_alpha,
-                                   nbest=translation_settings.n_best,
-                                   batch=batch,
-                                   idx=idx,
-                                   request_id=translation_settings.request_id)
+        # Put beams into the same order as the input maxibatch.
+        tmp = numpy.array(beams, dtype=numpy.object)
+        ordered_beams = tmp[idxs.argsort()]
 
-            self._input_queue.put(input_item)
-            source_batches.append(batch)
-        return idx+1, source_batches, idxs
-
-    def _retrieve_jobs(self, num_samples, request_id, timeout=5):
-        """
-        """
-        while len(self._retrieved_translations[request_id]) < num_samples:
-            resp = None
-            while resp is None:
-                try:
-                    resp = self._output_queue.get(True, timeout)
-                # if queue is empty after 5s, check if processes are still alive
-                except Empty:
-                    for midx in xrange(self._num_processes):
-                        if not self._processes[midx].is_alive() and self._processes[midx].exitcode != 0:
-                            # kill all other processes and raise exception if one dies
-                            self._input_queue.cancel_join_thread()
-                            self._output_queue.cancel_join_thread()
-                            for idx in xrange(self._num_processes):
-                                self._processes[idx].terminate()
-                            logging.error("Translate worker process {0} crashed with exitcode {1}".format(self._processes[midx].pid, self._processes[midx].exitcode))
-                            sys.exit(1)
-            request_id, idx, output_item = resp
-            self._retrieved_translations[request_id][idx] = output_item
-            #print self._retrieved_translations
-
-        for idx in xrange(num_samples):
-            yield self._retrieved_translations[request_id][idx]
-
-        # then remove all entries with this request ID from the dictionary
-        del self._retrieved_translations[request_id]
-
-    ### EXPOSED TRANSLATION FUNCTIONS ###
-
-    def translate(self, source_segments, translation_settings):
-        """
-        Returns the translation of @param source_segments.
-        """
-
-        logging.info('Translating {0} segments...\n'.format(len(source_segments)))
-        start_time = time.time()
-        n_batches, source_batches, idxs = self._send_jobs(source_segments, translation_settings)
-
-        n_sent = 0
-        outputs = [None]*n_batches
-        for i, samples in enumerate(self._retrieve_jobs(n_batches, translation_settings.request_id)):
-            outputs[i] = list(samples)
-            n_sent += len(samples)
-            logging.info('Translated {} sents'.format(n_sent))
-
-        outputs = [beam for batch in outputs for beam in batch]
-        outputs = numpy.array(outputs, dtype=numpy.object)
-        outputs = outputs[idxs.argsort()]
-
-        translations = []
-        for i, beam in enumerate(outputs):
-            if translation_settings.normalization_alpha:
-                beam = map(lambda (sent, cost): (sent, cost/len(sent)** translation_settings.normalization_alpha), beam)
+        # Write the translations to the output file.
+        for i, beam in enumerate(ordered_beams):
+            if normalization_alpha:
+                beam = map(lambda (sent, cost): normalize(sent, cost), beam)
             beam = sorted(beam, key=lambda (sent, cost): cost)
-
-            if translation_settings.n_best is True:
-                n_best_list = []
-                for j, (sent, cost) in enumerate(beam):
-                    translation = Translation(sentence_id=i,
-                                              source_words=source_segments[i],
-                                              target_words=seq2words(sent, self._num_to_target[self.target_lang], join=False),
-                                              score=cost,
-                                              hypothesis_id=j)
-                    n_best_list.append(translation)
-                translations.append(n_best_list)
+            if nbest:
+                num = num_prev_translated + i
+                for sent, cost in beam:
+                    translation = util.seq2words(sent, num_to_target)
+                    line = "{} ||| {} ||| {}\n".format(num, translation,
+                                                       str(cost))
+                    output_file.write(line)
             else:
                 best_hypo, cost = beam[0]
-                target_words = seq2words(best_hypo, self._num_to_target[self.target_lang])
-                translation = Translation(sentence_id=i,
-                                            source_words=source_segments[i],
-                                            target_words=seq2words(best_hypo, self._num_to_target[self.target_lang], join=False),
-                                            score=cost)
-                translations.append(translation)
+                line = util.seq2words(best_hypo, num_to_target) + '\n'
+                output_file.write(line)
 
-        duration = time.time() - start_time
-        logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(n_sent, duration, n_sent/duration))
+    _, _, _, num_to_target = nmt.load_dictionaries(config)
 
-        return translations
+    logging.info("NOTE: Length of translations is capped to {}".format(
+        config.translation_maxlen))
 
-    def translate_file(self, input_object, translation_settings):
-        """
-        """
-        source_segments = input_object.readlines()
-        return self.translate(source_segments, translation_settings)
+    start_time = time.time()
 
+    num_translated = 0
+    maxibatch = []
+    while True:
+        line = input_file.readline()
+        if line == "":
+            if len(maxibatch) > 0:
+                translate_maxibatch(maxibatch, num_to_target, num_translated)
+                num_translated += len(maxibatch)
+            break
+        maxibatch.append(line)
+        if len(maxibatch) == (maxibatch_size * minibatch_size):
+            translate_maxibatch(maxibatch, num_to_target, num_translated)
+            num_translated += len(maxibatch)
+            maxibatch = []
 
-    def translate_string(self, segment, translation_settings):
-        """
-        Translates a single segment
-        """
-        if not segment.endswith('\n'):
-            segment += '\n'
-        source_segments = [segment]
-        return self.translate(source_segments, translation_settings)
-
-    def translate_list(self, segments, translation_settings):
-        """
-        Translates a list of segments
-        """
-        source_segments = [s + '\n' if not s.endswith('\n') else s for s in segments]
-        return self.translate(source_segments, translation_settings)
-
-    ### FUNCTIONS FOR WRITING THE RESULTS ###
-
-    def write_translation(self, output_file, translation, translation_settings):
-        """
-        Writes a single translation to a file or STDOUT.
-        """
-        output_items = []
-        # sentence ID only for nbest
-        if translation_settings.n_best is True:
-            output_items.append(str(translation.sentence_id))
-
-        # translations themselves
-        output_items.append(" ".join(translation.target_words))
-
-        # write scores for nbest?
-        if translation_settings.n_best is True:
-            output_items.append(str(translation.score))
-
-        if translation_settings.n_best is True:
-            output_file.write(" ||| ".join(output_items) + "\n")
-        else:
-            output_file.write("\n".join(output_items) + "\n")
+    duration = time.time() - start_time
+    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
+        num_translated, duration, num_translated/duration))
 
 
-    def write_translations(self, output_file, translations, translation_settings):
-        """
-        Writes translations to a file or STDOUT.
-        """
-        if translation_settings.n_best is True:
-            for nbest_list in translations:
-                for translation in nbest_list:
-                    self.write_translation(output_file, translation, translation_settings)
-        else:
-            for translation in translations:
-                self.write_translation(output_file, translation, translation_settings)
-
-def main(input_file, output_file, translation_settings):
+def main():
     """
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    translator = Translator(translation_settings)
-    translations = translator.translate_file(input_file, translation_settings)
-    translator.write_translations(output_file, translations, translation_settings)
+    # Parse console arguments.
+    settings = TranslationSettings(from_console_arguments=True)
 
-    logging.info('Done')
-    translator.shutdown()
+    # Start logging.
+    level = logging.DEBUG if settings.verbose else logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
+    # Create the TensorFlow session.
+    tf_config = tf.ConfigProto()
+    tf_config.allow_soft_placement = True
+    session = tf.Session(config=tf_config)
+
+    # Load config file for each model.
+    configs = []
+    for model in settings.models:
+        config = util.load_config(model)
+        compat.fill_options(config)
+        config['reload'] = model
+        configs.append(argparse.Namespace(**config))
+
+    # Create the model graphs and restore their variables.
+    logging.debug("Loading models\n")
+    models = []
+    for i, config in enumerate(configs):
+        with tf.variable_scope("model%d" % i) as scope:
+            model = StandardModel(config)
+            saver = nmt.init_or_restore_variables(config, session,
+                                                  ensemble_scope=scope)
+            models.append(model)
+
+    # Translate the source file.
+    translate_file(input_file=settings.input,
+                   output_file=settings.output,
+                   session=session,
+                   models=models,
+                   config=configs[0],
+                   beam_size=settings.beam_width,
+                   nbest=settings.n_best,
+                   minibatch_size=settings.b,
+                   maxibatch_size=settings.maxibatch_size,
+                   normalization_alpha=settings.normalization_alpha)
 
 
 if __name__ == "__main__":
-    # parse console arguments
-    translation_settings = TranslationSettings(from_console_arguments=True)
-    input_file = translation_settings.input
-    output_file = translation_settings.output
-    # start logging
-    level = logging.DEBUG if translation_settings.verbose else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    main(input_file, output_file, translation_settings)
+    main()
