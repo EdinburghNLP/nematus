@@ -185,28 +185,30 @@ for training a full-scale system, consider the training scripts at http://data.s
 
 #### `nematus/translate.py` : use an existing model to translate a source text
 
-| parameter            | description |
-|---                   |--- |
-| -k K                 | Beam size (default: 5)) |
-| -p P                 | Number of processes (default: 5)) |
-| -n                   | Normalize scores by sentence length |
-| -v                   | verbose mode. |
-| --models MODELS [MODELS ...], -m MODELS [MODELS ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
+| parameter | description |
+|---        |---          |
+| -b B | Minibatch size (default: 80)) |
+| --models MODEL [MODEL ...], -m MODEL [MODEL ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
+| -v | verbose mode. |
+| -k BEAM_WIDTH | Beam size (default: 5)) |
+| -n [ALPHA] | Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
+| -c | Character-level |
 | --input PATH, -i PATH | Input file (default: standard input) |
 | --output PATH, -o PATH | Output file (default: standard output) |
-| --n-best             | Write n-best list (of size k) |
+| --n-best | Write n-best list (of size k) |
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus
 
-| parameter              | description |
-|---                     |--- |
-| -b B                   |   Minibatch size (default: 80)) |
-| -n                     |   Normalize scores by sentence length |
-| -v                     |   verbose mode. |
-| --models MODELS [MODELS ...], -m MODELS [MODELS ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
+| parameter | description |
+|---        |---          |
+| -h, --help | show this help message and exit |
+| -b B | Minibatch size (default: 80)) |
+| --models MODEL [MODEL ...], -m MODEL [MODEL ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
+| -v | verbose mode. |
+| -n [ALPHA] | Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
+| --output PATH, -o PATH | Output file (default: standard output) |
 | --source PATH, -s PATH | Source text file |
 | --target PATH, -t PATH | Target text file |
-| --output PATH, -o PATH | Output file (default: standard output) |
 
 
 #### `nematus/rescore.py` : use an existing model to rescore an n-best list.
