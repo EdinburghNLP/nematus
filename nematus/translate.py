@@ -19,14 +19,16 @@ from settings import TranslationSettings
 import util
 
 
-def translate_file(input_file, output_file, session, models, config,
-                   beam_size=12, nbest=False, minibatch_size=80,
+def translate_file(input_file, output_file, source_lang, target_lang, session,
+                   models, config, beam_size=12, nbest=False, minibatch_size=80,
                    maxibatch_size=20, normalization_alpha=1.0):
     """Translates a source file using a translation model (or ensemble).
 
     Args:
         input_file: file object from which source sentences will be read.
         output_file: file object to which translations will be written.
+        source_lang: ...
+        target_lang: ...
         session: TensorFlow session.
         models: list of model objects to use for ensemble beam search.
         config: model config (must be valid for all models).
@@ -52,7 +54,7 @@ def translate_file(input_file, output_file, session, models, config,
         # Sort the maxibatch by length and split into minibatches.
         try:
             minibatches, idxs = nmt.read_all_lines(config, maxibatch,
-                                                   minibatch_size)
+                                                   minibatch_size, source_lang)
         except exception.Error as x:
             logging.error(x.msg)
             sys.exit(1)
@@ -65,7 +67,7 @@ def translate_file(input_file, output_file, session, models, config,
             x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
                                                 maxlen=None)
             sample = inference.beam_search(models, session, x, x_mask,
-                                           beam_size)
+                                           beam_size, target_lang)
             beams.extend(sample)
             num_translated = num_prev_translated + len(beams)
             logging.info('Translated {} sents'.format(num_translated))
@@ -82,13 +84,15 @@ def translate_file(input_file, output_file, session, models, config,
             if nbest:
                 num = num_prev_translated + i
                 for sent, cost in beam:
-                    translation = util.seq2words(sent, num_to_target)
+                    translation = util.seq2words(sent,
+                                                 num_to_target[target_lang])
                     line = "{} ||| {} ||| {}\n".format(num, translation,
                                                        str(cost))
                     output_file.write(line)
             else:
                 best_hypo, cost = beam[0]
-                line = util.seq2words(best_hypo, num_to_target) + '\n'
+                line = util.seq2words(best_hypo,
+                                      num_to_target[target_lang]) + '\n'
                 output_file.write(line)
 
     _, _, _, num_to_target = nmt.load_dictionaries(config)
@@ -143,6 +147,21 @@ def main():
         config['reload'] = model
         configs.append(argparse.Namespace(**config))
 
+    # Determine source and target language IDs.
+    source_lang, target_lang = None, None
+    for i, lang in enumerate(configs[0].source_embedding_ids):
+        if lang == settings.source_embedding_id:
+            source_lang = i
+            break
+    if source_lang == None:
+        assert False
+    for i, lang in enumerate(config[0].target_embedding_ids):
+        if lang == settings.target_embedding_id:
+            target_lang = i
+            break
+    if target_lang == None:
+        assert False
+
     # Create the model graphs and restore their variables.
     logging.debug("Loading models\n")
     models = []
@@ -156,6 +175,8 @@ def main():
     # Translate the source file.
     translate_file(input_file=settings.input,
                    output_file=settings.output,
+                   source_lang=source_lang,
+                   target_lang=target_lang,
                    session=session,
                    models=models,
                    config=configs[0],

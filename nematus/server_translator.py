@@ -288,7 +288,6 @@ class Translator(object):
                 translations.append(n_best_list)
             else:
                 best_hypo, cost = beam[0]
-                target_words = seq2words(best_hypo, self._num_to_target[self.target_lang])
                 translation = Translation(sentence_id=i,
                                             source_words=source_segments[i],
                                             target_words=seq2words(best_hypo, self._num_to_target[self.target_lang], join=False),
