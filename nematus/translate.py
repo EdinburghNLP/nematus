@@ -22,7 +22,20 @@ import util
 def translate_file(input_file, output_file, session, models, config,
                    beam_size=12, nbest=False, minibatch_size=80,
                    maxibatch_size=20, normalization_alpha=1.0):
-    """Translates a source file using a translation model (or ensemble)."""
+    """Translates a source file using a translation model (or ensemble).
+
+    Args:
+        input_file: file object from which source sentences will be read.
+        output_file: file object to which translations will be written.
+        session: TensorFlow session.
+        models: list of model objects to use for ensemble beam search.
+        config: model config (must be valid for all models).
+        beam_size: beam width.
+        nbest: if True, produce n-best output with scores; otherwise 1-best.
+        minibatch_size: minibatch size in sentences.
+        maxibatch_size: number of minibatches to read and sort, pre-translation.
+        normalization_alpha: alpha parameter for length normalization.
+    """
 
     def normalize(sent, cost):
         return (sent, cost / (len(sent) ** normalization_alpha))
