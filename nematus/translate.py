@@ -155,7 +155,7 @@ def main():
             break
     if source_lang == None:
         assert False
-    for i, lang in enumerate(config[0].target_embedding_ids):
+    for i, lang in enumerate(configs[0].target_embedding_ids):
         if lang == settings.target_embedding_id:
             target_lang = i
             break
