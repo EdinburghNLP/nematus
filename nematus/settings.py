@@ -80,6 +80,10 @@ class TranslationSettings(BaseSettings):
 
         self._parser.add_argument('--n-best', action="store_true",
                                   help="Write n-best list (of size k)")
+        self._parser.add_argument(
+            '--maxibatch_size', type=int, default=20,
+            help="size of maxibatch (number of minibatches that are sorted " \
+                 "by length) (default: %(default)s)")
 
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
