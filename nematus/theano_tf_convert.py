@@ -206,12 +206,14 @@ def tensorflow_to_theano_model(in_path, out_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--from_theano', action='store_true')
-    group.add_argument('--from_tf', action='store_true')
-
-    data = parser.add_argument_group()
-    data.add_argument('--in', type=str, required=True, metavar='PATH', dest='inn')
-    data.add_argument('--out', type=str, required=True, metavar='PATH')
+    group.add_argument('--from_theano', action='store_true',
+                       help="convert from Theano to TensorFlow format")
+    group.add_argument('--from_tf', action='store_true',
+                       help="convert from Tensorflow to Theano format")
+    parser.add_argument('--in', type=str, required=True, metavar='PATH',
+                        dest='inn', help="path to input model")
+    parser.add_argument('--out', type=str, required=True, metavar='PATH',
+                        help="path to output model")
 
     opts = parser.parse_args()
     opts.inn = os.path.abspath(opts.inn)

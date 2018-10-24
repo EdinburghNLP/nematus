@@ -187,28 +187,27 @@ for training a full-scale system, consider the training scripts at http://data.s
 
 | parameter | description |
 |---        |---          |
-| -b B | Minibatch size (default: 80)) |
-| --models MODEL [MODEL ...], -m MODEL [MODEL ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
-| -v | verbose mode. |
-| -k BEAM_WIDTH | Beam size (default: 5)) |
-| -n [ALPHA] | Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
-| -c | Character-level |
-| --input PATH, -i PATH | Input file (default: standard input) |
-| --output PATH, -o PATH | Output file (default: standard output) |
-| --n-best | Write n-best list (of size k) |
+| -v, --verbose | verbose mode |
+| -m PATH [PATH ...], --models PATH [PATH ...] | model to use; provide multiple models (with same vocabulary) for ensemble decoding |
+| -b INT, --minibatch_size INT | minibatch size (default: 80) |
+| -i PATH, --input PATH | input file (default: standard input) |
+| -o PATH, --output PATH | output file (default: standard output) |
+| -k INT, --beam_size INT | beam size (default: 5) |
+| -n [ALPHA], --normalization_alpha [ALPHA] | normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
+| --n_best | write n-best list (of size k) |
+| --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 
 #### `nematus/score.py` : use an existing model to score a parallel corpus
 
 | parameter | description |
 |---        |---          |
-| -h, --help | show this help message and exit |
-| -b B | Minibatch size (default: 80)) |
-| --models MODEL [MODEL ...], -m MODEL [MODEL ...] | model to use. Provide multiple models (with same vocabulary) for ensemble decoding |
-| -v | verbose mode. |
-| -n [ALPHA] | Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
-| --output PATH, -o PATH | Output file (default: standard output) |
-| --source PATH, -s PATH | Source text file |
-| --target PATH, -t PATH | Target text file |
+| -v, --verbose | verbose mode |
+| -m PATH [PATH ...], --models PATH [PATH ...] | model to use; provide multiple models (with same vocabulary) for ensemble decoding |
+| -b INT, --minibatch_size INT | minibatch size (default: 80) |
+| -n [ALPHA], --normalization_alpha [ALPHA] | normalize scores by sentence length (with argument, exponentiate lengths by ALPHA) |
+| -o PATH, --output PATH | output file (default: standard output) |
+| -s PATH, --source PATH | source text file |
+| -t PATH, --target PATH | target text file |
 
 
 #### `nematus/rescore.py` : use an existing model to rescore an n-best list.
@@ -221,13 +220,20 @@ new scores will be appended to the end. `rescore.py` has the same arguments as `
 
 | parameter             | description |
 |---                    |--- |
-| --input PATH, -i PATH | Input n-best list file (default: standard input) |
+| -i PATH, --input PATH | input n-best list file (default: standard input) |
 
 
 #### `nematus/theano_tf_convert.py` : convert an existing theano model to a tensorflow model
 
 If you have a Theano model (model.npz) with network architecture features that are currently
 supported then you can convert it into a tensorflow model using `nematus/theano_tf_convert.py`.
+
+| parameter | description |
+|---        |---          |
+| --from_theano | convert from Theano to TensorFlow format |
+| --from_tf | convert from Tensorflow to Theano format |
+| --in PATH | path to input model |
+| --out PATH | path to output model |
 
 
 PUBLICATIONS
