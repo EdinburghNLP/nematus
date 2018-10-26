@@ -632,11 +632,11 @@ def parse_args():
         help="learning rate (default: %(default)s)")
     training.add_argument(
         '--adam_beta1', type=float, default=0.9, metavar='FLOAT',
-        help='exponential decay rate for the second moment estimates ' \
+        help='exponential decay rate for the first moment estimates ' \
              '(default: %(default)s)')
     training.add_argument(
         '--adam_beta2', type=float, default=0.999, metavar='FLOAT',
-        help='exponential decay rate for the first moment estimates ' \
+        help='exponential decay rate for the second moment estimates ' \
              '(default: %(default)s)')
     training.add_argument(
         '--adam_epsilon', type=float, default=1e-08, metavar='FLOAT', \

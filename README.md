@@ -154,8 +154,8 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --optimizer {adam} | optimizer (default: adam) |
 | --learning_rate FLOAT, --lrate FLOAT | learning rate (default: 0.0001) |
-| --adam_beta1 FLOAT | exponential decay rate for the second moment estimates (default: 0.9) |
-| --adam_beta2 FLOAT | exponential decay rate for the first moment estimates (default: 0.999) |
+| --adam_beta1 FLOAT | exponential decay rate for the first moment estimates (default: 0.9) |
+| --adam_beta2 FLOAT | exponential decay rate for the second moment estimates (default: 0.999) |
 | --adam_epsilon FLOAT | constant for numerical stability (default: 1e-08) |
 | --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
 
