@@ -79,6 +79,12 @@ def fill_options(options):
         options['label_smoothing'] = 0.0
     if not 'softmax_mixture_size' in options:
         options['softmax_mixture_size'] = 1
+    if not 'adam_beta1' in options:
+        options['adam_beta1'] = 0.9
+    if not 'adam_beta2' in options:
+        options['adam_beta2'] = 0.999
+    if not 'adam_epsilon' in options:
+        options['adam_epsilon'] = 1e-08
 
     # set the default model version.
     if not 'model_version' in options:
