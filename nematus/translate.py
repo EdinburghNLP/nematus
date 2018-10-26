@@ -180,9 +180,9 @@ def main():
                    session=session,
                    models=models,
                    config=configs[0],
-                   beam_size=settings.beam_width,
+                   beam_size=settings.beam_size,
                    nbest=settings.n_best,
-                   minibatch_size=settings.b,
+                   minibatch_size=settings.minibatch_size,
                    maxibatch_size=settings.maxibatch_size,
                    normalization_alpha=settings.normalization_alpha)
 

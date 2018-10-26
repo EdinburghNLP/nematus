@@ -40,7 +40,7 @@ def score_model(source_file, target_file, scorer_settings, options):
                     target=target_file.name,
                     source_dicts=option.source_dicts,
                     target_dict=option.target_dict,
-                    batch_size=scorer_settings.b,
+                    batch_size=scorer_settings.minibatch_size,
                     maxlen=float('inf'),
                     source_vocab_sizes=option.source_vocab_sizes,
                     target_vocab_size=option.target_vocab_size,

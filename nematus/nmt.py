@@ -253,7 +253,10 @@ def train(config, sess):
                 replicas.append(StandardModel(config))
 
     if config.optimizer == 'adam':
-        optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate,
+                                           beta1=config.adam_beta1,
+                                           beta2=config.adam_beta2,
+                                           epsilon=config.adam_epsilon)
     else:
         logging.error('No valid optimizer defined: {}'.format(config.optimizer))
         sys.exit(1)
@@ -644,8 +647,6 @@ def parse_args():
                          help="Prior model for MAP-L2 regularization. Unless using \"--reload\", this will also be used for initialization.")
     training.add_argument('--clip_c', type=float, default=1.0, metavar='FLOAT',
                          help="gradient clipping threshold (default: %(default)s)")
-    training.add_argument('--learning_rate', '--lrate', type=float, default=0.0001, metavar='FLOAT',
-                         help="learning rate (default: %(default)s)")
     training.add_argument('--label_smoothing', type=float, default=0.0, metavar='FLOAT',
                          help="label smoothing (default: %(default)s)")
     training.add_argument('--no_shuffle', action="store_false", dest="shuffle_each_epoch",
@@ -656,9 +657,24 @@ def parse_args():
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
-    training.add_argument('--optimizer', type=str, default="adam",
-                         choices=['adam'],
-                         help="optimizer (default: %(default)s)")
+    training.add_argument(
+        '--optimizer', type=str, default="adam", choices=['adam'],
+        help="optimizer (default: %(default)s)")
+    training.add_argument(
+        '--learning_rate', '--lrate', type=float, default=0.0001,
+        metavar='FLOAT',
+        help="learning rate (default: %(default)s)")
+    training.add_argument(
+        '--adam_beta1', type=float, default=0.9, metavar='FLOAT',
+        help='exponential decay rate for the first moment estimates ' \
+             '(default: %(default)s)')
+    training.add_argument(
+        '--adam_beta2', type=float, default=0.999, metavar='FLOAT',
+        help='exponential decay rate for the second moment estimates ' \
+             '(default: %(default)s)')
+    training.add_argument(
+        '--adam_epsilon', type=float, default=1e-08, metavar='FLOAT', \
+        help='constant for numerical stability (default: %(default)s)')
 
     validation = parser.add_argument_group('validation parameters')
     validation.add_argument('--valid_source_dataset', type=str, default=None, metavar='PATH', 

@@ -208,7 +208,7 @@ class Translator(object):
         for idx, batch in enumerate(batches):
 
             input_item = QueueItem(verbose=self._verbose,
-                                   k=translation_settings.beam_width,
+                                   k=translation_settings.beam_size,
                                    normalization_alpha=translation_settings.normalization_alpha,
                                    nbest=translation_settings.n_best,
                                    batch=batch,

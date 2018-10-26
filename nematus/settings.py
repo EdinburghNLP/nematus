@@ -26,11 +26,19 @@ class BaseSettings(object):
         """
         Console arguments used in all modes
         """
-        self._parser.add_argument('-b', type=int, default=80,
-                                  help="Minibatch size (default: %(default)s))")
-        self._parser.add_argument('--models', '-m', type=str, nargs = '+', required=True, metavar="MODEL",
-                                  help="model to use. Provide multiple models (with same vocabulary) for ensemble decoding")
-        self._parser.add_argument('-v', dest='verbose', action="store_true", help="verbose mode.")
+        self._parser.add_argument(
+            '-v', '--verbose', action="store_true",
+            help="verbose mode")
+
+        self._parser.add_argument(
+            '-m', '--models', type=str, nargs='+', required=True,
+            metavar="PATH",
+            help="model to use; provide multiple models (with same " \
+                 "vocabulary) for ensemble decoding")
+
+        self._parser.add_argument(
+            '-b', '--minibatch_size', type=int, default=80, metavar='INT',
+            help="minibatch size (default: %(default)s)")
 
     def _set_console_arguments(self):
         """
@@ -64,30 +72,48 @@ class TranslationSettings(BaseSettings):
     def _add_console_arguments(self):
         super(TranslationSettings, self)._add_console_arguments()
 
-        self._parser.add_argument('-k', dest='beam_width', type=int, default=5,
-                                  help="Beam size (default: %(default)s))")
-        self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
-                                  help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
-        self._parser.add_argument('-c', dest='char_level', action="store_true", help="Character-level")
+        if self._from_console_arguments:
+            # don't open files if no console arguments are parsed
+            self._parser.add_argument(
+                '-i', '--input', type=argparse.FileType('r'),
+                default=sys.stdin, metavar='PATH',
+                help="input file (default: standard input)")
 
-        if self._from_console_arguments: # don't open files if no console arguments are parsed
-            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                                      default=sys.stdin, metavar='PATH',
-                                      help="Input file (default: standard input)")
-            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
-                                      default=sys.stdout, metavar='PATH',
-                                      help="Output file (default: standard output)")
+            self._parser.add_argument(
+                '-o', '--output', type=argparse.FileType('w'),
+                default=sys.stdout, metavar='PATH',
+                help="output file (default: standard output)")
 
-        self._parser.add_argument('--n-best', action="store_true",
-                                  help="Write n-best list (of size k)")
         self._parser.add_argument(
             '--source-embedding-id', type=str, default="src",
             help="")
+
         self._parser.add_argument(
             '--target-embedding-id', type=str, default="tgt",
             help="")
+
         self._parser.add_argument(
-            '--maxibatch_size', type=int, default=20,
+            '-k', '--beam_size', type=int, default=5, metavar='INT',
+            help="beam size (default: %(default)s)")
+
+        self._parser.add_argument(
+            '-n', '--normalization_alpha', type=float, default=0.0, nargs="?",
+            const=1.0, metavar="ALPHA",
+            help="normalize scores by sentence length (with argument, " \
+                 "exponentiate lengths by ALPHA)")
+
+        # Support --n-best and --n_best (the dash version was added first, but
+        # is inconsistent with the prevailing underscore style).
+        group = self._parser.add_mutually_exclusive_group()
+        group.add_argument(
+            '--n_best', action="store_true",
+            help="write n-best list (of size k)")
+        group.add_argument(
+            '--n-best', action="store_true",
+            help=argparse.SUPPRESS)
+
+        self._parser.add_argument(
+            '--maxibatch_size', type=int, default=20, metavar='INT',
             help="size of maxibatch (number of minibatches that are sorted " \
                  "by length) (default: %(default)s)")
 
@@ -105,17 +131,26 @@ class ServerSettings(BaseSettings):
 
     def _add_console_arguments(self):
         super(ServerSettings, self)._add_console_arguments()
-        self._parser.add_argument('--style', default='Nematus',
-                                  help='API style; see `README.md` (default: Nematus)')
-        self._parser.add_argument('--host', default='0.0.0.0',
-                                  help='Host address (default: 0.0.0.0)')
-        self._parser.add_argument('--port', type=int, default=8080,
-                                  help='Host port (default: 8080)')
-        self._parser.add_argument('--threads', type=int, default=4,
-                                  help='Number of threads (default: 4)')
+
         self._parser.add_argument(
-            '-p', dest='num_processes', type=int, default=1,
-            help="Number of processes (default: %(default)s))")
+            '--style', default='Nematus',
+            help='API style; see `README.md` (default: Nematus)')
+
+        self._parser.add_argument(
+            '--host', default='0.0.0.0',
+            help='host address (default: %(default)s)')
+
+        self._parser.add_argument(
+            '--port', type=int, default=8080, metavar='INT',
+            help='host port (default: %(default)s)')
+
+        self._parser.add_argument(
+            '--threads', type=int, default=4, metavar='INT',
+            help='number of threads (default: %(default)s)')
+
+        self._parser.add_argument(
+            '-p', '--num_processes', type=int, default=1, metavar='INT',
+            help="number of processes (default: %(default)s)")
 
 
 class ScorerBaseSettings(BaseSettings):
@@ -126,13 +161,24 @@ class ScorerBaseSettings(BaseSettings):
 
     def _add_console_arguments(self):
         super(ScorerBaseSettings, self)._add_console_arguments()
-        self._parser.add_argument('-n', dest='normalization_alpha', type=float, default=0.0, nargs="?", const=1.0, metavar="ALPHA",
-                                  help="Normalize scores by sentence length (with argument, exponentiate lengths by ALPHA)")
-        if self._from_console_arguments: # don't open files if no console arguments are parsed
-            self._parser.add_argument('--output', '-o', type=argparse.FileType('w'),
-                                      default=sys.stdout, metavar='PATH', help="Output file (default: standard output)")
-            self._parser.add_argument('--source', '-s', type=argparse.FileType('r'),
-                                      required=True, metavar='PATH', help="Source text file")
+
+        self._parser.add_argument(
+            '-n', '--normalization_alpha', type=float, default=0.0, nargs="?",
+            const=1.0, metavar="ALPHA",
+            help="normalize scores by sentence length (with argument, " \
+                 "exponentiate lengths by ALPHA)")
+
+        if self._from_console_arguments:
+            # don't open files if no console arguments are parsed
+            self._parser.add_argument(
+                '-o', '--output', type=argparse.FileType('w'),
+                default=sys.stdout, metavar='PATH',
+                help="output file (default: standard output)")
+
+            self._parser.add_argument(
+                '-s', '--source', type=argparse.FileType('r'),
+                required=True, metavar='PATH',
+                help="source text file")
 
 
 class ScorerSettings(ScorerBaseSettings):
@@ -142,8 +188,10 @@ class ScorerSettings(ScorerBaseSettings):
     def _add_console_arguments(self):
         super(ScorerSettings, self)._add_console_arguments()
         if self._from_console_arguments:
-            self._parser.add_argument('--target', '-t', type=argparse.FileType('r'),
-                                      required=True, metavar='PATH', help="Target text file")
+            self._parser.add_argument(
+                '-t', '--target', type=argparse.FileType('r'), required=True,
+                metavar='PATH',
+                help="target text file")
 
 
 class RescorerSettings(ScorerBaseSettings):
@@ -153,5 +201,7 @@ class RescorerSettings(ScorerBaseSettings):
     def _add_console_arguments(self):
         super(RescorerSettings, self)._add_console_arguments()
         if self._from_console_arguments:
-            self._parser.add_argument('--input', '-i', type=argparse.FileType('r'),
-                                      default=sys.stdin, metavar='PATH', help="Input n-best list file (default: standard input)")
+            self._parser.add_argument(
+                '-i', '--input', type=argparse.FileType('r'),
+                default=sys.stdin, metavar='PATH',
+                help="input n-best list file (default: standard input)")
