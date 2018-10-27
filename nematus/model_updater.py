@@ -8,8 +8,12 @@ minibatches, feeding them to the individual replicas, and then combining and
 applying the resulting gradients (and losses).
 """
 class ModelUpdater(object):
-    def __init__(self, config, replicas, optimizer, global_step,
+    def __init__(self, config, num_gpus, replicas, optimizer, global_step,
                  summary_writer=None):
+        assert len(replicas) > 0
+        assert (len(replicas) == num_gpus
+                or (num_gpus == 0 and len(replicas == 1))
+
         self.replicas = replicas
         self.global_step = global_step
         self.summary_writer = summary_writer
@@ -23,7 +27,9 @@ class ModelUpdater(object):
         weighted_objectives = []
         all_grad_vars = []
         for i in range(len(self.replicas)):
-            with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+            device_type = "GPU" if num_gpus > 0 else "CPU"
+            device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
+            with tf.device(device_spec):
                 with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
                     objective = replicas[i].get_objective()
                     gradients = optimizer.compute_gradients(objective)

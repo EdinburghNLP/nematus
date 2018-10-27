@@ -227,12 +227,15 @@ def train(config, sess):
 
     # Construct the graph, with one model replica per GPU
 
-    num_replicas = len(util.get_available_gpus())
+    num_gpus = len(util.get_available_gpus())
+    num_replicas = max(1, num_gpus)
 
     logging.info('Building model...')
     replicas = []
     for i in range(num_replicas):
-        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+        device_type = "GPU" if num_gpus > 0 else "CPU"
+        device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
+        with tf.device(device_spec):
             with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
                 replicas.append(StandardModel(config))
 
@@ -255,7 +258,8 @@ def train(config, sess):
     else:
         writer = None
 
-    updater = ModelUpdater(config, replicas, optimizer, global_step, writer)
+    updater = ModelUpdater(config, num_gpus, replicas, optimizer, global_step,
+                           writer)
 
     saver, progress = init_or_restore_variables(config, sess, train=True)
 
