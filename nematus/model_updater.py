@@ -12,7 +12,7 @@ class ModelUpdater(object):
                  summary_writer=None):
         assert len(replicas) > 0
         assert (len(replicas) == num_gpus
-                or (num_gpus == 0 and len(replicas == 1))
+                or (len(replicas == 1) and num_gpus == 0))
 
         self.replicas = replicas
         self.global_step = global_step
