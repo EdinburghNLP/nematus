@@ -168,7 +168,6 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --validFreq INT | validation frequency (default: 10000) |
 | --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
 | --patience INT | early stopping patience (default: 10) |
-| --run_validation | Compute validation score on validation dataset |
 
 #### display parameters
 | parameter | description |

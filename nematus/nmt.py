@@ -497,30 +497,6 @@ def validate(config, sess, text_iterator, model, normalization_alpha=0):
     return losses
 
 
-def validate_helper(config, sess):
-    logging.info('Building model...')
-    model = StandardModel(options)
-    saver = init_or_restore_variables(config, sess)
-    valid_text_iterator = TextIterator(
-                        source=config.valid_source_dataset,
-                        target=config.valid_target_dataset,
-                        source_dicts=config.source_dicts,
-                        target_dict=config.target_dict,
-                        batch_size=config.valid_batch_size,
-                        maxlen=config.maxlen,
-                        source_vocab_sizes=config.source_vocab_sizes,
-                        target_vocab_size=config.target_vocab_size,
-                        shuffle_each_epoch=False,
-                        sort_by_length=False, #TODO
-                        use_factor=(config.factors > 1),
-                        maxibatch_size=config.maxibatch_size)
-    costs = validate(config, sess, valid_text_iterator, model)
-    lines = open(config.valid_target_dataset).readlines()
-    for cost, line in zip(costs, lines):
-        logging.info("{0} {1}".format(cost,line.strip()))
-
-
-
 def parse_args():
     parser = argparse.ArgumentParser()
 
@@ -664,8 +640,6 @@ def parse_args():
                          help="path to script for external validation (default: %(default)s). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output.")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
-    validation.add_argument('--run_validation', action='store_true',
-                         help="Compute validation score on validation dataset")
 
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
@@ -793,7 +767,5 @@ if __name__ == "__main__":
             model = StandardModel(config)
             saver = init_or_restore_variables(config, sess)
             translate(sess, model, config)
-        elif config.run_validation:
-            validate_helper(config, sess)
         else:
             train(config, sess)
