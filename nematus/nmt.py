@@ -652,8 +652,6 @@ def parse_args():
                          help="size of the beam (default: %(default)s)")
 
     translate = parser.add_argument_group('translate parameters')
-    translate.add_argument('--translate_valid', action='store_true', dest='translate_valid',
-                            help='Translate source dataset instead of training')
     translate.add_argument('--no_normalize', action='store_false', dest='normalize',
                             help="Cost of sentences will not be normalized by length")
     translate.add_argument('--n_best', action='store_true', dest='n_best',
@@ -751,21 +749,20 @@ def parse_args():
 
     return config
 
-if __name__ == "__main__":
 
-    # set up logging
+if __name__ == "__main__":
+    # Start logging.
     level = logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
+    # Parse command-line arguments.
     config = parse_args()
     logging.info(config)
+
+    # Create the TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.allow_soft_placement = True
+
+    # Train.
     with tf.Session(config=tf_config) as sess:
-        if config.translate_valid:
-            logging.info('Building model...')
-            model = StandardModel(config)
-            saver = init_or_restore_variables(config, sess)
-            translate(sess, model, config)
-        else:
-            train(config, sess)
+        train(config, sess)
