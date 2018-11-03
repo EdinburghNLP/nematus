@@ -118,14 +118,11 @@ def translate_file(input_file, output_file, session, models, config,
         num_translated, duration, num_translated/duration))
 
 
-def main():
+def main(settings):
     """
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    # Parse console arguments.
-    settings = TranslationSettings(from_console_arguments=True)
-
     # Start logging.
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
@@ -167,4 +164,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Parse console arguments.
+    settings = TranslationSettings(from_console_arguments=True)
+    main(settings)

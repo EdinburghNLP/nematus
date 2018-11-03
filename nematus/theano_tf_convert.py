@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 import compat
+import logging
 import nmt
 import util
 from model import StandardModel
@@ -148,6 +149,8 @@ def theano_to_tensorflow_model(in_path, out_path):
     with tf.Session() as sess:
         logging.info('Building model...')
         model = StandardModel(config)
+        init = tf.zeros_initializer(dtype=tf.int32)
+        global_step = tf.get_variable('time', [], initializer=init, trainable=False)
         saver = nmt.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
