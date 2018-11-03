@@ -2,10 +2,11 @@
 Utility functions
 '''
 
-import sys
-import json
 import cPickle as pkl
+import exception
+import json
 import numpy
+import sys
 
 # Source:
 # https://stackoverflow.com/questions/38559755/how-to-get-current-available-gpus-in-tensorflow
@@ -115,3 +116,52 @@ def reverse_dict(dictt):
     keys, values = zip(*dictt.items())
     r_dictt = dict(zip(values, keys))
     return r_dictt
+
+
+def load_dictionaries(config):
+    source_to_num = [load_dict(d) for d in config.source_dicts]
+    target_to_num = load_dict(config.target_dict)
+    num_to_source = [reverse_dict(d) for d in source_to_num]
+    num_to_target = reverse_dict(target_to_num)
+    return source_to_num, target_to_num, num_to_source, num_to_target
+
+
+def read_all_lines(config, sentences, batch_size):
+    source_to_num, _, _, _ = load_dictionaries(config)
+
+    if config.source_vocab_sizes != None:
+        assert len(config.source_vocab_sizes) == len(source_to_num)
+        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
+            if vocab_size != None and vocab_size > 0:
+                for key, idx in d.items():
+                    if idx >= vocab_size:
+                        del d[key]
+
+    lines = []
+    for sent in sentences:
+        line = []
+        for w in sent.strip().split():
+            if config.factors == 1:
+                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
+            else:
+                w = [source_to_num[i][f] if f in source_to_num[i] else 1
+                                         for (i,f) in enumerate(w.split('|'))]
+                if len(w) != config.factors:
+                    raise exception.Error(
+                        'Expected {0} factors, but input word has {1}\n'.format(
+                            config.factors, len(w)))
+            line.append(w)
+        lines.append(line)
+    lines = numpy.array(lines)
+    lengths = numpy.array(map(lambda l: len(l), lines))
+    lengths = numpy.array(lengths)
+    idxs = lengths.argsort()
+    lines = lines[idxs]
+
+    #merge into batches
+    batches = []
+    for i in range(0, len(lines), batch_size):
+        batch = lines[i:i+batch_size]
+        batches.append(batch)
+
+    return batches, idxs

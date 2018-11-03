@@ -51,8 +51,8 @@ def translate_file(input_file, output_file, session, models, config,
 
         # Sort the maxibatch by length and split into minibatches.
         try:
-            minibatches, idxs = nmt.read_all_lines(config, maxibatch,
-                                                   minibatch_size)
+            minibatches, idxs = util.read_all_lines(config, maxibatch,
+                                                    minibatch_size)
         except exception.Error as x:
             logging.error(x.msg)
             sys.exit(1)
@@ -91,7 +91,7 @@ def translate_file(input_file, output_file, session, models, config,
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
                 output_file.write(line)
 
-    _, _, _, num_to_target = nmt.load_dictionaries(config)
+    _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
         config.translation_maxlen))

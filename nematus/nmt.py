@@ -173,53 +173,6 @@ def load_data(config):
     logging.info('Done')
     return text_iterator, valid_text_iterator
 
-def load_dictionaries(config):
-    source_to_num = [util.load_dict(d) for d in config.source_dicts]
-    target_to_num = util.load_dict(config.target_dict)
-    num_to_source = [util.reverse_dict(d) for d in source_to_num]
-    num_to_target = util.reverse_dict(target_to_num)
-    return source_to_num, target_to_num, num_to_source, num_to_target
-
-def read_all_lines(config, sentences, batch_size):
-    source_to_num, _, _, _ = load_dictionaries(config)
-
-    if config.source_vocab_sizes != None:
-        assert len(config.source_vocab_sizes) == len(source_to_num)
-        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
-            if vocab_size != None and vocab_size > 0:
-                for key, idx in d.items():
-                    if idx >= vocab_size:
-                        del d[key]
-
-    lines = []
-    for sent in sentences:
-        line = []
-        for w in sent.strip().split():
-            if config.factors == 1:
-                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
-            else:
-                w = [source_to_num[i][f] if f in source_to_num[i] else 1
-                                         for (i,f) in enumerate(w.split('|'))]
-                if len(w) != config.factors:
-                    raise exception.Error(
-                        'Expected {0} factors, but input word has {1}\n'.format(
-                            config.factors, len(w)))
-            line.append(w)
-        lines.append(line)
-    lines = numpy.array(lines)
-    lengths = numpy.array(map(lambda l: len(l), lines))
-    lengths = numpy.array(lengths)
-    idxs = lengths.argsort()
-    lines = lines[idxs]
-
-    #merge into batches
-    batches = []
-    for i in range(0, len(lines), batch_size):
-        batch = lines[i:i+batch_size]
-        batches.append(batch)
-
-    return batches, idxs
-
 
 def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
@@ -270,7 +223,7 @@ def train(config, sess):
     json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
-    _, _, num_to_source, num_to_target = load_dictionaries(config)
+    _, _, num_to_source, num_to_target = util.load_dictionaries(config)
     total_loss = 0.
     n_sents, n_words = 0, 0
     last_time = time.time()
@@ -391,8 +344,8 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
 
     try:
         sentences = open(config.valid_source_dataset, 'r').readlines()
-        batches, idxs = read_all_lines(config, sentences,
-                                       config.valid_batch_size)
+        batches, idxs = util.read_all_lines(config, sentences,
+                                            config.valid_batch_size)
     except exception.Error as x:
         logging.error(x.msg)
         sys.exit(1)
@@ -410,7 +363,7 @@ def translate_validation_set(sess, model, config, output_file=sys.stdin):
     tmp = numpy.array(beams, dtype=numpy.object)
     ordered_beams = tmp[idxs.argsort()]
 
-    _, _, _, num_to_target = load_dictionaries(config)
+    _, _, _, num_to_target = util.load_dictionaries(config)
     for beam in ordered_beams:
         if config.normalize:
             beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)

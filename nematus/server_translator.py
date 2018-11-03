@@ -15,11 +15,11 @@ from collections import defaultdict
 from Queue import Empty
 
 from model import StandardModel
-from util import load_dict, load_config, seq2words, prepare_data
+import util
 from compat import fill_options
 from settings import TranslationSettings
 
-from nmt import init_or_restore_variables, load_dictionaries, read_all_lines
+from nmt import init_or_restore_variables
 
 import inference
 import exception
@@ -69,13 +69,13 @@ class Translator(object):
 
         self._options = []
         for model in self._models:
-            config = load_config(model)
+            config = util.load_config(model)
             # backward compatibility
             fill_options(config)
             config['reload'] = model
             self._options.append(argparse.Namespace(**config))
 
-        _, _, _, self._num_to_target = load_dictionaries(self._options[0])
+        _, _, _, self._num_to_target = util.load_dictionaries(self._options[0])
 
     def _init_queues(self):
         """
@@ -167,7 +167,9 @@ class Translator(object):
         #max_ratio = input_item.max_ratio
 
         y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = prepare_data(x, y_dummy, self._options[0].factors, maxlen=None)
+        x, x_mask, _, _ = util.prepare_data(x, y_dummy,
+                                            self._options[0].factors,
+                                            maxlen=None)
 
         sample = inference.beam_search(models, sess, x, x_mask, k)
 
@@ -182,8 +184,8 @@ class Translator(object):
         source_batches = []
 
         try:
-            batches, idxs = read_all_lines(self._options[0], input_,
-                                           self._batch_size)
+            batches, idxs = util.read_all_lines(self._options[0], input_,
+                                                self._batch_size)
         except exception.Error as x:
             logging.error(x.msg)
             for process in self._processes:
@@ -264,19 +266,22 @@ class Translator(object):
             if translation_settings.n_best is True:
                 n_best_list = []
                 for j, (sent, cost) in enumerate(beam):
+                    target_words = util.seq2words(sent, self._num_to_target,
+                                                  join=False)
                     translation = Translation(sentence_id=i,
                                               source_words=source_segments[i],
-                                              target_words=seq2words(sent, self._num_to_target, join=False),
+                                              target_words=target_words,
                                               score=cost,
                                               hypothesis_id=j)
                     n_best_list.append(translation)
                 translations.append(n_best_list)
             else:
                 best_hypo, cost = beam[0]
-                target_words = seq2words(best_hypo, self._num_to_target)
+                target_words = util.seq2words(best_hypo, self._num_to_target,
+                                              join=False)
                 translation = Translation(sentence_id=i,
                                             source_words=source_segments[i],
-                                            target_words=seq2words(best_hypo, self._num_to_target, join=False),
+                                            target_words=target_words,
                                             score=cost)
                 translations.append(translation)
 
