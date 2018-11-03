@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Given a parallel corpus of sentence pairs: with one-to-one of target and source sentences,
-produce the score, and optionally alignment for each pair.
+produce the score.
 """
 
 import sys
@@ -14,7 +14,6 @@ import numpy
 
 from data_iterator import TextIterator
 from util import load_config
-from alignment_util import combine_source_target_text_1to1
 from compat import fill_options
 from model import StandardModel
 

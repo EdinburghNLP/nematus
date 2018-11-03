@@ -17,7 +17,6 @@ from Queue import Empty
 from model import StandardModel
 from util import load_dict, load_config, seq2words, prepare_data
 from compat import fill_options
-from hypgraph import HypGraphRenderer
 from settings import TranslationSettings
 
 from nmt import init_or_restore_variables, load_dictionaries, read_all_lines
