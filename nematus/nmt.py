@@ -479,7 +479,7 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
 
         # normalize scores according to output length
         if normalization_alpha:
-            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_v_mask_in.T])
+            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_mask.T])
             loss_per_sentence_out /= adjusted_lengths
 
         losses += list(loss_per_sentence_out)
