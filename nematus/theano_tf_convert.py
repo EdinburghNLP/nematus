@@ -8,9 +8,9 @@ import tensorflow as tf
 
 import compat
 import logging
-import nmt
-import util
 from model import StandardModel
+import model_loader
+import util
 
 def construct_parameter_map(config):
     def drt_tag(i):
@@ -151,7 +151,7 @@ def theano_to_tensorflow_model(in_path, out_path):
         model = StandardModel(config)
         init = tf.zeros_initializer(dtype=tf.int32)
         global_step = tf.get_variable('time', [], initializer=init, trainable=False)
-        saver = nmt.init_or_restore_variables(config, sess)
+        saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
         for key in saved_model.keys():

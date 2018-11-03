@@ -16,7 +16,7 @@ from data_iterator import TextIterator
 from util import load_config
 from compat import fill_options
 from model import StandardModel
-
+import model_loader
 import nmt
 from settings import ScorerSettings
 
@@ -32,7 +32,7 @@ def score_model(source_file, target_file, scorer_settings, options):
             with tf.Session(config=tf_config) as sess:
                 logging.info('Building model...')
                 model = StandardModel(option)
-                saver = nmt.init_or_restore_variables(option, sess)
+                saver = model_loader.init_or_restore_variables(option, sess)
 
                 text_iterator = TextIterator(
                     source=source_file.name,

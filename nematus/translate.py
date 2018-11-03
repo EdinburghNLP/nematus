@@ -14,7 +14,7 @@ import compat
 import exception
 import inference
 from model import StandardModel
-import nmt
+import model_loader
 from settings import TranslationSettings
 import util
 
@@ -146,8 +146,8 @@ def main(settings):
     for i, config in enumerate(configs):
         with tf.variable_scope("model%d" % i) as scope:
             model = StandardModel(config)
-            saver = nmt.init_or_restore_variables(config, session,
-                                                  ensemble_scope=scope)
+            saver = model_loader.init_or_restore_variables(config, session,
+                                                           ensemble_scope=scope)
             models.append(model)
 
     # Translate the source file.

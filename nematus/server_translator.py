@@ -14,15 +14,14 @@ from multiprocessing import Process, Queue
 from collections import defaultdict
 from Queue import Empty
 
-from model import StandardModel
-import util
 from compat import fill_options
-from settings import TranslationSettings
-
-from nmt import init_or_restore_variables
-
-import inference
 import exception
+import inference
+from model import StandardModel
+import model_loader
+from settings import TranslationSettings
+import util
+
 
 class Translation(object):
     """
@@ -122,8 +121,8 @@ class Translator(object):
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
                 model = StandardModel(options)
-                saver = init_or_restore_variables(options, sess,
-                                                  ensemble_scope=scope)
+                saver = model_loader.init_or_restore_variables(
+                    options, sess, ensemble_scope=scope)
                 models.append(model)
 
         logging.info("NOTE: Length of translations is capped to {}".format(self._options[0].translation_maxlen))
