@@ -19,6 +19,7 @@ import tensorflow as tf
 
 from data_iterator import TextIterator
 import exception
+import inference
 from model import StandardModel
 import model_loader
 from model_updater import ModelUpdater
@@ -198,8 +199,7 @@ def train(config, sess):
                         progress.estop = True
                         break
                 if config.valid_script is not None:
-                    score = validate_with_script(sess, replicas[0], config,
-                                                 valid_text_iterator)
+                    score = validate_with_script(sess, replicas[0], config)
                     need_to_save = (score is not None and
                         (len(progress.valid_script_scores) == 0 or
                          score > max(progress.valid_script_scores)))
@@ -228,61 +228,19 @@ def train(config, sess):
             break
 
 
-# TODO This function shares a lot of code with translate.Translator.  Can
-# we use that class instead (without too much painful refactoring)?
-def translate_validation_set(sess, model, config, output_file=sys.stdin):
-    start_time = time.time()
-
-    logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
-
-    try:
-        sentences = open(config.valid_source_dataset, 'r').readlines()
-        batches, idxs = util.read_all_lines(config, sentences,
-                                            config.valid_batch_size)
-    except exception.Error as x:
-        logging.error(x.msg)
-        sys.exit(1)
-
-    beams = []
-    for x in batches:
-        y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
-                                            maxlen=None)
-        sample = model.beam_search(sess, x, x_mask, config.beam_size)
-        beams.extend(sample)
-        logging.info('Translated {} sents'.format(len(beams)))
-
-    # Put beams into the order of the original sentences.
-    tmp = numpy.array(beams, dtype=numpy.object)
-    ordered_beams = tmp[idxs.argsort()]
-
-    _, _, _, num_to_target = util.load_dictionaries(config)
-    for beam in ordered_beams:
-        if config.normalize:
-            beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
-        beam = sorted(beam, key=lambda (sent, cost): cost)
-        if config.n_best:
-            for sent, cost in beam:
-                translation = util.seq2words(sent, num_to_target)
-                line = "{} [{}]\n".format(translation, cost)
-                output_file.write(line)
-        else:
-            best_hypo, cost = beam[0]
-            line = util.seq2words(best_hypo, num_to_target) + '\n'
-            output_file.write(line)
-
-    duration = time.time() - start_time
-    num_sents = len(ordered_beams)
-    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
-        num_sents, duration, num_sents/duration))
-
-
-def validate_with_script(sess, model, config, valid_text_iterator):
+def validate_with_script(sess, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile()
-    translate_validation_set(sess, model, config, output_file=out)
+    inference.translate_file(input_file=open(config.valid_source_dataset),
+                             output_file=out,
+                             session=sess,
+                             models=[model],
+                             config=config,
+                             beam_size=config.beam_size,
+                             minibatch_size=config.valid_batch_size,
+                             normalization_alpha=1.0)
     out.flush()
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
