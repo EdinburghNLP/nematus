@@ -31,32 +31,22 @@ class TestTranslate(unittest.TestCase):
         for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
             self.assertEqual(line.strip(), line2.strip())
 
-
     def get_settings(self):
         """
         Initialize and customize settings.
         """
         translation_settings = TranslationSettings()
+        translation_settings.input = open('../../en-de/in')
+        translation_settings.output = open('../../en-de/out','w')
         translation_settings.models = ["model.npz"]
-        translation_settings.num_processes = 1
-        translation_settings.beam_width = 12
+        translation_settings.beam_size = 12
         translation_settings.normalization_alpha = 1.0
-        translation_settings.suppress_unk = True
-
         return translation_settings
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
         os.chdir('models/en-de/')
-
-        translation_settings = self.get_settings()
-
-        translate(
-                  input_file=open('../../en-de/in'),
-                  output_file=open('../../en-de/out','w'),
-                  translation_settings=translation_settings
-                  )
-
+        translate(settings=self.get_settings())
         os.chdir('../..')
         self.outputEqual('en-de/ref2','en-de/out')
 

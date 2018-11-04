@@ -3,135 +3,28 @@
 '''
 Build a neural machine translation model with soft attention
 '''
+import argparse
+import collections
+from datetime import datetime
+import json
 import os
 import logging
-import time
-import argparse
 import subprocess
-import tempfile
-import json
 import sys
+import tempfile
+import time
 
 import numpy
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
-#import tensorflow.contrib.framework as slim ???
-
-from datetime import datetime
-from collections import OrderedDict
 
 from data_iterator import TextIterator, MultiTargetIterator
-
+import exception
+import inference
 from model import StandardModel
+import model_loader
 from model_updater import ModelUpdater
 import util
-import training_progress
-import exception
-import compat
 
-def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
-    # Construct a mapping between saved variable names and names in the current
-    # scope. There are two reasons why names might be different:
-    #
-    #   1. This model is part of an ensemble, in which case a model-specific
-    #       name scope will be active.
-    #
-    #   2. The saved model is from an old version of Nematus (before deep model
-    #        support was added) and uses a different variable naming scheme
-    #        for the GRUs.
-    variables = slim.get_variables_to_restore()
-    var_map = {}
-    for v in variables:
-        name = v.name.split(':')[0]
-        if ensemble_scope == None:
-            saved_name = name
-        elif v.name.startswith(ensemble_scope.name + "/"):
-            saved_name = name[len(ensemble_scope.name)+1:]
-            # The ensemble scope is repeated for Adam variables. See
-            # https://github.com/tensorflow/tensorflow/issues/8120
-            if saved_name.startswith(ensemble_scope.name + "/"):
-                saved_name = saved_name[len(ensemble_scope.name)+1:]
-        else: # v belongs to a different model in the ensemble.
-            continue
-        if config.model_version == 0.1:
-            # Backwards compatibility with the old variable naming scheme.
-            saved_name = compat.revert_variable_name(saved_name, 0.1)
-        var_map[saved_name] = v
-    saver = tf.train.Saver(var_map, max_to_keep=None)
-
-    # compute reload model filename
-    reload_filename = None
-    if config.reload == 'latest_checkpoint':
-        checkpoint_dir = os.path.dirname(config.saveto)
-        reload_filename = tf.train.latest_checkpoint(checkpoint_dir)
-        if reload_filename != None:
-            if (os.path.basename(reload_filename).rsplit('-', 1)[0] !=
-                os.path.basename(config.saveto)):
-                logging.error("Mismatching model filename found in the same directory while reloading from the latest checkpoint")
-                sys.exit(1)
-            logging.info('Latest checkpoint found in directory ' + os.path.abspath(checkpoint_dir))
-    elif config.reload != None:
-        reload_filename = config.reload
-    if (reload_filename == None) and (config.prior_model != None):
-        logging.info('Initializing model parameters from prior')
-        reload_filename = config.prior_model
-
-    # initialize or reload training progress
-    if train:
-        progress = training_progress.TrainingProgress()
-        progress.bad_counter = 0
-        progress.uidx = 0
-        progress.eidx = 0
-        progress.estop = False
-        progress.history_errs = []
-        progress.valid_script_scores = []
-        if reload_filename and config.reload_training_progress:
-            path = reload_filename + '.progress.json'
-            if os.path.exists(path):
-                logging.info('Reloading training progress')
-                progress.load_from_json(path)
-                if (progress.estop == True or
-                    progress.eidx > config.max_epochs or
-                    progress.uidx >= config.finish_after):
-                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % reload_path)
-                    sys.exit(0)
-
-    # load prior model
-    if train and config.prior_model != None:
-        load_prior(config, sess, saver)
-    
-    # initialize or restore model
-    if reload_filename == None:
-        logging.info('Initializing model parameters from scratch...')
-        init_op = tf.global_variables_initializer()
-        sess.run(init_op)
-    else:
-        logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
-        saver.restore(sess, os.path.abspath(reload_filename))
-
-    logging.info('Done')
-
-    if train:
-        return saver, progress
-    else:
-        return saver
-
-
-def load_prior(config, sess, saver):
-     logging.info('Loading prior model parameters from file ' + os.path.abspath(config.prior_model))
-     saver.restore(sess, os.path.abspath(config.prior_model))
-     
-     # fill prior variables with the loaded values
-     prior_variables = tf.get_collection_ref('prior_variables')
-     prior_variables_dict = dict([(v.name, v) for v in prior_variables])
-     assign_tensors = []
-     with tf.variable_scope('prior'):
-         for v in tf.trainable_variables():
-             prior_name = 'loss/prior/'+v.name
-             prior_variable = prior_variables_dict[prior_name]
-             assign_tensors.append(prior_variable.assign(v))
-     tf.variables_initializer(prior_variables)
-     sess.run(assign_tensors)
 
 def load_data(config):
     logging.info('Reading data...')
@@ -179,63 +72,6 @@ def load_data(config):
     logging.info('Done')
     return text_iterator, valid_text_iterator
 
-def load_dictionaries(config):
-    source_to_num = [util.load_dict(d) for d in config.source_dicts]
-    target_to_num = [util.load_dict(d) for d in config.target_dicts]
-    num_to_source = [util.reverse_dict(d) for d in source_to_num]
-    num_to_target = [util.reverse_dict(d) for d in target_to_num]
-    return source_to_num, target_to_num, num_to_source, num_to_target
-
-def read_all_lines(config, sentences, batch_size, src_lang_idx=0):
-    def adjust_source_indices(w, src_lang_idx, vocab_sizes):
-        num_factors = len(w)
-        num_langs = len(vocab_sizes) / num_factors
-        offsets = [0] * num_factors
-        for i in range(num_factors):
-            for j in range(src_lang_idx):
-                offsets[i] += vocab_sizes[i * num_langs + j]
-        return [index + offsets[i] for i, index in enumerate(w)]
-    source_to_num, _, _, _ = load_dictionaries(config)
-
-    if config.source_vocab_sizes != None:
-        assert len(config.source_vocab_sizes) == len(source_to_num)
-        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
-            if vocab_size != None and vocab_size > 0:
-                for key, idx in d.items():
-                    if idx >= vocab_size:
-                        del d[key]
-
-    lines = []
-    for sent in sentences:
-        line = []
-        for w in sent.strip().split():
-            if config.factors == 1:
-                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
-            else:
-                w = [source_to_num[i][f] if f in source_to_num[i] else 1
-                                         for (i,f) in enumerate(w.split('|'))]
-                if len(w) != config.factors:
-                    raise exception.Error(
-                        'Expected {0} factors, but input word has {1}\n'.format(
-                            config.factors, len(w)))
-            w = adjust_source_indices(w, src_lang_idx,
-                                      config.source_vocab_sizes)
-            line.append(w)
-        lines.append(line)
-    lines = numpy.array(lines)
-    lengths = numpy.array(map(lambda l: len(l), lines))
-    lengths = numpy.array(lengths)
-    idxs = lengths.argsort()
-    lines = lines[idxs]
-
-    #merge into batches
-    batches = []
-    for i in range(0, len(lines), batch_size):
-        batch = lines[i:i+batch_size]
-        batches.append(batch)
-
-    return batches, idxs
-
 
 def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
@@ -243,12 +79,15 @@ def train(config, sess):
 
     # Construct the graph, with one model replica per GPU
 
-    num_replicas = len(util.get_available_gpus())
+    num_gpus = len(util.get_available_gpus())
+    num_replicas = max(1, num_gpus)
 
     logging.info('Building model...')
     replicas = []
     for i in range(num_replicas):
-        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+        device_type = "GPU" if num_gpus > 0 else "CPU"
+        device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
+        with tf.device(device_spec):
             with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
                 replicas.append(StandardModel(config))
 
@@ -271,18 +110,20 @@ def train(config, sess):
     else:
         writer = None
 
-    updater = ModelUpdater(config, replicas, optimizer, global_step, writer)
+    updater = ModelUpdater(config, num_gpus, replicas, optimizer, global_step,
+                           writer)
 
-    saver, progress = init_or_restore_variables(config, sess, train=True)
+    saver, progress = model_loader.init_or_restore_variables(
+        config, sess, train=True)
 
     global_step.load(progress.uidx, sess)
 
     #save model options
-    config_as_dict = OrderedDict(sorted(vars(config).items()))
+    config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
     json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
-    _, _, num_to_source, num_to_target = load_dictionaries(config)
+    _, _, num_to_source, num_to_target = util.load_dictionaries(config)
     num_to_multi_source, vocab_offsets = util.combine_source_dicts(
         num_to_source, config.factors, config.source_vocab_sizes)
     total_loss = 0.
@@ -369,8 +210,7 @@ def train(config, sess):
                         progress.estop = True
                         break
                 if config.valid_script is not None:
-                    score = validate_with_script(sess, replicas[0], config,
-                                                 valid_text_iterator)
+                    score = validate_with_script(sess, replicas[0], config)
                     need_to_save = (score is not None and
                         (len(progress.valid_script_scores) == 0 or
                          score > max(progress.valid_script_scores)))
@@ -399,61 +239,19 @@ def train(config, sess):
             break
 
 
-# TODO This function shares a lot of code with translate.Translator.  Can
-# we use that class instead (without too much painful refactoring)?
-def translate_validation_set(sess, model, config, output_file=sys.stdin):
-    start_time = time.time()
-
-    logging.info("NOTE: Length of translations is capped to {}".format(config.translation_maxlen))
-
-    try:
-        sentences = open(config.valid_source_dataset, 'r').readlines()
-        batches, idxs = read_all_lines(config, sentences,
-                                       config.valid_batch_size)
-    except exception.Error as x:
-        logging.error(x.msg)
-        sys.exit(1)
-
-    beams = []
-    for x in batches:
-        y_dummy = numpy.zeros(shape=(len(x),1))
-        x, x_mask, _, _ = util.prepare_data(x, y_dummy, config.factors,
-                                            maxlen=None)
-        sample = model.beam_search(sess, x, x_mask, config.beam_size)
-        beams.extend(sample)
-        logging.info('Translated {} sents'.format(len(beams)))
-
-    # Put beams into the order of the original sentences.
-    tmp = numpy.array(beams, dtype=numpy.object)
-    ordered_beams = tmp[idxs.argsort()]
-
-    _, _, _, num_to_target = load_dictionaries(config)
-    for beam in ordered_beams:
-        if config.normalize:
-            beam = map(lambda (sent, cost): (sent, cost/len(sent)), beam)
-        beam = sorted(beam, key=lambda (sent, cost): cost)
-        if config.n_best:
-            for sent, cost in beam:
-                translation = util.seq2words(sent, num_to_target)
-                line = "{} [{}]\n".format(translation, cost)
-                output_file.write(line)
-        else:
-            best_hypo, cost = beam[0]
-            line = util.seq2words(best_hypo, num_to_target) + '\n'
-            output_file.write(line)
-
-    duration = time.time() - start_time
-    num_sents = len(ordered_beams)
-    logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
-        num_sents, duration, num_sents/duration))
-
-
-def validate_with_script(sess, model, config, valid_text_iterator):
+def validate_with_script(sess, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile()
-    translate_validation_set(sess, model, config, output_file=out)
+    inference.translate_file(input_file=open(config.valid_source_dataset),
+                             output_file=out,
+                             session=sess,
+                             models=[model],
+                             config=config,
+                             beam_size=config.beam_size,
+                             minibatch_size=config.valid_batch_size,
+                             normalization_alpha=1.0)
     out.flush()
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
@@ -497,7 +295,7 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
 
         # normalize scores according to output length
         if normalization_alpha:
-            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_v_mask_in.T])
+            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_mask.T])
             loss_per_sentence_out /= adjusted_lengths
 
         losses += list(loss_per_sentence_out)
@@ -513,31 +311,6 @@ def validate(config, sess, text_iterator, model, normalization_alpha=0):
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
         total_loss/num_sents, total_loss, num_sents))
     return losses
-
-
-def validate_helper(config, sess):
-    # FIXME multi target
-    logging.info('Building model...')
-    model = StandardModel(options)
-    saver = init_or_restore_variables(config, sess)
-    valid_text_iterator = TextIterator(
-                        source=config.valid_source_dataset,
-                        target=config.valid_target_dataset,
-                        source_dicts=config.source_dicts,
-                        target_dict=config.target_dict,
-                        batch_size=config.valid_batch_size,
-                        maxlen=config.maxlen,
-                        source_vocab_sizes=config.source_vocab_sizes,
-                        target_vocab_size=config.target_vocab_size,
-                        shuffle_each_epoch=False,
-                        sort_by_length=False, #TODO
-                        use_factor=(config.factors > 1),
-                        maxibatch_size=config.maxibatch_size)
-    costs = validate(config, sess, valid_text_iterator, model)
-    lines = open(config.valid_target_dataset).readlines()
-    for cost, line in zip(costs, lines):
-        logging.info("{0} {1}".format(cost,line.strip()))
-
 
 
 def parse_args():
@@ -694,8 +467,6 @@ def parse_args():
                          help="path to script for external validation (default: %(default)s). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output.")
     validation.add_argument('--patience', type=int, default=10, metavar='INT',
                          help="early stopping patience (default: %(default)s)")
-    validation.add_argument('--run_validation', action='store_true',
-                         help="Compute validation score on validation dataset")
 
     display = parser.add_argument_group('display parameters')
     display.add_argument('--dispFreq', type=int, default=1000, metavar='INT',
@@ -708,8 +479,6 @@ def parse_args():
                          help="size of the beam (default: %(default)s)")
 
     translate = parser.add_argument_group('translate parameters')
-    translate.add_argument('--translate_valid', action='store_true', dest='translate_valid',
-                            help='Translate source dataset instead of training')
     translate.add_argument('--no_normalize', action='store_false', dest='normalize',
                             help="Cost of sentences will not be normalized by length")
     translate.add_argument('--n_best', action='store_true', dest='n_best',
@@ -852,23 +621,20 @@ def parse_args():
 
     return config
 
-if __name__ == "__main__":
 
-    # set up logging
+if __name__ == "__main__":
+    # Start logging.
     level = logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
+    # Parse command-line arguments.
     config = parse_args()
     logging.info(config)
+
+    # Create the TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.allow_soft_placement = True
+
+    # Train.
     with tf.Session(config=tf_config) as sess:
-        if config.translate_valid:
-            logging.info('Building model...')
-            model = StandardModel(config)
-            saver = init_or_restore_variables(config, sess)
-            translate(sess, model, config)
-        elif config.run_validation:
-            validate_helper(config, sess)
-        else:
-            train(config, sess)
+        train(config, sess)

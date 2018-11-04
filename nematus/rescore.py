@@ -12,7 +12,6 @@ import numpy
 
 from data_iterator import TextIterator
 from util import load_config
-from alignment_util import combine_source_target_text
 from compat import fill_options
 
 from settings import RescorerSettings

@@ -29,7 +29,7 @@ class TestScore(unittest.TestCase):
     def get_settings():
         scorer_settings = ScorerSettings()
         scorer_settings.models = ['model.npz']
-        scorer_settings.b = 80
+        scorer_settings.minibatch_size = 80
         scorer_settings.normalization_alpha = 1.0
         return scorer_settings
 

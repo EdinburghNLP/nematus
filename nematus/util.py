@@ -2,10 +2,11 @@
 Utility functions
 '''
 
-import sys
-import json
 import cPickle as pkl
+import exception
+import json
 import numpy
+import sys
 
 # Source:
 # https://stackoverflow.com/questions/38559755/how-to-get-current-available-gpus-in-tensorflow
@@ -138,3 +139,62 @@ def combine_source_dicts(num_to_source_dicts, num_factors, vocab_sizes):
         if len(offsets[factor_idx]) < num_langs:
             offsets[factor_idx].append(offset+vocab_sizes[i])
     return combined_dicts, offsets
+
+
+def load_dictionaries(config):
+    source_to_num = [load_dict(d) for d in config.source_dicts]
+    target_to_num = [load_dict(d) for d in config.target_dicts]
+    num_to_source = [reverse_dict(d) for d in source_to_num]
+    num_to_target = [reverse_dict(d) for d in target_to_num]
+    return source_to_num, target_to_num, num_to_source, num_to_target
+
+
+def read_all_lines(config, sentences, batch_size, src_lang_idx=0):
+    def adjust_source_indices(w, src_lang_idx, vocab_sizes):
+        num_factors = len(w)
+        num_langs = len(vocab_sizes) / num_factors
+        offsets = [0] * num_factors
+        for i in range(num_factors):
+            for j in range(src_lang_idx):
+                offsets[i] += vocab_sizes[i * num_langs + j]
+        return [index + offsets[i] for i, index in enumerate(w)]
+    source_to_num, _, _, _ = load_dictionaries(config)
+
+    if config.source_vocab_sizes != None:
+        assert len(config.source_vocab_sizes) == len(source_to_num)
+        for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
+            if vocab_size != None and vocab_size > 0:
+                for key, idx in d.items():
+                    if idx >= vocab_size:
+                        del d[key]
+
+    lines = []
+    for sent in sentences:
+        line = []
+        for w in sent.strip().split():
+            if config.factors == 1:
+                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
+            else:
+                w = [source_to_num[i][f] if f in source_to_num[i] else 1
+                                         for (i,f) in enumerate(w.split('|'))]
+                if len(w) != config.factors:
+                    raise exception.Error(
+                        'Expected {0} factors, but input word has {1}\n'.format(
+                            config.factors, len(w)))
+            w = adjust_source_indices(w, src_lang_idx,
+                                      config.source_vocab_sizes)
+            line.append(w)
+        lines.append(line)
+    lines = numpy.array(lines)
+    lengths = numpy.array(map(lambda l: len(l), lines))
+    lengths = numpy.array(lengths)
+    idxs = lengths.argsort()
+    lines = lines[idxs]
+
+    #merge into batches
+    batches = []
+    for i in range(0, len(lines), batch_size):
+        batch = lines[i:i+batch_size]
+        batches.append(batch)
+
+    return batches, idxs

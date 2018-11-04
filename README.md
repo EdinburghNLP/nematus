@@ -168,7 +168,6 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --validFreq INT | validation frequency (default: 10000) |
 | --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
 | --patience INT | early stopping patience (default: 10) |
-| --run_validation | Compute validation score on validation dataset |
 
 #### display parameters
 | parameter | description |
@@ -181,7 +180,6 @@ for training a full-scale system, consider the training scripts at http://data.s
 #### translate parameters
 | parameter | description |
 |---        |---          |
-| --translate_valid | Translate source dataset instead of training |
 | --no_normalize | Cost of sentences will not be normalized by length |
 | --n_best | Print full beam |
 | --translation_maxlen INT | Maximum length of translation output sentence (default: 200) |
