@@ -17,8 +17,8 @@ from Queue import Empty
 from compat import fill_options
 import exception
 import inference
-from model import StandardModel
 import model_loader
+import rnn_model
 from settings import TranslationSettings
 import util
 
@@ -120,7 +120,7 @@ class Translator(object):
         models = []
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
-                model = StandardModel(options)
+                model = RNNModel(options)
                 saver = model_loader.init_or_restore_variables(
                     options, sess, ensemble_scope=scope)
                 models.append(model)

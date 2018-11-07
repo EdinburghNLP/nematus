@@ -8,8 +8,8 @@ import tensorflow as tf
 
 import compat
 import logging
-from model import StandardModel
 import model_loader
+import rnn_model
 import util
 
 def construct_parameter_map(config):
@@ -148,7 +148,7 @@ def theano_to_tensorflow_model(in_path, out_path):
 
     with tf.Session() as sess:
         logging.info('Building model...')
-        model = StandardModel(config)
+        model = rnn_model.RNNModel(config)
         init = tf.zeros_initializer(dtype=tf.int32)
         global_step = tf.get_variable('time', [], initializer=init, trainable=False)
         saver = model_loader.init_or_restore_variables(config, sess)

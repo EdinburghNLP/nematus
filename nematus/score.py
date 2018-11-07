@@ -15,9 +15,9 @@ import numpy
 from data_iterator import TextIterator
 from util import load_config
 from compat import fill_options
-from model import StandardModel
 import model_loader
 import nmt
+import rnn_model
 from settings import ScorerSettings
 
 import tensorflow as tf
@@ -31,7 +31,7 @@ def score_model(source_file, target_file, scorer_settings, options):
             tf_config.allow_soft_placement = True
             with tf.Session(config=tf_config) as sess:
                 logging.info('Building model...')
-                model = StandardModel(option)
+                model = rnn_model.RNNModel(option)
                 saver = model_loader.init_or_restore_variables(option, sess)
 
                 text_iterator = TextIterator(

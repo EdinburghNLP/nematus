@@ -20,9 +20,9 @@ import tensorflow as tf
 from data_iterator import TextIterator
 import exception
 import inference
-from model import StandardModel
 import model_loader
 from model_updater import ModelUpdater
+import rnn_model
 import util
 
 
@@ -83,7 +83,7 @@ def train(config, sess):
         device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
         with tf.device(device_spec):
             with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-                replicas.append(StandardModel(config))
+                replicas.append(rnn_model.RNNModel(config))
 
     if config.optimizer == 'adam':
         optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate,

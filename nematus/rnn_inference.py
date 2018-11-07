@@ -3,11 +3,11 @@ import tensorflow as tf
 
 
 def sample(session, model, x, x_mask, graph=None):
-    """Randomly samples translations from a StandardModel.
+    """Randomly samples translations from a RNNModel.
 
     Args:
         session: TensorFlow session.
-        model: a StandardModel object.
+        model: a RNNModel object.
         x: Numpy array with shape (factors, max_seq_len, batch_size).
         x_mask: Numpy array with shape (max_seq_len, batch_size).
         graph: a SampleGraph object (to allow reuse if sampling repeatedly).
@@ -30,7 +30,7 @@ def sample(session, model, x, x_mask, graph=None):
 
 
 def beam_search(session, models, x, x_mask, beam_size, graph=None):
-    """Beam search using one or more StandardModels.
+    """Beam search using one or more RNNModels..
 
     If using an ensemble (i.e. more than one model), then at each timestep
     the top k tokens are selected according to the sum of the models' log
@@ -38,7 +38,7 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
 
     Args:
         session: TensorFlow session.
-        models: a list of StandardModel objects.
+        models: a list of RNNModel objects.
         x: Numpy array with shape (factors, max_seq_len, batch_size).
         x_mask: Numpy array with shape (max_seq_len, batch_size).
         beam_size: beam width.
@@ -98,7 +98,7 @@ def _reconstruct_hypotheses(ys, parents, cost, beam_size):
     return hypotheses
 
 
-"""Builds a graph fragment for sampling over a StandardModel."""
+"""Builds a graph fragment for sampling over a RNNModel."""
 class SampleGraph(object):
     def __init__(self, model):
         self._sampled_ys = construct_sampling_ops(model)
@@ -108,7 +108,7 @@ class SampleGraph(object):
         return (self._sampled_ys)
 
 
-"""Builds a graph fragment for beam search over one or more StandardModels."""
+"""Builds a graph fragment for beam search over one or more RNNModels."""
 class BeamSearchGraph(object):
     def __init__(self, models, beam_size):
         self._beam_size = beam_size
@@ -125,10 +125,10 @@ class BeamSearchGraph(object):
 
 
 def construct_sampling_ops(model):
-    """Builds a graph fragment for sampling over a StandardModel.
+    """Builds a graph fragment for sampling over a RNNModel.
 
     Args:
-        model: a StandardModel.
+        model: a RNNModel.
 
     Returns:
         A Tensor with shape (max_seq_len, batch_size) containing one sampled
@@ -192,7 +192,7 @@ def construct_sampling_ops(model):
 
 
 def construct_beam_search_ops(models, beam_size):
-    """Builds a graph fragment for beam search over one or more StandardModels.
+    """Builds a graph fragment for beam search over one or more RNNModels.
 
     Strategy:
         compute the log_probs - same as with sampling

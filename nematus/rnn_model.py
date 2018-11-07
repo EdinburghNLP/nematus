@@ -358,7 +358,7 @@ class ModelInputs(object):
             shape=())
 
 
-class StandardModel(object):
+class RNNModel(object):
     def __init__(self, config):
         self.inputs = ModelInputs(config)
 
@@ -434,8 +434,6 @@ class StandardModel(object):
                     map_l2_acc.append(tf.nn.l2_loss(v - prior_v))
                 self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
                 self.objective += self.map_l2_loss
-
-        self.sampled_ys = None
 
     def get_loss(self):
         return self.loss_per_sentence

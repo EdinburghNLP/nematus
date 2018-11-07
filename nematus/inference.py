@@ -12,9 +12,9 @@ import util
 
 """Represents a collection of models that can be used jointly for inference.
 
-Currently only RNN-based models (i.e. StandardModel) are supported. Beam
-search can use multiple models (i.e. an ensemble) but sampling is limited
-to a single model. Multi-GPU inference is not yet supported.
+Currently only RNN-based models are supported. Beam search can use multiple
+models (i.e. an ensemble) but sampling is limited to a single model. Multi-GPU
+inference is not yet supported.
 
 TODO Multi-GPU inference (i.e. multiple replicas of the same model).
 TODO Transformer support.
