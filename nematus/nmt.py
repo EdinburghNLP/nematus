@@ -112,6 +112,11 @@ def train(config, sess):
 
     global_step.load(progress.uidx, sess)
 
+    # Use an InferenceModelSet to abstract over model types for sampling and
+    # beam search. Multi-GPU sampling and beam search are not currently
+    # supported, so we just use the first replica.
+    model_set = inference.InferenceModelSet([replicas[0]], [config])
+
     #save model options
     config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
     json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
@@ -154,7 +159,7 @@ def train(config, sess):
 
             if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
-                samples = replicas[0].sample(sess, x_small, x_mask_small)
+                samples = model_set.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
                     source = util.factoredseq2words(xx, num_to_source)
@@ -166,7 +171,8 @@ def train(config, sess):
 
             if config.beamFreq and progress.uidx % config.beamFreq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
-                samples = replicas[0].beam_search(sess, x_small, x_mask_small, config.beam_size)
+                samples = model_set.beam_search(sess, x_small, x_mask_small,
+                                               config.beam_size)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
@@ -237,7 +243,7 @@ def validate_with_script(sess, model, config):
                              output_file=out,
                              session=sess,
                              models=[model],
-                             config=config,
+                             configs=[config],
                              beam_size=config.beam_size,
                              minibatch_size=config.valid_batch_size,
                              normalization_alpha=1.0)

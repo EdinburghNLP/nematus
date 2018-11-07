@@ -52,7 +52,7 @@ def main(settings):
                              output_file=settings.output,
                              session=session,
                              models=models,
-                             config=configs[0],
+                             configs=configs,
                              beam_size=settings.beam_size,
                              nbest=settings.n_best,
                              minibatch_size=settings.minibatch_size,
