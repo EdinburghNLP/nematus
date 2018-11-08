@@ -17,8 +17,8 @@ from Queue import Empty
 from compat import fill_options
 import exception
 import inference
-from model import StandardModel
 import model_loader
+import rnn_model
 from settings import TranslationSettings
 import util
 
@@ -134,7 +134,7 @@ class Translator(object):
         models = []
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
-                model = StandardModel(options)
+                model = RNNModel(options)
                 saver = model_loader.init_or_restore_variables(
                     options, sess, ensemble_scope=scope)
                 models.append(model)
@@ -154,6 +154,7 @@ class Translator(object):
         tf_config.allow_soft_placement = True
         sess = tf.Session(config=tf_config)
         models = self._load_models(process_id, sess)
+        ensemble = inference.Ensemble(models)
 
         # listen to queue in while loop, translate items
         while True:
@@ -164,12 +165,13 @@ class Translator(object):
             idx = input_item.idx
             request_id = input_item.request_id
 
-            output_item = self._translate(process_id, input_item, models, sess)
+            output_item = self._translate(process_id, input_item, ensemble,
+                                          sess)
             self._output_queue.put((request_id, idx, output_item))
 
         return
 
-    def _translate(self, process_id, input_item, models, sess):
+    def _translate(self, process_id, input_item, ensemble, sess):
         """
         Actual translation (model sampling).
         """
@@ -184,7 +186,7 @@ class Translator(object):
                                             self._options[0].factors,
                                             maxlen=None)
 
-        sample = inference.beam_search(models, sess, x, x_mask, k, self.target_lang)
+        sample = ensemble.beam_search(sess, x, x_mask, k, self.target_lang)
 
         return sample
 

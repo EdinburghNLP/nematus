@@ -1,11 +1,7 @@
-import sys
-import logging
-
-import numpy
 import tensorflow as tf
 
-import inference
 import layers
+import model_inputs
 
 
 class Decoder(object):
@@ -115,68 +111,6 @@ class Decoder(object):
             self.predictor = Predictor(config, batch_size, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
 
-
-    def sample(self, target_lang_id):
-        batch_size = tf.shape(self.init_state)[0]
-        high_depth = 0 if self.high_gru_stack == None \
-                       else len(self.high_gru_stack.grus)
-        i = tf.constant(0)
-        init_y = -tf.ones(dtype=tf.int32, shape=[batch_size])
-        init_emb = tf.zeros(dtype=tf.float32,
-                            shape=[batch_size,self.embedding_size])
-        y_array = tf.TensorArray(
-            dtype=tf.int32,
-            size=self.translation_maxlen,
-            clear_after_read=True, #TODO: does this help? or will it only introduce bugs in the future?
-            name='y_sampled_array')
-        init_loop_vars = [i, self.init_state, [self.init_state] * high_depth,
-                          init_y, init_emb, y_array]
-
-        def cond(i, base_state, high_states, prev_y, prev_emb, y_array):
-            return tf.logical_and(
-                tf.less(i, self.translation_maxlen),
-                tf.reduce_any(tf.not_equal(prev_y, 0)))
-
-        def body(i, prev_base_state, prev_high_states, prev_y, prev_emb,
-                 y_array):
-            state1 = self.grustep1.forward(prev_base_state, prev_emb)
-            att_ctx = self.attstep.forward(state1)
-            base_state = self.grustep2.forward(state1, att_ctx)
-            if self.high_gru_stack == None:
-                output = base_state
-                high_states = []
-            else:
-                if self.high_gru_stack.context_state_size == 0:
-                    output, high_states = self.high_gru_stack.forward_single(
-                        prev_high_states, base_state)
-                else:
-                    output, high_states = self.high_gru_stack.forward_single(
-                        prev_high_states, base_state, context=att_ctx)
-            logits = self.predictor.get_logits(prev_emb, output, att_ctx,
-                                               multi_step=False)
-            new_y = tf.multinomial(logits, num_samples=1)
-            new_y = tf.cast(new_y, dtype=tf.int32)
-            new_y = tf.squeeze(new_y, axis=1)
-            new_y = tf.where(tf.equal(prev_y, tf.constant(0, dtype=tf.int32)),
-                             tf.zeros_like(new_y), new_y)
-            y_array = y_array.write(index=i, value=new_y)
-            new_emb = self.y_emb_layer.forward(new_y, target_lang_id)
-            # We need to specify the shape of new_emb to avoid a shape invariant
-            # failure - it seems that TensorFlow can't fully infer the shape
-            # under certain circumstances (specifically, if we're using tied
-            # encoder-decoder embeddings and y_emb_layer.forward involves a
-            # slice).
-            new_emb.set_shape([None, self.embedding_size])
-            return i+1, base_state, high_states, new_y, new_emb, y_array
-
-        final_loop_vars = tf.while_loop(
-                           cond=cond,
-                           body=body,
-                           loop_vars=init_loop_vars,
-                           back_prop=False)
-        i, _, _, _, _, y_array = final_loop_vars
-        sampled_ys = y_array.gather(tf.range(0, i))
-        return sampled_ys
 
     def score(self, y, target_lang_id):
         with tf.variable_scope("y_embeddings_layer"):
@@ -397,45 +331,9 @@ class Encoder(object):
         return concat_states
 
 
-class ModelInputs(object):
+class RNNModel(object):
     def __init__(self, config):
-        # variable dimensions
-        seq_len, batch_size = None, None
-
-        self.x = tf.placeholder(
-            name='x',
-            shape=(config.factors, seq_len, batch_size),
-            dtype=tf.int32)
-
-        self.x_mask = tf.placeholder(
-            name='x_mask',
-            shape=(seq_len, batch_size),
-            dtype=tf.float32)
-
-        self.y = tf.placeholder(
-            name='y',
-            shape=(seq_len, batch_size),
-            dtype=tf.int32)
-
-        self.y_mask = tf.placeholder(
-            name='y_mask',
-            shape=(seq_len, batch_size),
-            dtype=tf.float32)
-
-        self.target_lang_id = tf.placeholder(
-            name='target_lang_id',
-            shape=(),
-            dtype=tf.int32)
-
-        self.training = tf.placeholder_with_default(
-            False,
-            name='training',
-            shape=())
-
-
-class StandardModel(object):
-    def __init__(self, config):
-        self.inputs = ModelInputs(config)
+        self.inputs = model_inputs.ModelInputs(config)
 
         # Dropout functions for words.
         # These probabilistically zero-out all embedding values for individual
@@ -512,51 +410,8 @@ class StandardModel(object):
                 self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
                 self.objective += self.map_l2_loss
 
-        self.sampled_ys = None
-        self.beam_size, self.beam_ys, self.parents, self.cost = None, None, None, None
-
     def get_loss(self):
         return self.loss_per_sentence
 
     def get_objective(self):
         return self.objective
-
-    def _get_samples(self):
-        if self.sampled_ys == None:
-            self.sampled_ys = self.decoder.sample(self.inputs.target_lang_id)
-        return self.sampled_ys
-
-    def sample(self, session, x_in, x_mask_in, target_lang):
-        sampled_ys = self._get_samples()
-        feeds = {self.inputs.x: x_in,
-                 self.inputs.x_mask: x_mask_in,
-                 self.inputs.target_lang_id: target_lang}
-        sampled_ys_out = session.run(sampled_ys, feed_dict=feeds)
-        sampled_ys_out = sampled_ys_out.T
-        samples = []
-        for sample in sampled_ys_out:
-            sample = numpy.trim_zeros(list(sample), trim='b')
-            sample.append(0)
-            samples.append(sample)
-        return samples
-
-    def _get_beam_search_outputs(self, beam_size):
-        if beam_size != self.beam_size:
-            self.beam_size = beam_size
-            self.beam_ys, self.parents, self.cost = inference.construct_beam_search_functions([self], beam_size)
-        return self.beam_ys, self.parents, self.cost
-
-
-    def beam_search(self, session, x_in, x_mask_in, target_lang, beam_size):
-        # x_in is a numpy array with shape (factors, seqLen, batch)
-        # x_mask is a numpy array with shape (seqLen, batch)
-        x_in = numpy.repeat(x_in, repeats=beam_size, axis=-1)
-        x_mask_in = numpy.repeat(x_mask_in, repeats=beam_size, axis=-1)
-        feeds = {self.inputs.x: x_in,
-                 self.inputs.x_mask: x_mask_in,
-                 self.inputs.target_lang_id: target_lang}
-        beam_ys, parents, cost = self._get_beam_search_outputs(beam_size)
-        beam_ys_out, parents_out, cost_out = session.run(
-                                                    [beam_ys, parents, cost],
-                                                    feed_dict=feeds)
-        return inference.reconstruct_hypotheses(beam_ys_out, parents_out, cost_out, beam_size)

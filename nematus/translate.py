@@ -9,8 +9,8 @@ import tensorflow as tf
 
 import compat
 import inference
-from model import StandardModel
 import model_loader
+import rnn_model
 from settings import TranslationSettings
 import util
 
@@ -57,7 +57,7 @@ def main(settings):
     models = []
     for i, config in enumerate(configs):
         with tf.variable_scope("model%d" % i) as scope:
-            model = StandardModel(config)
+            model = rnn_model.RNNModel(config)
             saver = model_loader.init_or_restore_variables(config, session,
                                                            ensemble_scope=scope)
             models.append(model)
@@ -69,7 +69,7 @@ def main(settings):
                              target_lang=target_lang,
                              session=session,
                              models=models,
-                             config=configs[0],
+                             configs=configs,
                              beam_size=settings.beam_size,
                              nbest=settings.n_best,
                              minibatch_size=settings.minibatch_size,
