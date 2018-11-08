@@ -27,22 +27,22 @@ class InferenceModelSet(object):
         self._cached_sample_graph = None
         self._cached_beam_search_graph = None
 
-    def sample(self, session, x, x_mask):
+    def sample(self, session, x, x_mask, target_lang):
         # Sampling is not implemented for ensembles, so just use the first
         # model.
         model = self._models[0]
         if self._cached_sample_graph is None:
             self._cached_sample_graph = rnn_inference.SampleGraph(model)
-        return rnn_inference.sample(session, model, x, x_mask,
+        return rnn_inference.sample(session, model, x, x_mask, target_lang,
                                     self._cached_sample_graph)
 
-    def beam_search(self, session, x, x_mask, beam_size):
+    def beam_search(self, session, x, x_mask, beam_size, target_lang):
         if (self._cached_beam_search_graph is None
             or self._cached_beam_search_graph.beam_size != beam_size):
             self._cached_beam_search_graph = \
                 rnn_inference.BeamSearchGraph(self._models, beam_size)
         return rnn_inference.beam_search(session, self._models, x, x_mask,
-                                         beam_size,
+                                         beam_size, target_lang,
                                          self._cached_beam_search_graph)
 
 
