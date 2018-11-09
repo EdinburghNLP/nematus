@@ -74,7 +74,7 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
                 if (progress.estop == True or
                     progress.eidx > config.max_epochs or
                     progress.uidx >= config.finish_after):
-                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % reload_path)
+                    logging.warning('Training is already complete. Disable reloading of training progress (--no_reload_training_progress) or remove or modify progress file (%s) to train anyway.' % path)
                     sys.exit(0)
 
     # load prior model
