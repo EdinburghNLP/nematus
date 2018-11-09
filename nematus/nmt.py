@@ -273,7 +273,6 @@ def validate_with_script(sess, model, config):
 def calc_loss_per_sentence(config, sess, text_iterator, model,
                            normalization_alpha=0):
     losses = []
-    loss_per_sentence = model.get_loss()
     for x_v, y_v in text_iterator:
         if len(x_v[0][0]) != config.factors:
             logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
@@ -285,14 +284,14 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
                  model.inputs.y: y,
                  model.inputs.y_mask: y_mask,
                  model.inputs.training: False}
-        loss_per_sentence_out = sess.run(loss_per_sentence, feed_dict=feeds)
+        loss_per_sentence = sess.run(model.loss_per_sentence, feed_dict=feeds)
 
         # normalize scores according to output length
         if normalization_alpha:
             adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_mask.T])
-            loss_per_sentence_out /= adjusted_lengths
+            loss_per_sentence /= adjusted_lengths
 
-        losses += list(loss_per_sentence_out)
+        losses += list(loss_per_sentence)
         logging.info( "Seen {0}".format(len(losses)))
     return losses
 

@@ -24,20 +24,21 @@ class ModelUpdater(object):
             placeholder = tf.placeholder(name=name, shape=(), dtype=tf.float32)
             self.replica_weights.append(placeholder)
 
-        weighted_objectives = []
+        weighted_losses = []
         all_grad_vars = []
         for i in range(len(self.replicas)):
             device_type = "GPU" if num_gpus > 0 else "CPU"
             device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
             with tf.device(device_spec):
                 with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-                    objective = replicas[i].get_objective()
-                    gradients = optimizer.compute_gradients(objective)
+                    loss = self._regularize(replicas[i].loss, config.decay_c,
+                                            config.map_decay_c)
+                    gradients = optimizer.compute_gradients(loss)
                     all_grad_vars.append(gradients)
                     weight = self.replica_weights[i]
-                    weighted_objectives.append(objective*weight)
+                    weighted_losses.append(loss*weight)
 
-        self.objective = sum(weighted_objectives) / sum(self.replica_weights)
+        self.loss = sum(weighted_losses) / sum(self.replica_weights)
 
         grad_vars = self._average_gradients(all_grad_vars, self.replica_weights)
         grads, varss = zip(*grad_vars)
@@ -49,9 +50,31 @@ class ModelUpdater(object):
         self.apply_grads = optimizer.apply_gradients(
             grad_vars, global_step=self.global_step)
 
-        tf.summary.scalar(name='mean_cost', tensor=self.objective)
+        tf.summary.scalar(name='mean_cost', tensor=self.loss)
         tf.summary.scalar(name='t', tensor=self.global_step)
         self.merged = tf.summary.merge_all()
+
+    def _regularize(self, loss, decay_c, map_decay_c):
+        with tf.variable_scope("loss"):
+            # Optionally, add an L2 loss term.
+            if decay_c > 0.0:
+                l2_loss = tf.constant(0.0, dtype=tf.float32)
+                l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]) * tf.constant(decay_c, dtype=tf.float32)
+                loss += l2_loss
+            # Optionally, add an L2 loss term based on a prior model.
+            if map_decay_c > 0.0:
+                map_l2_loss = tf.constant(0.0, dtype=tf.float32)
+                map_l2_acc = []
+                for v in tf.trainable_variables():
+                    prior_name = 'prior/'+v.name.split(':')[0]
+                    prior_v = tf.get_variable(
+                        prior_name, initializer=v.initialized_value(),
+                        trainable=False, collections=['prior_variables'],
+                        dtype=v.initialized_value().dtype)
+                    map_l2_acc.append(tf.nn.l2_loss(v - prior_v))
+                map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(map_decay_c, dtype=tf.float32)
+                loss += map_l2_loss
+        return loss
 
     def update(self, session, x, x_mask, y, y_mask, write_summary):
         """Update the model for a single minibatch."""
@@ -83,7 +106,7 @@ class ModelUpdater(object):
             feed_dict[self.replicas[i].inputs.y_mask] = split_y_mask[j]
             feed_dict[self.replicas[i].inputs.training] = True
 
-        out = [self.global_step, self.apply_grads, self.objective]
+        out = [self.global_step, self.apply_grads, self.loss]
         if write_summary:
             out += [self.merged]
         out_values = session.run(out, feed_dict=feed_dict)

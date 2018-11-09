@@ -384,29 +384,13 @@ class RNNModel(object):
             self.loss_layer = layers.Masked_cross_entropy_loss(
                 self.inputs.y, self.inputs.y_mask, config.label_smoothing,
                 training=self.inputs.training)
-            self.loss_per_sentence = self.loss_layer.forward(self.logits)
-            self.objective = tf.reduce_mean(self.loss_per_sentence,
-                                            keepdims=False)
-            self.l2_loss = tf.constant(0.0, dtype=tf.float32)
-            if config.decay_c > 0.0:
-                self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]) * tf.constant(config.decay_c, dtype=tf.float32)
-                self.objective += self.l2_loss
+            self._loss_per_sentence = self.loss_layer.forward(self.logits)
+            self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
 
-            self.map_l2_loss = tf.constant(0.0, dtype=tf.float32)
-            if config.map_decay_c > 0.0:
-                map_l2_acc = []
-                for v in tf.trainable_variables():
-                    prior_name = 'prior/'+v.name.split(':')[0]
-                    prior_v = tf.get_variable(
-                        prior_name, initializer=v.initialized_value(),
-                        trainable=False, collections=['prior_variables'],
-                        dtype=v.initialized_value().dtype)
-                    map_l2_acc.append(tf.nn.l2_loss(v - prior_v))
-                self.map_l2_loss = tf.add_n(map_l2_acc) * tf.constant(config.map_decay_c, dtype=tf.float32)
-                self.objective += self.map_l2_loss
+    @property
+    def loss_per_sentence(self):
+        return self._loss_per_sentence
 
-    def get_loss(self):
-        return self.loss_per_sentence
-
-    def get_objective(self):
-        return self.objective
+    @property
+    def loss(self):
+        return self._loss
