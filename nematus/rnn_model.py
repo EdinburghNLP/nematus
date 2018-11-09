@@ -4,6 +4,85 @@ import layers
 import model_inputs
 
 
+"""Builds a GRU-based attentional encoder-decoder model.
+
+This class is responsible for constructing a TensorFlow graph that takes
+a minibatch of sentence pairs as input and calculates a loss value via
+teacher forcing (specifically, the loss is the mean sentence-level
+cross-entropy).
+
+For inference (sampling and beam search), see rnn_inference.py.
+
+For optimization, see model_updater.py.
+"""
+class RNNModel(object):
+    def __init__(self, config):
+        self.inputs = model_inputs.ModelInputs(config)
+
+        # Dropout functions for words.
+        # These probabilistically zero-out all embedding values for individual
+        # words.
+        dropout_source, dropout_target = None, None
+        if config.use_dropout and config.dropout_source > 0.0:
+            def dropout_source(x):
+                return tf.layers.dropout(
+                    x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
+                    rate=config.dropout_source, training=self.inputs.training)
+        if config.use_dropout and config.dropout_target > 0.0:
+            def dropout_target(y):
+                return tf.layers.dropout(
+                    y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
+                    rate=config.dropout_target, training=self.inputs.training)
+
+        # Dropout functions for use within FF, GRU, and attention layers.
+        # We use Gal and Ghahramani (2016)-style dropout, so these functions
+        # will be used to create 2D dropout masks that are reused at every
+        # timestep.
+        dropout_embedding, dropout_hidden = None, None
+        if config.use_dropout and config.dropout_embedding > 0.0:
+            def dropout_embedding(e):
+                return tf.layers.dropout(e, noise_shape=tf.shape(e),
+                                         rate=config.dropout_embedding,
+                                         training=self.inputs.training)
+        if config.use_dropout and config.dropout_hidden > 0.0:
+            def dropout_hidden(h):
+                return tf.layers.dropout(h, noise_shape=tf.shape(h),
+                                         rate=config.dropout_hidden,
+                                         training=self.inputs.training)
+
+        batch_size = tf.shape(self.inputs.x)[-1]  # dynamic value
+
+        with tf.variable_scope("encoder"):
+            self.encoder = Encoder(config, batch_size, dropout_source,
+                                   dropout_embedding, dropout_hidden)
+            ctx = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
+
+        with tf.variable_scope("decoder"):
+            if config.tie_encoder_decoder_embeddings:
+                tied_embeddings = self.encoder.emb_layer
+            else:
+                tied_embeddings = None
+            self.decoder = Decoder(config, ctx, self.inputs.x_mask,
+                                   dropout_target, dropout_embedding,
+                                   dropout_hidden, tied_embeddings)
+            self.logits = self.decoder.score(self.inputs.y)
+
+        with tf.variable_scope("loss"):
+            self.loss_layer = layers.Masked_cross_entropy_loss(
+                self.inputs.y, self.inputs.y_mask, config.label_smoothing,
+                training=self.inputs.training)
+            self._loss_per_sentence = self.loss_layer.forward(self.logits)
+            self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
+
+    @property
+    def loss_per_sentence(self):
+        return self._loss_per_sentence
+
+    @property
+    def loss(self):
+        return self._loss
+
+
 class Decoder(object):
     def __init__(self, config, context, x_mask,
                  dropout_target, dropout_embedding, dropout_hidden,
@@ -326,71 +405,3 @@ class Encoder(object):
         else:
             concat_states = tf.concat([fwd_states, bwd_states], axis=2)
         return concat_states
-
-
-class RNNModel(object):
-    def __init__(self, config):
-        self.inputs = model_inputs.ModelInputs(config)
-
-        # Dropout functions for words.
-        # These probabilistically zero-out all embedding values for individual
-        # words.
-        dropout_source, dropout_target = None, None
-        if config.use_dropout and config.dropout_source > 0.0:
-            def dropout_source(x):
-                return tf.layers.dropout(
-                    x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
-                    rate=config.dropout_source, training=self.inputs.training)
-        if config.use_dropout and config.dropout_target > 0.0:
-            def dropout_target(y):
-                return tf.layers.dropout(
-                    y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
-                    rate=config.dropout_target, training=self.inputs.training)
-
-        # Dropout functions for use within FF, GRU, and attention layers.
-        # We use Gal and Ghahramani (2016)-style dropout, so these functions
-        # will be used to create 2D dropout masks that are reused at every
-        # timestep.
-        dropout_embedding, dropout_hidden = None, None
-        if config.use_dropout and config.dropout_embedding > 0.0:
-            def dropout_embedding(e):
-                return tf.layers.dropout(e, noise_shape=tf.shape(e),
-                                         rate=config.dropout_embedding,
-                                         training=self.inputs.training)
-        if config.use_dropout and config.dropout_hidden > 0.0:
-            def dropout_hidden(h):
-                return tf.layers.dropout(h, noise_shape=tf.shape(h),
-                                         rate=config.dropout_hidden,
-                                         training=self.inputs.training)
-
-        batch_size = tf.shape(self.inputs.x)[-1]  # dynamic value
-
-        with tf.variable_scope("encoder"):
-            self.encoder = Encoder(config, batch_size, dropout_source,
-                                   dropout_embedding, dropout_hidden)
-            ctx = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
-
-        with tf.variable_scope("decoder"):
-            if config.tie_encoder_decoder_embeddings:
-                tied_embeddings = self.encoder.emb_layer
-            else:
-                tied_embeddings = None
-            self.decoder = Decoder(config, ctx, self.inputs.x_mask,
-                                   dropout_target, dropout_embedding,
-                                   dropout_hidden, tied_embeddings)
-            self.logits = self.decoder.score(self.inputs.y)
-
-        with tf.variable_scope("loss"):
-            self.loss_layer = layers.Masked_cross_entropy_loss(
-                self.inputs.y, self.inputs.y_mask, config.label_smoothing,
-                training=self.inputs.training)
-            self._loss_per_sentence = self.loss_layer.forward(self.logits)
-            self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
-
-    @property
-    def loss_per_sentence(self):
-        return self._loss_per_sentence
-
-    @property
-    def loss(self):
-        return self._loss
