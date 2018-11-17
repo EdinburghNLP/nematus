@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 
 import numpy as np
 import tensorflow as tf
@@ -154,20 +155,24 @@ def theano_to_tensorflow_model(in_path, out_path):
         saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
-        for key in saved_model.keys():
+        for th_name in saved_model.keys():
             # ignore adam parameters
-            if key.startswith('adam'):
+            if th_name.startswith('adam'):
                 continue
-            tf_name = th2tf[key]
+            tf_name = th2tf[th_name]
             if tf_name is not None:
                 assert tf_name not in seen
                 seen.add(tf_name)
                 tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
-                if (sess.run(tf.shape(tf_var)) != saved_model[key].shape).any():
-                    print "mismatch for", tf_name, key, saved_model[key].shape, sess.run(tf.shape(tf_var))
-                assign_ops.append(tf.assign(tf_var, saved_model[key]))
+                tf_shape = sess.run(tf.shape(tf_var))
+                th_var = saved_model[th_name]
+                th_shape = th_var.shape
+                if list(tf_shape) != list(th_shape):
+                    print "mismatch for", tf_name, th_name, th_shape, tf_shape
+                    sys.exit(1)
+                assign_ops.append(tf.assign(tf_var, th_var))
             else:
-                print "Not saving", key, "because no TF equivalent"
+                print "Not saving", th_name, "because no TF equivalent"
         sess.run(assign_ops)
         saver.save(sess, save_path=out_path)
 
