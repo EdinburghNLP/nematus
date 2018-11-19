@@ -16,7 +16,7 @@ from data_iterator import TextIterator
 from util import load_config
 from compat import fill_options
 import model_loader
-import nmt
+import train
 import rnn_model
 from settings import ScorerSettings
 
@@ -47,7 +47,7 @@ def score_model(source_file, target_file, scorer_settings, options):
                     use_factor=(option.factors > 1),
                     sort_by_length=False)
 
-                losses = nmt.calc_loss_per_sentence(
+                losses = train.calc_loss_per_sentence(
                     option,
                     sess,
                     text_iterator,

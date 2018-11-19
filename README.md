@@ -94,7 +94,7 @@ All of the scripts below can be run with `--help` flag to get usage information.
 Sample commands with toy examples are available in the `test` directory;
 for training a full-scale system, consider the training scripts at http://data.statmt.org/wmt17_systems/training/
 
-#### `nematus/nmt.py` : use to train a new model
+#### `nematus/train.py` : use to train a new model
 
 #### data sets; model loading and saving
 | parameter | description |
