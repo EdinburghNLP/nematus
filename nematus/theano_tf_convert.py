@@ -180,13 +180,13 @@ def theano_to_tensorflow_model(in_path, out_path):
         sess.run(assign_ops)
         saver.save(sess, save_path=out_path)
 
-        logging.info("The following TF variables were not assigned " \
-                     "(excluding Adam vars):")
-        logging.info("You should see only 'beta1_power', 'beta2_power' and " \
-                     "'time' variable listed")
+        unassigned = []
         for tf_var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
-            if tf_var.name not in seen and 'Adam' not in tf_var.name:
-                logging.info(tf_var.name)
+            if tf_var.name not in seen:
+                unassigned.append(tf_var.name)
+        logging.info("The following TF variables were not " \
+                     "assigned: {}".format(" ".join(unassigned)))
+        logging.info("You should see only the 'time' variable listed")
 
 
 def tensorflow_to_theano_model(in_path, out_path):
