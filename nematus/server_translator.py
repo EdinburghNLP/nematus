@@ -52,7 +52,7 @@ class Translator(object):
         self._num_processes = settings.num_processes
         self._verbose = settings.verbose
         self._retrieved_translations = defaultdict(dict)
-        self._batch_size = settings.b
+        self._batch_size = settings.minibatch_size
 
         # load model options
         self._load_model_options()
@@ -134,7 +134,7 @@ class Translator(object):
         models = []
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
-                model = RNNModel(options)
+                model = rnn_model.RNNModel(options)
                 saver = model_loader.init_or_restore_variables(
                     options, sess, ensemble_scope=scope)
                 models.append(model)
@@ -154,7 +154,7 @@ class Translator(object):
         tf_config.allow_soft_placement = True
         sess = tf.Session(config=tf_config)
         models = self._load_models(process_id, sess)
-        ensemble = inference.Ensemble(models)
+        ensemble = inference.InferenceModelSet(models, self._options)
 
         # listen to queue in while loop, translate items
         while True:

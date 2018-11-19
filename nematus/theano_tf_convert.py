@@ -1,13 +1,14 @@
 #!/usr/bin/env python 
 
 import argparse
+import logging
 import os
+import sys
 
 import numpy as np
 import tensorflow as tf
 
 import compat
-import logging
 import model_loader
 import rnn_model
 import util
@@ -154,28 +155,38 @@ def theano_to_tensorflow_model(in_path, out_path):
         saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
-        for key in saved_model.keys():
+        for th_name in saved_model.keys():
             # ignore adam parameters
-            if key.startswith('adam'):
+            if th_name.startswith('adam'):
                 continue
-            tf_name = th2tf[key]
-            if tf_name is not None:
-                assert tf_name not in seen
-                seen.add(tf_name)
-                tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
-                if (sess.run(tf.shape(tf_var)) != saved_model[key].shape).any():
-                    print "mismatch for", tf_name, key, saved_model[key].shape, sess.run(tf.shape(tf_var))
-                assign_ops.append(tf.assign(tf_var, saved_model[key]))
-            else:
-                print "Not saving", key, "because no TF equivalent"
+            tf_name = th2tf[th_name]
+            if tf_name is None:
+                logging.info("Not saving {} because no TF " \
+                             "equivalent".format(th_name))
+                continue
+            assert tf_name not in seen
+            seen.add(tf_name)
+            tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
+            tf_shape = sess.run(tf.shape(tf_var))
+            th_var = saved_model[th_name]
+            th_shape = th_var.shape
+            if list(tf_shape) != list(th_shape):
+                logging.error("Shapes do not match for {} and " \
+                              "{}.".format(tf_name, th_name))
+                logging.error("Shape of {} is {}".format(tf_name, tf_shape))
+                logging.error("Shape of {} is {}".format(th_name, th_shape))
+                sys.exit(1)
+            assign_ops.append(tf.assign(tf_var, th_var))
         sess.run(assign_ops)
         saver.save(sess, save_path=out_path)
 
-        print "The following TF variables were not assigned (excluding Adam vars):"
-        print "You should see only 'beta1_power', 'beta2_power' and 'time' variable listed"
+        unassigned = []
         for tf_var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
-            if tf_var.name not in seen and 'Adam' not in tf_var.name:
-                print tf_var.name
+            if tf_var.name not in seen:
+                unassigned.append(tf_var.name)
+        logging.info("The following TF variables were not " \
+                     "assigned: {}".format(" ".join(unassigned)))
+        logging.info("You should see only the 'time' variable listed")
 
 
 def tensorflow_to_theano_model(in_path, out_path):
@@ -191,7 +202,8 @@ def tensorflow_to_theano_model(in_path, out_path):
                 try:
                     v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))
                 except:
-                    print "Skipping {} because it was not found".format(tf_name)
+                    logging.info("Skipping {} because it was not " \
+                                 "found".format(tf_name))
                     continue
             else:
                 if th_name == 'history_errs':
@@ -203,7 +215,7 @@ def tensorflow_to_theano_model(in_path, out_path):
             assert th_name not in params, '{} is repeated!'.format(th_name)
             params[th_name] = v
     np.savez(out_path, **params)
-    print 'Saved {} params in {}'.format(len(params), out_path)
+    logging.info('Saved {} params to {}'.format(len(params), out_path))
 
 
 if __name__ == '__main__':
@@ -221,7 +233,10 @@ if __name__ == '__main__':
     opts = parser.parse_args()
     opts.inn = os.path.abspath(opts.inn)
     opts.out = os.path.abspath(opts.out)
-    
+
+    # Start logging.
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
     if opts.from_theano:
         theano_to_tensorflow_model(opts.inn, opts.out)
     elif opts.from_tf:
