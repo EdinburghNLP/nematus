@@ -123,7 +123,7 @@ class Decoder(object):
         with tf.variable_scope("base"):
             with tf.variable_scope("gru0"):
                 if config.theano_compat:
-                    bias_type = layers.LegacyBiasType.THEANO
+                    bias_type = layers.LegacyBiasType.THEANO_A
                 else:
                     bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
                 self.grustep1 = layers.GRUStep(
@@ -145,7 +145,7 @@ class Decoder(object):
                                 dropout_context=dropout_hidden,
                                 dropout_state=dropout_hidden)
             if config.theano_compat:
-                bias_type = layers.LegacyBiasType.THEANO
+                bias_type = layers.LegacyBiasType.THEANO_B
             else:
                 bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_TRUE
             self.grustep2 = layers.DeepTransitionGRUStep(
@@ -164,7 +164,7 @@ class Decoder(object):
                 self.high_gru_stack = None
             else:
                 if config.theano_compat:
-                    bias_type = layers.LegacyBiasType.THEANO
+                    bias_type = layers.LegacyBiasType.THEANO_A
                 else:
                     bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_TRUE
                 self.high_gru_stack = layers.GRUStack(
@@ -348,7 +348,7 @@ class Encoder(object):
                                                    config.dim_per_factor)
 
         if config.theano_compat:
-            bias_type = layers.LegacyBiasType.THEANO
+            bias_type = layers.LegacyBiasType.THEANO_A
         else:
             bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
 

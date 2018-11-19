@@ -6,10 +6,31 @@ import tensorflow as tf
 
 import initializers
 
+"""Controls bias and layer normalization handling in GRUs."""
 class LegacyBiasType:
-    THEANO = 1
-    NEMATUS_COMPAT_TRUE = 2
-    NEMATUS_COMPAT_FALSE = 3
+    """
+    THEANO_A and THEANO_B are for backwards compatibility with models that
+    were trained with the Theano version of Nematus.
+
+    THEANO_A matches the behaviour of Theano's gru_layer (used in the encoder
+    and the high levels of the decoder) and also of the pre-attention sub-layer
+    of gru_cond_layer (used in the base level of the decoder).
+
+    THEANO_B matches the behaviour of the post-attention sub-layer of Theano's
+    gru_cond_layer (used in the base level of the decoder).
+
+    NEMATUS_COMPAT_TRUE and NEMATUS_COMPAT_FALSE should be used for all models
+    trained with the TensorFlow version of Nematus. For shallow models, bias
+    and layer normalization handling is identical to the Theano version. For
+    deep models, the behaviour was (inadvertently) changed. Empirically, it
+    doesn't seem to make much difference, as long as one type is used
+    consistently at training and test times.
+    """
+    THEANO_A = 1
+    THEANO_B = 2
+    NEMATUS_COMPAT_TRUE = 3
+    NEMATUS_COMPAT_FALSE = 4
+
 
 def matmul3d(x3d, matrix):
     shape = tf.shape(x3d)
@@ -239,24 +260,18 @@ class GRUStep(object):
 
     def _layer_norm_and_bias(self, x, b, layer_norm, x_is_input):
         assert self.use_layer_norm == (layer_norm is not None)
-        if self.legacy_bias_type == LegacyBiasType.THEANO:
-            # This emulates the Theano version of Nematus.
-            if not self.use_layer_norm:
-                return x + b
-            if x_is_input:
-                return layer_norm.forward(x+b)
-            else:
-                return layer_norm.forward(x) + b
-        if self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_TRUE:
-            if x_is_input:
-                return layer_norm.forward(x) if self.use_layer_norm else x
-            else:
-                return layer_norm.forward(x+b) if self.use_layer_norm else x+b
-        elif self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE:
+        if (self.legacy_bias_type == LegacyBiasType.THEANO_A
+            or self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE):
             if x_is_input:
                 return layer_norm.forward(x+b) if self.use_layer_norm else x+b
             else:
                 return layer_norm.forward(x) if self.use_layer_norm else x
+        elif (self.legacy_bias_type == LegacyBiasType.THEANO_B
+              or self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_TRUE):
+            if x_is_input:
+                return layer_norm.forward(x) if self.use_layer_norm else x
+            else:
+                return layer_norm.forward(x+b) if self.use_layer_norm else x+b
         else:
             assert False
 
@@ -285,10 +300,14 @@ class GRUStep(object):
         if proposal_state is None:
             proposal_state = self._get_proposal_state(prev_state) 
 
-        if gates_x == None:
-            gates = gates_state
-        else:
+        if gates_x != None:
+            # level l = 0 in deep transition GRU
             gates = gates_x + gates_state
+        else:
+            # level l > 0 in deep transition GRU
+            gates = gates_state
+            if self.legacy_bias_type == LegacyBiasType.THEANO_A:
+                gates += self.gates_bias
         gates = tf.nn.sigmoid(gates)
         read_gate, update_gate = tf.split(gates,
                                           num_or_size_splits=2,
@@ -296,7 +315,12 @@ class GRUStep(object):
 
         proposal = proposal_state*read_gate
         if proposal_x != None:
+            # level l = 0 in deep transition GRU
             proposal += proposal_x
+        else:
+            # level l > 0 in deep transition GRU
+            if self.legacy_bias_type == LegacyBiasType.THEANO_A:
+                proposal += self.proposal_bias
         proposal = tf.tanh(proposal)
         new_state = update_gate*prev_state + (1-update_gate)*proposal
 
