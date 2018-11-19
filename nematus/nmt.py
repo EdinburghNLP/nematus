@@ -17,12 +17,15 @@ import time
 import numpy
 import tensorflow as tf
 
+import compat
 from data_iterator import TextIterator
 import exception
 import inference
+from learning_schedule import ConstantSchedule, TransformerSchedule
 import model_loader
 from model_updater import ModelUpdater
 import rnn_model
+from transformer import Transformer as TransformerModel
 import util
 
 
@@ -33,6 +36,7 @@ def load_data(config):
                         target=config.target_dataset,
                         source_dicts=config.source_dicts,
                         target_dict=config.target_dict,
+                        model_type=config.model_type,
                         batch_size=config.batch_size,
                         maxlen=config.maxlen,
                         source_vocab_sizes=config.source_vocab_sizes,
@@ -51,6 +55,7 @@ def load_data(config):
                             target=config.valid_target_dataset,
                             source_dicts=config.source_dicts,
                             target_dict=config.target_dict,
+                            model_type=config.model_type,
                             batch_size=config.valid_batch_size,
                             maxlen=config.maxlen,
                             source_vocab_sizes=config.source_vocab_sizes,
@@ -71,6 +76,9 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
+    if config.model_type == "transformer":
+        nematode_config = compat.create_nematode_config_or_die(config)
+
     # Construct the graph, with one model replica per GPU
 
     num_gpus = len(util.get_available_gpus())
@@ -82,20 +90,37 @@ def train(config, sess):
         device_type = "GPU" if num_gpus > 0 else "CPU"
         device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
         with tf.device(device_spec):
-            with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-                replicas.append(rnn_model.RNNModel(config))
+            #with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
+            with tf.variable_scope(tf.get_variable_scope(),
+                                   reuse=tf.AUTO_REUSE):
+                if config.model_type == "transformer":
+                    model = TransformerModel(nematode_config)
+                else:
+                    model = rnn_model.RNNModel(config)
+                replicas.append(model)
+
+    init = tf.zeros_initializer(dtype=tf.int32)
+    global_step = tf.get_variable('time', [], initializer=init, trainable=False)
+
+    if config.learning_schedule == "constant":
+        schedule = ConstantSchedule(config.learning_rate)
+    elif config.learning_schedule == "transformer":
+        schedule = TransformerSchedule(global_step=global_step,
+                                       dim=config.state_size,
+                                       warmup_steps=config.warmup_steps)
+    else:
+        logging.error('Learning schedule type is not valid: {}'.format(
+            config.learning_schedule))
+        sys.exit(1)
 
     if config.optimizer == 'adam':
-        optimizer = tf.train.AdamOptimizer(learning_rate=config.learning_rate,
+        optimizer = tf.train.AdamOptimizer(learning_rate=schedule.learning_rate,
                                            beta1=config.adam_beta1,
                                            beta2=config.adam_beta2,
                                            epsilon=config.adam_epsilon)
     else:
         logging.error('No valid optimizer defined: {}'.format(config.optimizer))
         sys.exit(1)
-
-    init = tf.zeros_initializer(dtype=tf.int32)
-    global_step = tf.get_variable('time', [], initializer=init, trainable=False)
 
     if config.summaryFreq:
         summary_dir = (config.summary_dir if config.summary_dir is not None
@@ -297,12 +322,24 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
 
 
 def validate(config, sess, text_iterator, model, normalization_alpha=0):
+    # Unnormalized cross entropy
     losses = calc_loss_per_sentence(config, sess, text_iterator, model,
                                     normalization_alpha)
     num_sents = len(losses)
     total_loss = sum(losses)
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
         total_loss/num_sents, total_loss, num_sents))
+    # Normalized cross entropy (i.e. standard cross entropy).
+    #norm_losses = calc_loss_per_sentence(config, sess, text_iterator, model,
+    #                                     normalization_alpha=1.0)
+    #total_norm_loss = sum(norm_losses)
+    #logging.info('Validation cross entropy (AVG/SUM/N_SENT): {} {} {}'.format(
+    #    total_norm_loss/num_sents, total_norm_loss, num_sents))
+    # Perplexity
+    perplexities = [2 ** xent for xent in losses]
+    total_perplexity = sum(perplexities)
+    logging.info('Validation perplexity (AVG/SUM/N_SENT): {} {} {}'.format(
+        total_perplexity/num_sents, total_perplexity, num_sents))
     return losses
 
 
@@ -334,6 +371,9 @@ def parse_args():
                          help="Save summaries after INT updates, if 0 do not save summaries (default: %(default)s)")
 
     network = parser.add_argument_group('network parameters')
+    network.add_argument(
+        '--model_type', type=str, default='rnn', choices=['rnn', 'transformer'],
+        help="model type (default: %(default)s)")
     network.add_argument('--embedding_size', '--dim_word', type=int, default=512, metavar='INT',
                          help="embedding layer size (default: %(default)s)")
     network.add_argument('--state_size', '--dim', type=int, default=1000, metavar='INT',
@@ -416,9 +456,18 @@ def parse_args():
         '--optimizer', type=str, default="adam", choices=['adam'],
         help="optimizer (default: %(default)s)")
     training.add_argument(
+        '--learning_schedule', type=str, default='constant',
+        choices=['constant', 'transformer'],
+        help="learning schedule (default: %(default)s)")
+    training.add_argument(
         '--learning_rate', '--lrate', type=float, default=0.0001,
         metavar='FLOAT',
         help="learning rate (default: %(default)s)")
+    training.add_argument(
+        '--warmup_steps', type=int, default=8000, metavar='INT',
+        help='number of initial updates during which the learning rate is ' \
+             'increased linearly during learning rate scheduling (default: ' \
+             '%(default)s)')
     training.add_argument(
         '--adam_beta1', type=float, default=0.9, metavar='FLOAT',
         help='exponential decay rate for the first moment estimates ' \
@@ -467,6 +516,41 @@ def parse_args():
                             help="Print full beam")
     translate.add_argument('--translation_maxlen', type=int, default=200, metavar='INT',
                          help="Maximum length of translation output sentence (default: %(default)s)")
+
+
+    transformer = parser.add_argument_group('Transformer-specific parameters')
+    transformer.add_argument(
+        '--transformer_encoder_layers', type=int, default=6, metavar='INT',
+        help='number of encoder layers (default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_decoder_layers', type=int, default=6, metavar='INT',
+        help='number of decoder layers (default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_ffn_hidden_size', type=int, default=2048, metavar='INT',
+        help='inner dimensionality of feed-forward sub-layers in FAN ' \
+             'models (default: %(default)s)')
+    # TODO general?
+    transformer.add_argument(
+        '--transformer_num_heads', type=int, default=8, metavar='INT',
+        help='number of attention heads used in multi-head attention ' \
+             '(default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_dropout_embeddings', type=float, default=0.1,
+        metavar='FLOAT',
+        help='dropout applied to sums of word embeddings and positional ' \
+             'encodings (default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_dropout_residual', type=float, default=0.1,
+        metavar='FLOAT',
+        help='dropout applied to residual connections (default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_dropout_relu', type=float, default=0.1, metavar='FLOAT',
+        help='dropout applied to the internal activation of the feed-forward ' \
+             'sub-layers (default: %(default)s)')
+    transformer.add_argument(
+        '--transformer_dropout_attn', type=float, default=0.1, metavar='FLOAT',
+        help='dropout applied to attention weights (default: %(default)s)')
+
     config = parser.parse_args()
 
     # allow "--datasets" for backward compatibility
@@ -542,7 +626,7 @@ def parse_args():
         if vocab_size >= 0:
             continue
         try:
-            d = util.load_dict(config.dictionaries[i])
+            d = util.load_dict(config.dictionaries[i], config.model_type)
         except:
             logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
         vocab_sizes[i] = max(d.values()) + 1

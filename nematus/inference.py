@@ -7,23 +7,40 @@ import tensorflow as tf
 
 import exception
 import rnn_inference
+import transformer_inference
 import util
 
 
 """Represents a collection of models that can be used jointly for inference.
 
-Currently only RNN-based models are supported. Beam search can use multiple
-models (i.e. an ensemble) but sampling is limited to a single model. Multi-GPU
-inference is not yet supported.
+RNN and Transformer models are both supported, though they can't be mixed.
+For RNNs, search can use multiple models (i.e. an ensemble) but sampling is
+limited to a single model. For Transformers, only single models are supported.
+Multi-GPU inference is not yet supported.
 
 TODO Multi-GPU inference (i.e. multiple replicas of the same model).
-TODO Transformer support.
+TODO Beam search for Transformer ensembles.
 TODO Mixed RNN/Tranformer inference.
 TODO Ensemble sampling (is this useful?).
 """
 class InferenceModelSet(object):
     def __init__(self, models, configs):
         self._models = models
+        self._model_types = [config.model_type for config in configs]
+        # Currently only supports RNN ensembles or single Transformer models
+        assert len(set(self._model_types)) == 1
+        if self._model_types[0] == "transformer":
+            assert len(models) == 1
+            self._sample_func = transformer_inference.sample
+            self._sample_graph_type = transformer_inference.SampleGraph
+            self._beam_search_func = transformer_inference.beam_search
+            self._beam_search_graph_type = transformer_inference.BeamSearchGraph
+        else:
+            assert self._model_types[0] == "rnn"
+            self._sample_func = rnn_inference.sample
+            self._sample_graph_type = rnn_inference.SampleGraph
+            self._beam_search_func = rnn_inference.beam_search
+            self._beam_search_graph_type = rnn_inference.BeamSearchGraph
         self._cached_sample_graph = None
         self._cached_beam_search_graph = None
 
@@ -32,18 +49,18 @@ class InferenceModelSet(object):
         # model.
         model = self._models[0]
         if self._cached_sample_graph is None:
-            self._cached_sample_graph = rnn_inference.SampleGraph(model)
-        return rnn_inference.sample(session, model, x, x_mask,
-                                    self._cached_sample_graph)
+            self._cached_sample_graph = self._sample_graph_type(model)
+        return self._sample_func(session, model, x, x_mask,
+                                 self._cached_sample_graph)
 
     def beam_search(self, session, x, x_mask, beam_size):
         if (self._cached_beam_search_graph is None
             or self._cached_beam_search_graph.beam_size != beam_size):
             self._cached_beam_search_graph = \
-                rnn_inference.BeamSearchGraph(self._models, beam_size)
-        return rnn_inference.beam_search(session, self._models, x, x_mask,
-                                         beam_size,
-                                         self._cached_beam_search_graph)
+                self._beam_search_graph_type(self._models, beam_size)
+        return self._beam_search_func(session, self._models, x, x_mask,
+                                      beam_size,
+                                      self._cached_beam_search_graph)
 
 
 def translate_file(input_file, output_file, session, models, configs,

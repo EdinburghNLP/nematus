@@ -12,6 +12,7 @@ import inference
 import model_loader
 import rnn_model
 from settings import TranslationSettings
+from transformer import Transformer as TransformerModel
 import util
 
 
@@ -42,10 +43,17 @@ def main(settings):
     models = []
     for i, config in enumerate(configs):
         with tf.variable_scope("model%d" % i) as scope:
-            model = rnn_model.RNNModel(config)
+            if config.model_type == "transformer":
+                nematode_config = compat.create_nematode_config_or_die(config)
+                model = TransformerModel(nematode_config)
+            else:
+                model = rnn_model.RNNModel(config)
             saver = model_loader.init_or_restore_variables(config, session,
                                                            ensemble_scope=scope)
             models.append(model)
+
+    # TODO Ensembling is currently only supported for RNNs, so if
+    # TODO len(models) > 1 then check models are all rnn
 
     # Translate the source file.
     inference.translate_file(input_file=settings.input,

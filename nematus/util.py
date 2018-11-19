@@ -65,14 +65,29 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
 def unicode_to_utf8(d):
     return dict((key.encode("UTF-8"), value) for (key,value) in d.items())
 
-def load_dict(filename):
+def load_dict(filename, model_type):
     try:
         with open(filename, 'rb') as f:
-            return unicode_to_utf8(json.load(f))
+            d = unicode_to_utf8(json.load(f))
     except:
         with open(filename, 'rb') as f:
-            return pkl.load(f)
+            d = pkl.load(f)
+    if model_type == "transformer" and "<GO>" not in d:
+        d = convert_dict_to_nematode_format(d)
+    return d
 
+def convert_dict_to_nematode_format(d):
+    d["<EOS>"] = 0
+    d["<GO>"] = 1
+    del d["UNK"]
+    v_eos = d["eos"]
+    del d["eos"]
+    for k, v in d.items():
+        if v == 2:
+            d[k] = v_eos
+            d["<UNK>"] = 2
+            break
+    return d
 
 def load_config(basename):
     try:
@@ -98,12 +113,20 @@ def factoredseq2words(seq, inverse_dictionaries, join=True):
     assert len(seq.shape) == 2
     assert len(inverse_dictionaries) == seq.shape[1]
     words = []
+    eos_reached = False
     for i, w in enumerate(seq):
+        if eos_reached:
+            break
         factors = []
         for j, f in enumerate(w):
             if f == 0:
-                assert (i == len(seq) - 1) or (seq[i+1][j] == 0), \
-                       ('Zero not at the end of sequence', seq)
+                eos_reached = True
+                break
+                # This assert has been commented out because it's possible for
+                # non-zero values to follow zero values for Transformer models.
+                # TODO Check why this happens
+                #assert (i == len(seq) - 1) or (seq[i+1][j] == 0), \
+                #       ('Zero not at the end of sequence', seq)
             elif f in inverse_dictionaries[j]:
                 factors.append(inverse_dictionaries[j][f])
             else:
@@ -119,8 +142,9 @@ def reverse_dict(dictt):
 
 
 def load_dictionaries(config):
-    source_to_num = [load_dict(d) for d in config.source_dicts]
-    target_to_num = load_dict(config.target_dict)
+    m_type = config.model_type
+    source_to_num = [load_dict(d, m_type) for d in config.source_dicts]
+    target_to_num = load_dict(config.target_dict, m_type)
     num_to_source = [reverse_dict(d) for d in source_to_num]
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target
