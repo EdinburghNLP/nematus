@@ -31,7 +31,16 @@ class ModelUpdater(object):
             device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
             with tf.device(device_spec):
                 with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-                    loss = self._regularize(replicas[i].loss, config.decay_c,
+                    if config.loss_function == "cross-entropy":
+                        loss = replicas[i].loss
+                    elif config.loss_function == "per-token-cross-entropy":
+                        ce_per_sent = replicas[i].loss_per_sentence
+                        ce_total = tf.reduce_sum(ce_per_sent)
+                        num_tokens = tf.reduce_sum(replicas[i].inputs.y_mask)
+                        loss = ce_total / tf.cast(num_tokens, tf.float32)
+                    else:
+                        assert False
+                    loss = self._regularize(loss, config.decay_c,
                                             config.map_decay_c)
                     gradients = optimizer.compute_gradients(loss)
                     all_grad_vars.append(gradients)

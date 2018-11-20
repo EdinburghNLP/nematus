@@ -322,24 +322,12 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
 
 
 def validate(config, sess, text_iterator, model, normalization_alpha=0):
-    # Unnormalized cross entropy
     losses = calc_loss_per_sentence(config, sess, text_iterator, model,
                                     normalization_alpha)
     num_sents = len(losses)
     total_loss = sum(losses)
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
         total_loss/num_sents, total_loss, num_sents))
-    # Normalized cross entropy (i.e. standard cross entropy).
-    #norm_losses = calc_loss_per_sentence(config, sess, text_iterator, model,
-    #                                     normalization_alpha=1.0)
-    #total_norm_loss = sum(norm_losses)
-    #logging.info('Validation cross entropy (AVG/SUM/N_SENT): {} {} {}'.format(
-    #    total_norm_loss/num_sents, total_norm_loss, num_sents))
-    # Perplexity
-    perplexities = [2 ** xent for xent in losses]
-    total_perplexity = sum(perplexities)
-    logging.info('Validation perplexity (AVG/SUM/N_SENT): {} {} {}'.format(
-        total_perplexity/num_sents, total_perplexity, num_sents))
     return losses
 
 
@@ -452,6 +440,10 @@ def parse_args():
                          help='do not sort sentences in maxibatch by length')
     training.add_argument('--maxibatch_size', type=int, default=20, metavar='INT',
                          help='size of maxibatch (number of minibatches that are sorted by length) (default: %(default)s)')
+    training.add_argument(
+        '--loss_function', type=str, default="cross-entropy",
+        choices=['cross-entropy', 'per-token-cross-entropy'],
+        help="loss function (default: %(default)s)")
     training.add_argument(
         '--optimizer', type=str, default="adam", choices=['adam'],
         help="optimizer (default: %(default)s)")
