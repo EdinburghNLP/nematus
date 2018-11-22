@@ -65,11 +65,9 @@ class Transformer(object):
             masked_loss, sentence_loss, batch_loss = \
                 loss_layer.forward(logits, self.target_ids_out, self.target_mask, self.training)
 
-            #sent_lens = tf.reduce_sum(self.target_mask, axis=1, keepdims=False)
-            #self._loss_per_sentence = sentence_loss * sent_lens
-            #self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
-            self._loss_per_sentence = sentence_loss
-            self._loss = batch_loss
+            sent_lens = tf.reduce_sum(self.target_mask, axis=1, keepdims=False)
+            self._loss_per_sentence = sentence_loss * sent_lens
+            self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
 
     def _build_graph(self):
         """ Defines the model graph. """
