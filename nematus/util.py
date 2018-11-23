@@ -77,14 +77,16 @@ def load_dict(filename, model_type):
     return d
 
 def convert_dict_to_nematode_format(d):
+    assert d["eos"] == 0
+    assert d["UNK"] == 1
+    del d["eos"]
+    del d["UNK"]
     d["<EOS>"] = 0
     d["<GO>"] = 1
-    del d["UNK"]
-    v_eos = d["eos"]
-    del d["eos"]
+    v_max = max(d.values())
     for k, v in d.items():
         if v == 2:
-            d[k] = v_eos
+            d[k] = v_max + 1
             d["<UNK>"] = 2
             break
     return d
