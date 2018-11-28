@@ -20,7 +20,6 @@ def sample(session, model, x, x_mask, graph=None):
     feed_dict = {}
     feed_dict[model.inputs.x] = x
     feed_dict[model.inputs.x_mask] = x_mask
-    feed_dict[model.sampling_epsilon] = 0.0
     feed_dict[model.training] = False
     if graph is None:
         graph = SampleGraph(model)
@@ -56,7 +55,6 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
     for model in models:
         feed_dict[model.inputs.x] = x
         feed_dict[model.inputs.x_mask] = x_mask
-        feed_dict[model.sampling_epsilon] = 0.0
         feed_dict[model.training] = False
     if graph is None:
         graph = BeamSearchGraph(models, beam_size)

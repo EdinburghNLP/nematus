@@ -26,7 +26,6 @@ class Transformer(object):
 
         # Placeholders
         self.inputs = model_inputs.ModelInputs(config)
-        self.sampling_epsilon = tf.placeholder(dtype=self.float_dtype, name='scheduled_sampling_epsilon', shape=[])
 
         # Convert from time-major to batch-major, handle factors
         self.source_ids, \
