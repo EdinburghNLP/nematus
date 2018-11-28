@@ -50,12 +50,13 @@ class ModelUpdater(object):
         self.loss = sum(weighted_losses) / sum(self.replica_weights)
 
         grad_vars = self._average_gradients(all_grad_vars, self.replica_weights)
-        grads, varss = zip(*grad_vars)
-        clipped_grads, global_norm = tf.clip_by_global_norm(
-            grads, clip_norm=config.clip_c)
-        # Might be interesting to see how the global norm changes over time,
-        # attach a summary?
-        grad_vars = zip(clipped_grads, varss)
+        if config.clip_c > 0.0:
+            grads, varss = zip(*grad_vars)
+            clipped_grads, global_norm = tf.clip_by_global_norm(
+                grads, clip_norm=config.clip_c)
+            # Might be interesting to see how the global norm changes over time,
+            # attach a summary?
+            grad_vars = zip(clipped_grads, varss)
         self.apply_grads = optimizer.apply_gradients(
             grad_vars, global_step=self.global_step)
 
