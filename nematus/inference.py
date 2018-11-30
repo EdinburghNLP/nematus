@@ -36,13 +36,34 @@ class InferenceModelSet(object):
         return rnn_inference.sample(session, model, x, x_mask,
                                     self._cached_sample_graph)
 
-    def beam_search(self, session, x, x_mask, beam_size):
+    def beam_search(self, session, x, x_mask, beam_size,
+                    normalization_alpha=0.0):
+        """Beam search using all models contained in this model set.
+
+        If using an ensemble (i.e. more than one model), then at each timestep
+        the top k tokens are selected according to the sum of the models' log
+        probabilities (where k is the beam size).
+
+        Args:
+            session: TensorFlow session.
+            x: Numpy array with shape (factors, max_seq_len, batch_size).
+            x_mask: Numpy array with shape (max_seq_len, batch_size).
+            beam_size: beam width.
+            normalization_alpha: length normalization hyperparamter.
+
+        Returns:
+            A list of lists of (translation, score) pairs. The outer list
+            contains one list for each input sentence in the batch. The inner
+            lists contain k elements (where k is the beam size), sorted by
+            score in ascending order (i.e. best first, assuming lower scores
+            are better).
+        """
         if (self._cached_beam_search_graph is None
             or self._cached_beam_search_graph.beam_size != beam_size):
             self._cached_beam_search_graph = \
                 rnn_inference.BeamSearchGraph(self._models, beam_size)
         return rnn_inference.beam_search(session, self._models, x, x_mask,
-                                         beam_size,
+                                         beam_size, normalization_alpha,
                                          self._cached_beam_search_graph)
 
 
@@ -63,9 +84,6 @@ def translate_file(input_file, output_file, session, models, configs,
         maxibatch_size: number of minibatches to read and sort, pre-translation.
         normalization_alpha: alpha parameter for length normalization.
     """
-
-    def normalize(sent, cost):
-        return (sent, cost / (len(sent) ** normalization_alpha))
 
     def translate_maxibatch(maxibatch, model_set, num_to_target,
                             num_prev_translated):
@@ -93,7 +111,12 @@ def translate_file(input_file, output_file, session, models, configs,
             y_dummy = numpy.zeros(shape=(len(x),1))
             x, x_mask, _, _ = util.prepare_data(x, y_dummy, configs[0].factors,
                                                 maxlen=None)
-            sample = model_set.beam_search(session, x, x_mask, beam_size)
+            sample = model_set.beam_search(
+                session=session,
+                x=x,
+                x_mask=x_mask,
+                beam_size=beam_size,
+                normalization_alpha=normalization_alpha)
             beams.extend(sample)
             num_translated = num_prev_translated + len(beams)
             logging.info('Translated {} sents'.format(num_translated))
@@ -104,9 +127,6 @@ def translate_file(input_file, output_file, session, models, configs,
 
         # Write the translations to the output file.
         for i, beam in enumerate(ordered_beams):
-            if normalization_alpha:
-                beam = map(lambda (sent, cost): normalize(sent, cost), beam)
-            beam = sorted(beam, key=lambda (sent, cost): cost)
             if nbest:
                 num = num_prev_translated + i
                 for sent, cost in beam:

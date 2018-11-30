@@ -29,7 +29,8 @@ def sample(session, model, x, x_mask, graph=None):
     return samples
 
 
-def beam_search(session, models, x, x_mask, beam_size, graph=None):
+def beam_search(session, models, x, x_mask, beam_size,
+                normalization_alpha=0.0, graph=None):
     """Beam search using one or more RNNModels..
 
     If using an ensemble (i.e. more than one model), then at each timestep
@@ -42,13 +43,18 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
         x: Numpy array with shape (factors, max_seq_len, batch_size).
         x_mask: Numpy array with shape (max_seq_len, batch_size).
         beam_size: beam width.
+        normalization_alpha: length normalization hyperparamter.
         graph: a BeamSearchGraph (to allow reuse if searching repeatedly).
 
     Returns:
         A list of lists of (translation, score) pairs. The outer list contains
         one list for each input sentence in the batch. The inner lists contain
-        k elements (where k is the beam size).
+        k elements (where k is the beam size), sorted by score in ascending
+        order (i.e. best first, assuming lower scores are better).
     """
+    def normalize(sent, cost):
+        return (sent, cost / (len(sent) ** normalization_alpha))
+
     x_repeat = numpy.repeat(x, repeats=beam_size, axis=-1)
     x_mask_repeat = numpy.repeat(x_mask, repeats=beam_size, axis=-1)
     feed_dict = {}
@@ -58,7 +64,12 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
     if graph is None:
         graph = BeamSearchGraph(models, beam_size)
     ys, parents, costs = session.run(graph.outputs, feed_dict=feed_dict)
-    return _reconstruct_hypotheses(ys, parents, costs, beam_size)
+    beams = []
+    for beam in _reconstruct_hypotheses(ys, parents, costs, beam_size):
+        if normalization_alpha > 0.0:
+            beam = [normalize(sent, cost) for (sent, cost) in beam]
+        beams.append(sorted(beam, key=lambda (sent, cost): cost))
+    return beams
 
 
 def _reconstruct_hypotheses(ys, parents, cost, beam_size):
