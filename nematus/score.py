@@ -47,7 +47,7 @@ def score_model(source_file, target_file, scorer_settings, options):
                     use_factor=(option.factors > 1),
                     sort_by_length=False)
 
-                losses = train.calc_loss_per_sentence(
+                losses = train.calc_cross_entropy_per_sentence(
                     option,
                     sess,
                     text_iterator,
