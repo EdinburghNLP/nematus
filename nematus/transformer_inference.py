@@ -29,7 +29,8 @@ def sample(session, model, x, x_mask, graph=None):
     return target_batch
 
 
-def beam_search(session, models, x, x_mask, beam_size, graph=None):
+def beam_search(session, models, x, x_mask, beam_size,
+                normalization_alpha=0.0, graph=None):
     """Beam search using one Transformer translation model (TODO ensemble)
 
     TODO Ensemble
@@ -43,12 +44,14 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
         x: input Tensor with shape (factors, max_seq_len, batch_size).
         x_mask: mask Tensor for x with shape (max_seq_len, batch_size).
         beam_size: beam width.
+        normalization_alpha: length normalization hyperparameter.
         graph: a BeamSearchGraph (to allow reuse if searching repeatedly).
 
     Returns:
         A list of lists of (translation, score) pairs. The outer list has one
         element for each input sentence in the batch. The inner lists have
-        k elements (where k is the beam size).
+        k elements (where k is the beam size), sorted by score in best-first
+        order.
     """
     assert len(models) == 1  # ensembles not supported yet
     feed_dict = {}
@@ -57,14 +60,15 @@ def beam_search(session, models, x, x_mask, beam_size, graph=None):
         feed_dict[model.inputs.x_mask] = x_mask
         feed_dict[model.training] = False
     if graph is None:
-        graph = BeamSearchGraph(models, beam_size)
+        graph = BeamSearchGraph(models, beam_size, normalization_alpha)
     target_batch, scores = session.run(graph.outputs, feed_dict=feed_dict)
     assert len(target_batch) == x.shape[-1]
     assert len(scores) == x.shape[-1]
     hypotheses = []
     for i in range(len(target_batch)):
         pairs = zip(target_batch[i], scores[i])
-        hypotheses.append(pairs)
+        hypotheses.append(sorted(pairs, key=lambda (sent, cost): cost,
+                                 reverse=True))
     return hypotheses
 
 
@@ -80,9 +84,11 @@ class SampleGraph(object):
 
 """Builds a graph fragment for beam search over a TransformerModel."""
 class BeamSearchGraph(object):
-    def __init__(self, models, beam_size):
+    def __init__(self, models, beam_size, normalization_alpha):
         self._beam_size = beam_size
-        self._outputs = construct_beam_search_ops(models, beam_size)
+        self._normalization_alpha = normalization_alpha
+        self._outputs = construct_beam_search_ops(models, beam_size,
+                                                  normalization_alpha)
 
     @property
     def outputs(self):
@@ -91,6 +97,10 @@ class BeamSearchGraph(object):
     @property
     def beam_size(self):
         return self._beam_size
+
+    @property
+    def normalization_alpha(self):
+        return self._normalization_alpha
 
 
 def construct_sampling_ops(model):
@@ -108,7 +118,7 @@ def construct_sampling_ops(model):
     return ids, scores
 
 
-def construct_beam_search_ops(models, beam_size):
+def construct_beam_search_ops(models, beam_size, normalization_alpha):
     """Builds a graph fragment for sampling over a TransformerModel.
 
     Args:
@@ -121,11 +131,14 @@ def construct_beam_search_ops(models, beam_size):
     """
     assert len(models) == 1
     model = models[0]
-    ids, scores = decode_greedy(model, beam_size=beam_size)
+    ids, scores = decode_greedy(model,
+                                beam_size=beam_size,
+                                normalization_alpha=normalization_alpha)
     return ids, scores
 
 
-def decode_greedy(model, do_sample=False, beam_size=0):
+def decode_greedy(model, do_sample=False, beam_size=0,
+                  normalization_alpha=None):
     # Determine size of current batch
     batch_size, _ = get_shape_list(model.source_ids)
     # Encode source sequences
@@ -135,11 +148,11 @@ def decode_greedy(model, do_sample=False, beam_size=0):
     # Decode into target sequences
     with tf.name_scope('{:s}_decode'.format(model.name)):
         dec_output, scores = decode_at_test(model.dec, enc_output,
-            cross_attn_mask, batch_size, beam_size, do_sample)
+            cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha)
     return dec_output, scores
 
 
-def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, do_sample):
+def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha):
     """ Returns the probability distribution over target-side tokens conditioned on the output of the encoder;
      performs decoding via auto-regression at test time. """
 
@@ -204,7 +217,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
                                                    beam_size,
                                                    decoder.embedding_layer.get_vocab_size(),
                                                    0,
-                                                   decoder.config.length_normalization_alpha)
+                                                   normalization_alpha)
 
         else:
             # Initialize target IDs with <GO>

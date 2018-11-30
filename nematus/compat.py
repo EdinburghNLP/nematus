@@ -89,8 +89,6 @@ def fill_options(options):
     # Nematode compatibility
     if not 'translation_max_len' in options:
         options['translation_max_len'] = options['translation_maxlen']
-    if not 'length_normalization_alpha' in options:
-        options['length_normalization_alpha'] = 0.6
     if not 'num_encoder_layers' in options:
         options['num_encoder_layers'] = options['transformer_encoder_layers']
     if not 'num_decoder_layers' in options:
@@ -134,7 +132,6 @@ def create_nematode_config_or_die(config):
     nematode_config.hidden_size = config.state_size
     nematode_config.label_smoothing_discount = config.label_smoothing
     nematode_config.translation_max_len = config.translation_maxlen
-    nematode_config.length_normalization_alpha = 1.0
     nematode_config.num_encoder_layers = config.transformer_encoder_layers
     nematode_config.num_decoder_layers = config.transformer_decoder_layers
     nematode_config.ffn_hidden_size = config.transformer_ffn_hidden_size

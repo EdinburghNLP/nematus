@@ -75,10 +75,17 @@ class InferenceModelSet(object):
             score in ascending order (i.e. best first, assuming lower scores
             are better).
         """
-        if (self._cached_beam_search_graph is None
-            or self._cached_beam_search_graph.beam_size != beam_size):
+        def cached_graph_is_usable():
+            cached_graph = self._cached_beam_search_graph
+            if cached_graph is None:
+                return False
+            return (cached_graph.beam_size == beam_size
+                    and cached_graph.normalization_alpha == normalization_alpha)
+
+        if not cached_graph_is_usable():
             self._cached_beam_search_graph = \
-                self._beam_search_graph_type(self._models, beam_size)
+                self._beam_search_graph_type(self._models, beam_size,
+                                             normalization_alpha)
         return self._beam_search_func(session, self._models, x, x_mask,
                                       beam_size, normalization_alpha,
                                       self._cached_beam_search_graph)
