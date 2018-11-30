@@ -270,8 +270,8 @@ def validate_with_script(sess, model, config):
 
 
 # TODO Support for multiple GPUs
-def calc_loss_per_sentence(config, sess, text_iterator, model,
-                           normalization_alpha=0):
+def calc_cross_entropy_per_sentence(config, sess, text_iterator, model,
+                                    normalization_alpha=0.0):
     losses = []
     for x_v, y_v in text_iterator:
         if len(x_v[0][0]) != config.factors:
@@ -296,9 +296,9 @@ def calc_loss_per_sentence(config, sess, text_iterator, model,
     return losses
 
 
-def validate(config, sess, text_iterator, model, normalization_alpha=0):
-    losses = calc_loss_per_sentence(config, sess, text_iterator, model,
-                                    normalization_alpha)
+def validate(config, sess, text_iterator, model):
+    losses = calc_cross_entropy_per_sentence(
+        config, sess, text_iterator, model, normalization_alpha=0.0)
     num_sents = len(losses)
     total_loss = sum(losses)
     logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
