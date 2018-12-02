@@ -578,8 +578,14 @@ def parse_args():
             continue
         try:
             d = util.load_dict(config.dictionaries[i])
+        except IOError as x:
+            logging.error('failed to determine vocabulary size from file: ' \
+                          '{}: {}'.format(config.dictionaries[i], str(x)))
+            sys.exit(1)
         except:
-            logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
+            logging.error('failed to determine vocabulary size from file: ' \
+                          '{}'.format(config.dictionaries[i]))
+            sys.exit(1)
         vocab_sizes[i] = max(d.values()) + 1
 
     config.source_dicts = config.dictionaries[:-1]
