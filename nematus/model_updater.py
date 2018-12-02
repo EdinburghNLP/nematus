@@ -113,7 +113,7 @@ class ModelUpdater(object):
         out_values = session.run(out, feed_dict=feed_dict)
         if write_summary:
             assert self.summary_writer != None
-            self.writer.add_summary(out_values[3], out_values[0])
+            self.summary_writer.add_summary(out_values[3], out_values[0])
         loss = out_values[2] * batch_size
         return loss
 

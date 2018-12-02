@@ -46,11 +46,11 @@ def score_model(source_file, target_file, scorer_settings, options):
                     use_factor=(option.factors > 1),
                     sort_by_length=False)
 
-                losses = train.calc_loss_per_sentence(
-                    option,
+                losses = train.calc_cross_entropy_per_sentence(
                     sess,
-                    text_iterator,
                     model,
+                    option,
+                    text_iterator,
                     normalization_alpha=scorer_settings.normalization_alpha)
 
                 scores.append(losses)
