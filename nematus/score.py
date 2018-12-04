@@ -48,10 +48,10 @@ def score_model(source_file, target_file, scorer_settings, options):
                     sort_by_length=False)
 
                 losses = train.calc_cross_entropy_per_sentence(
-                    option,
                     sess,
-                    text_iterator,
                     model,
+                    option,
+                    text_iterator,
                     normalization_alpha=scorer_settings.normalization_alpha)
 
                 scores.append(losses)

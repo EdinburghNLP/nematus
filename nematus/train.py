@@ -213,18 +213,17 @@ def train(config, sess):
                         logging.info(msg)
 
             if config.validFreq and progress.uidx % config.validFreq == 0:
-                costs = validate(config, sess, valid_text_iterator, replicas[0])
-                # validation loss is mean of normalized sentence log probs
-                valid_loss = sum(costs) / len(costs)
+                valid_ce = validate(sess, replicas[0], config,
+                                    valid_text_iterator)
                 if (len(progress.history_errs) == 0 or
-                    valid_loss < min(progress.history_errs)):
-                    progress.history_errs.append(valid_loss)
+                    valid_ce < min(progress.history_errs)):
+                    progress.history_errs.append(valid_ce)
                     progress.bad_counter = 0
                     saver.save(sess, save_path=config.saveto)
                     progress_path = '{0}.progress.json'.format(config.saveto)
                     progress.save_to_json(progress_path)
                 else:
-                    progress.history_errs.append(valid_loss)
+                    progress.history_errs.append(valid_ce)
                     progress.bad_counter += 1
                     if progress.bad_counter > config.patience:
                         logging.info('Early Stop!')
@@ -258,6 +257,18 @@ def train(config, sess):
                 break
         if progress.estop:
             break
+
+
+def validate(session, model, config, text_iterator):
+    ce_vals, token_counts = calc_cross_entropy_per_sentence(
+        sess, model, config, text_iterator, normalization_alpha=0.0)
+    num_sents = len(ce_vals)
+    num_tokens = sum(token_counts)
+    sum_ce = sum(ce_vals)
+    avg_ce = sum_ce / num_sents
+    logging.info('Validation cross entropy (AVG/SUM/N_SENTS/N_TOKENS): {0} ' \
+                 '{1} {2} {3}'.format(avg_ce, sum_ce, num_sents, num_tokens))
+    return avg_ce
 
 
 def validate_with_script(sess, model, config):
@@ -295,41 +306,64 @@ def validate_with_script(sess, model, config):
     return score
 
 
-# TODO Support for multiple GPUs
-def calc_cross_entropy_per_sentence(config, sess, text_iterator, model,
+def calc_cross_entropy_per_sentence(session, model, config, text_iterator,
                                     normalization_alpha=0.0):
-    losses = []
-    for x_v, y_v in text_iterator:
-        if len(x_v[0][0]) != config.factors:
-            logging.error('Mismatch between number of factors in settings ({0}), and number in validation corpus ({1})\n'.format(config.factors, len(x_v[0][0])))
+    """Calculates cross entropy values for a parallel corpus.
+
+    By default (when normalization_alpha is 0.0), the sentence-level cross
+    entropy is calculated. If normalization_alpha is 1.0 then the per-token
+    cross entropy is calculated. Other values of normalization_alpha may be
+    useful if the cross entropy value will be used as a score for selecting
+    between translation candidates (e.g. in reranking an n-nbest list). Using
+    a different (empirically determined) alpha value can help correct a model
+    bias toward too-short / too-long sentences.
+
+    TODO Support for multiple GPUs
+
+    Args:
+        session: TensorFlow session.
+        model: a RNNModel object.
+        config: model config.
+        text_iterator: TextIterator.
+        normalization_alpha: length normalization hyperparameter.
+
+    Returns:
+        A pair of lists. The first contains the (possibly normalized) cross
+        entropy value for each sentence pair. The second contains the
+        target-side token count for each pair (including the terminating
+        <EOS> symbol).
+    """
+    ce_vals, token_counts = [], []
+    for xx, yy in text_iterator:
+        if len(xx[0][0]) != config.factors:
+            logging.error('Mismatch between number of factors in settings ' \
+                          '({0}) and number present in data ({1})'.format(
+                          config.factors, len(xx[0][0])))
             sys.exit(1)
-        x, x_mask, y, y_mask = util.prepare_data(x_v, y_v, config.factors,
+        x, x_mask, y, y_mask = util.prepare_data(xx, yy, config.factors,
                                                  maxlen=None)
+
+        # Run the minibatch through the model to get the sentence-level cross
+        # entropy values.
         feeds = {model.inputs.x: x,
                  model.inputs.x_mask: x_mask,
                  model.inputs.y: y,
                  model.inputs.y_mask: y_mask,
                  model.inputs.training: False}
-        loss_per_sentence = sess.run(model.loss_per_sentence, feed_dict=feeds)
+        batch_ce_vals = sess.run(model.loss_per_sentence, feed_dict=feeds)
 
-        # normalize scores according to output length
+        # Optionally, do length normalization.
+        batch_token_counts = [numpy.count_nonzero(s) for s in y_mask.T]
         if normalization_alpha:
-            adjusted_lengths = numpy.array([numpy.count_nonzero(s) ** normalization_alpha for s in y_mask.T])
-            loss_per_sentence /= adjusted_lengths
+            adjusted_lens = [n**normalization_alpha for n in batch_token_counts]
+            batch_ce_vals /= numpy.array(adjusted_lens)
 
-        losses += list(loss_per_sentence)
-        logging.info( "Seen {0}".format(len(losses)))
-    return losses
+        ce_vals += list(batch_ce_vals)
+        token_counts += batch_token_counts
+        logging.info("Seen {}".format(len(ce_vals)))
 
-
-def validate(config, sess, text_iterator, model):
-    losses = calc_cross_entropy_per_sentence(
-        config, sess, text_iterator, model, normalization_alpha=0.0)
-    num_sents = len(losses)
-    total_loss = sum(losses)
-    logging.info('Validation loss (AVG/SUM/N_SENT): {0} {1} {2}'.format(
-        total_loss/num_sents, total_loss, num_sents))
-    return losses
+    assert len(ce_vals) == len(token_counts)
+    return ce_vals, token_counts
 
 
 def parse_args():
@@ -620,8 +654,14 @@ def parse_args():
             continue
         try:
             d = util.load_dict(config.dictionaries[i], config.model_type)
+        except IOError as x:
+            logging.error('failed to determine vocabulary size from file: ' \
+                          '{}: {}'.format(config.dictionaries[i], str(x)))
+            sys.exit(1)
         except:
-            logging.error('failed to determine vocabulary size from file: {0}'.format(config.dictionaries[i]))
+            logging.error('failed to determine vocabulary size from file: ' \
+                          '{}'.format(config.dictionaries[i]))
+            sys.exit(1)
         vocab_sizes[i] = max(d.values()) + 1
 
     config.source_dicts = config.dictionaries[:-1]
