@@ -40,7 +40,6 @@ class TextIterator:
     """Simple Bitext iterator."""
     def __init__(self, source, target,
                  source_dicts, target_dict,
-                 model_type,
                  batch_size=128,
                  maxlen=100,
                  source_vocab_sizes=None,
@@ -67,8 +66,8 @@ class TextIterator:
             self.target = fopen(target, 'r')
         self.source_dicts = []
         for source_dict in source_dicts:
-            self.source_dicts.append(load_dict(source_dict, model_type))
-        self.target_dict = load_dict(target_dict, model_type)
+            self.source_dicts.append(load_dict(source_dict))
+        self.target_dict = load_dict(target_dict)
 
         self.keep_data_in_memory = keep_data_in_memory
         self.batch_size = batch_size
@@ -169,6 +168,11 @@ class TextIterator:
                 self.source_buffer.reverse()
                 self.target_buffer.reverse()
 
+        # FIXME Define the <UNK> value somewhere instead of hardcoding it here.
+        unk_val = 2
+
+        def lookup_token(t, d):
+            return d[t] if t in d else unk_val
 
         try:
             # actual work here
@@ -182,18 +186,19 @@ class TextIterator:
                 tmp = []
                 for w in ss:
                     if self.use_factor:
-                        w = [self.source_dicts[i][f] if f in self.source_dicts[i] else 1 for (i,f) in enumerate(w.split('|'))]
+                        w = [lookup_token(f, self.source_dicts[i]) \
+                             for (i,f) in enumerate(w.split('|'))]
                     else:
-                        w = [self.source_dicts[0][w] if w in self.source_dicts[0] else 1]
+                        w = [lookup_token(w, self.source_dicts[0])]
                     tmp.append(w)
                 ss_indices = tmp
 
                 # read from source file and map to word index
                 tt = self.target_buffer.pop()
-                tt_indices = [self.target_dict[w] if w in self.target_dict else 1
-                      for w in tt]
+                tt_indices = [lookup_token(w, self.target_dict) for w in tt]
                 if self.target_vocab_size != None:
-                    tt_indices = [w if w < self.target_vocab_size else 1 for w in tt_indices]
+                    tt_indices = [w if w < self.target_vocab_size else unk_val \
+                                  for w in tt_indices]
 
                 source.append(ss_indices)
                 target.append(tt_indices)

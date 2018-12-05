@@ -65,22 +65,48 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
 def unicode_to_utf8(d):
     return dict((key.encode("UTF-8"), value) for (key,value) in d.items())
 
-def load_dict(filename, model_type):
+def load_dict(filename):
     try:
         with open(filename, 'rb') as f:
             d = unicode_to_utf8(json.load(f))
     except:
         with open(filename, 'rb') as f:
             d = pkl.load(f)
-    if model_type == "transformer" and "<GO>" not in d:
-        d = convert_dict_to_nematode_format(d)
+    if "<GO>" not in d or d["<GO>"] != 1:
+       update_old_vocab_dictionary(d)
     return d
 
-def convert_dict_to_nematode_format(d):
-    assert d["eos"] == 0
-    assert d["UNK"] == 1
-    del d["eos"]
-    del d["UNK"]
+
+def update_old_vocab_dictionary(d):
+    """Updates a dictionary built with an old version of build_dictionary.py
+
+    In old versions of build_dictionary.py, the special symbols were:
+
+        0 "eos"
+        1 "UNK"
+
+    In the current version, they are:
+
+        0 "<EOS>"
+        1 "<GO>"
+        2 "<UNK>"
+
+    Args:
+        d: a vocabulary dictionary.
+
+    Returns:
+        None (d is modified in-place).
+    """
+    assert "eos" in d
+    assert "UNK" in d
+    # Delete the entries for "eos" and "UNK" unless they are actually BPE
+    # subwords.
+    if d["eos"] == 0:
+        del d["eos"]
+    if d["UNK"] == 1:
+        del d["UNK"]
+    # Add entries for "<EOS>", "<UNK>", and "<GO>".
+    # FIXME We shouldn't assume that they aren't subwords.
     d["<EOS>"] = 0
     d["<GO>"] = 1
     v_max = max(d.values())
@@ -89,7 +115,7 @@ def convert_dict_to_nematode_format(d):
             d[k] = v_max + 1
             d["<UNK>"] = 2
             break
-    return d
+
 
 def load_config(basename):
     try:
@@ -144,9 +170,8 @@ def reverse_dict(dictt):
 
 
 def load_dictionaries(config):
-    m_type = config.model_type
-    source_to_num = [load_dict(d, m_type) for d in config.source_dicts]
-    target_to_num = load_dict(config.target_dict, m_type)
+    source_to_num = [load_dict(d) for d in config.source_dicts]
+    target_to_num = load_dict(config.target_dict)
     num_to_source = [reverse_dict(d) for d in source_to_num]
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target

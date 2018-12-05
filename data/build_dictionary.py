@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
+from collections import OrderedDict
+import fileinput
+import sys
+
 import numpy
 import json
 
-import sys
-import fileinput
-
-from collections import OrderedDict
 
 def main():
     for filename in sys.argv[1:]:
@@ -26,10 +26,12 @@ def main():
         sorted_words = [words[ii] for ii in sorted_idx[::-1]]
 
         worddict = OrderedDict()
-        worddict['eos'] = 0
-        worddict['UNK'] = 1
+        worddict['<EOS>'] = 0
+        worddict['<GO>'] = 1
+        worddict['<UNK>'] = 2
+        # FIXME We shouldn't assume <EOS>, <GO>, and <UNK> aren't BPE subwords.
         for ii, ww in enumerate(sorted_words):
-            worddict[ww] = ii+2
+            worddict[ww] = ii+3
 
         with open('%s.json'%filename, 'wb') as f:
             json.dump(worddict, f, indent=2, ensure_ascii=False)

@@ -36,7 +36,6 @@ def load_data(config):
                         target=config.target_dataset,
                         source_dicts=config.source_dicts,
                         target_dict=config.target_dict,
-                        model_type=config.model_type,
                         batch_size=config.batch_size,
                         maxlen=config.maxlen,
                         source_vocab_sizes=config.source_vocab_sizes,
@@ -55,7 +54,6 @@ def load_data(config):
                             target=config.valid_target_dataset,
                             source_dicts=config.source_dicts,
                             target_dict=config.target_dict,
-                            model_type=config.model_type,
                             batch_size=config.valid_batch_size,
                             maxlen=config.maxlen,
                             source_vocab_sizes=config.source_vocab_sizes,
@@ -653,7 +651,7 @@ def parse_args():
         if vocab_size >= 0:
             continue
         try:
-            d = util.load_dict(config.dictionaries[i], config.model_type)
+            d = util.load_dict(config.dictionaries[i])
         except IOError as x:
             logging.error('failed to determine vocabulary size from file: ' \
                           '{}: {}'.format(config.dictionaries[i], str(x)))
