@@ -103,31 +103,3 @@ def fill_options(options):
         options['clip_c'] = 1.
     if not 'output_hidden_activation' in options:
         options['output_hidden_activation'] = 'tanh'
-
-
-# for backwards compatibility with old models
-def revert_variable_name(name, old_version):
-    assert old_version == 0.1
-    if name.endswith("/Adam"):
-        return revert_variable_name(name[:-len("/Adam")], old_version) + "/Adam"
-    if name.endswith("/Adam_1"):
-        return revert_variable_name(name[:-len("/Adam_1")], old_version) + "/Adam_1"
-    if "forward-stack/level0/gru0" in name:
-        return name.replace("forward-stack/level0/gru0", "forwardEncoder")
-    if "backward-stack/level0/gru0" in name:
-        return name.replace("backward-stack/level0/gru0", "backwardEncoder")
-    if "decoder/base/gru0" in name:
-        return name.replace("decoder/base/gru0", "decoder")
-    if "decoder/base/attention" in name:
-        return name.replace("decoder/base/attention", "decoder")
-    if "decoder/base/gru1" in name:
-        tmp = name.replace("decoder/base/gru1", "decoder")
-        if tmp.endswith("/new_mean"):
-            return tmp.replace("/new_mean", "_1/new_mean")
-        elif tmp.endswith("/new_std"):
-            return tmp.replace("/new_std", "_1/new_std")
-        else:
-            return tmp + "_1"
-    if "decoder/embedding" in name:
-        return name.replace("decoder/embedding", "decoder/y_embeddings_layer")
-    return name
