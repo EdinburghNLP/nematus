@@ -74,19 +74,6 @@ def load_dict(filename):
             return pkl.load(f)
 
 
-def load_config(basename):
-    try:
-        with open('%s.json' % basename, 'rb') as f:
-            return json.load(f)
-    except:
-        try:
-            with open('%s.pkl' % basename, 'rb') as f:
-                return pkl.load(f)
-        except:
-            sys.stderr.write('Error: config file {0}.json is missing\n'.format(basename))
-            sys.exit(1)
-
-
 def seq2words(seq, inverse_dictionary, join=True):
     seq = numpy.array(seq, dtype='int64')
     assert len(seq.shape) == 1

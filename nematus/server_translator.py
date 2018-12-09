@@ -2,19 +2,17 @@
 
 """Translation code used by server.py."""
 
-import sys
-import numpy
-import json
-import os
 import logging
-import argparse
+import sys
 import time
 
 from multiprocessing import Process, Queue
 from collections import defaultdict
 from Queue import Empty
 
-from compat import fill_options
+import numpy
+
+from config import load_config_from_json_file
 import exception
 import inference
 import model_loader
@@ -68,11 +66,9 @@ class Translator(object):
 
         self._options = []
         for model in self._models:
-            config = util.load_config(model)
-            # backward compatibility
-            fill_options(config)
-            config['reload'] = model
-            self._options.append(argparse.Namespace(**config))
+            config = load_config_from_json_file(model)
+            setattr(config, 'reload', model)
+            self._options.append(config)
 
         _, _, _, self._num_to_target = util.load_dictionaries(self._options[0])
 

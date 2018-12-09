@@ -3,21 +3,12 @@
 '''
 Rescoring an n-best list of translations using a translation model.
 '''
-import sys
-import argparse
-import tempfile
 import logging
+import tempfile
 
-import numpy
-
-from data_iterator import TextIterator
-from util import load_config
-from compat import fill_options
-
+from config import load_config_from_json_file
 from settings import RescorerSettings
 from score import score_model
-
-import tensorflow as tf
 
 
 def rescore(source_file, nbest_file, output_file, rescorer_settings, options):
@@ -46,10 +37,9 @@ def main(source_file, nbest_file, output_file, rescorer_settings):
     # load model model_options
     options = []
     for model in rescorer_settings.models:
-        options.append(load_config(model))
-        fill_options(options[-1])
-        options[-1]['reload'] = model
-        options[-1] = argparse.Namespace(**options[-1])
+        config = load_config_from_json_file(model)
+        setattr(config, 'reload', model)
+        options.append(config)
 
     rescore(source_file, nbest_file, output_file, rescorer_settings, options)
 

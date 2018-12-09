@@ -8,10 +8,9 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-import compat
+from config import load_config_from_json_file
 import model_loader
 import rnn_model
-import util
 
 def construct_parameter_map(config):
     def drt_tag(i):
@@ -135,11 +134,10 @@ def construct_parameter_map(config):
 
 
 def theano_to_tensorflow_config(model_path):
-    config = util.load_config(model_path)
-    compat.fill_options(config)
-    config['reload'] = None
-    config['prior_model'] = None
-    return argparse.Namespace(**config)
+    config = load_config_from_json_file(model_path)
+    setattr(config, 'reload', None)
+    setattr(config, 'prior_model', None)
+    return config
 
 
 def theano_to_tensorflow_model(in_path, out_path):
@@ -190,7 +188,7 @@ def theano_to_tensorflow_model(in_path, out_path):
 
 
 def tensorflow_to_theano_model(in_path, out_path):
-    config = util.load_config(in_path)
+    config = load_config_from_json_file(in_path)
     th2tf = construct_parameter_map(config)
     keys, values = zip(*th2tf.items())
     with tf.Session() as sess:
