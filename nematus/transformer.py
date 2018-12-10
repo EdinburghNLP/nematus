@@ -55,7 +55,7 @@ class Transformer(object):
                                                   cross_attn_mask)
             # Instantiate loss layer(s)
             loss_layer = MaskedCrossEntropy(self.dec_vocab_size,
-                                            self.config.label_smoothing_discount,
+                                            self.config.label_smoothing,
                                             self.int_dtype,
                                             self.float_dtype,
                                             time_major=False,
@@ -179,13 +179,13 @@ class TransformerEncoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
-            for layer_id in range(1, self.config.num_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
-                if layer_id == self.config.num_encoder_layers:
+                if layer_id == self.config.transformer_encoder_layers:
                     self.is_final_layer = True
                 # Specify ffn dimensions sequence
-                ffn_dims = [self.config.ffn_hidden_size, self.config.state_size]
+                ffn_dims = [self.config.transformer_ffn_hidden_size, self.config.state_size]
                 with tf.variable_scope(layer_name):
                     # Build layer blocks (see layers.py)
                     self_attn_block = AttentionBlock(self.config,
@@ -224,9 +224,9 @@ class TransformerEncoder(object):
             positional_signal = get_positional_signal(time_steps, depth, self.float_dtype)
             source_embeddings += positional_signal
             # Apply dropout
-            if self.config.dropout_embeddings > 0:
+            if self.config.transformer_dropout_embeddings > 0:
                 source_embeddings = tf.layers.dropout(source_embeddings,
-                                                      rate=self.config.dropout_embeddings, training=self.training)
+                                                      rate=self.config.transformer_dropout_embeddings, training=self.training)
             return source_embeddings, self_attn_mask, cross_attn_mask
 
         with tf.variable_scope(self.name):
@@ -234,7 +234,7 @@ class TransformerEncoder(object):
             enc_inputs, self_attn_mask, cross_attn_mask = _prepare_source()
             # Propagate inputs through the encoder stack
             enc_output = enc_inputs
-            for layer_id in range(1, self.config.num_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
                 enc_output, _ = self.encoder_stack[layer_id]['self_attn'].forward(enc_output, None, self_attn_mask)
                 enc_output = self.encoder_stack[layer_id]['ffn'].forward(enc_output)
         return enc_output, cross_attn_mask
@@ -281,7 +281,7 @@ class TransformerDecoder(object):
     def _get_initial_memories(self, batch_size, beam_size):
         """ Initializes decoder memories used for accelerated inference. """
         initial_memories = dict()
-        for layer_id in range(1, self.config.num_decoder_layers + 1):
+        for layer_id in range(1, self.config.transformer_decoder_layers + 1):
             initial_memories['layer_{:d}'.format(layer_id)] = \
                 {'keys': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1]),
                  'values': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1])}
@@ -291,13 +291,13 @@ class TransformerDecoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
-            for layer_id in range(1, self.config.num_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
-                if layer_id == self.config.num_encoder_layers:
+                if layer_id == self.config.transformer_encoder_layers:
                     self.is_final_layer = True
                 # Specify ffn dimensions sequence
-                ffn_dims = [self.config.ffn_hidden_size, self.config.state_size]
+                ffn_dims = [self.config.transformer_ffn_hidden_size, self.config.state_size]
                 with tf.variable_scope(layer_name):
                     # Build layer blocks (see layers.py)
                     self_attn_block = AttentionBlock(self.config,
@@ -329,10 +329,10 @@ class TransformerDecoder(object):
             """ Decodes the encoder-generated representations into target-side logits in parallel. """
             # Apply input dropout
             dec_input = \
-                tf.layers.dropout(target_embeddings, rate=self.config.dropout_embeddings, training=self.training)
+                tf.layers.dropout(target_embeddings, rate=self.config.transformer_dropout_embeddings, training=self.training)
             # Propagate inputs through the encoder stack
             dec_output = dec_input
-            for layer_id in range(1, self.config.num_decoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_decoder_layers + 1):
                 dec_output, _ = self.decoder_stack[layer_id]['self_attn'].forward(dec_output, None, self_attn_mask)
                 dec_output, _ = \
                     self.decoder_stack[layer_id]['cross_attn'].forward(dec_output, enc_output, cross_attn_mask)
@@ -345,9 +345,9 @@ class TransformerDecoder(object):
             # Embed target_ids
             target_embeddings = self._embed(target_ids)
             target_embeddings += positional_signal
-            if self.config.dropout_embeddings > 0:
+            if self.config.transformer_dropout_embeddings > 0:
                 target_embeddings = tf.layers.dropout(target_embeddings,
-                                                      rate=self.config.dropout_embeddings, training=self.training)
+                                                      rate=self.config.transformer_dropout_embeddings, training=self.training)
             return target_embeddings
 
         def _decoding_function():

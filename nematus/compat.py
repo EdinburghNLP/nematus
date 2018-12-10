@@ -86,27 +86,6 @@ def fill_options(options):
     if not 'adam_epsilon' in options:
         options['adam_epsilon'] = 1e-08
 
-    # Nematode compatibility
-    if not 'translation_max_len' in options:
-        options['translation_max_len'] = options['translation_maxlen']
-    if not 'num_encoder_layers' in options:
-        options['num_encoder_layers'] = options['transformer_encoder_layers']
-    if not 'num_decoder_layers' in options:
-        options['num_decoder_layers'] = options['transformer_decoder_layers']
-    if not 'ffn_hidden_size' in options:
-        options['ffn_hidden_size'] = options['transformer_ffn_hidden_size']
-    # TODO general?
-    if not 'num_heads' in options:
-        options['num_heads'] = options['transformer_num_heads']
-    if not 'dropout_embeddings' in options:
-        options['dropout_embeddings'] = options['transformer_dropout_embeddings']
-    if not 'dropout_residual' in options:
-        options['dropout_residual'] = options['transformer_dropout_residual']
-    if not 'dropout_relu' in options:
-        options['dropout_relu'] = options['transformer_dropout_relu']
-    if not 'dropout_attn' in options:
-        options['dropout_attn'] = options['transformer_dropout_attn']
-
     # set the default model version.
     if not 'model_version' in options:
         if from_theano_version and options['use_dropout']:
@@ -124,23 +103,6 @@ def fill_options(options):
         options['clip_c'] = 1.
     if not 'output_hidden_activation' in options:
         options['output_hidden_activation'] = 'tanh'
-
-
-def create_nematode_config_or_die(config):
-    # TODO Check that config is compatible with Nematode
-    nematode_config = config
-    nematode_config.hidden_size = config.state_size
-    nematode_config.label_smoothing_discount = config.label_smoothing
-    nematode_config.translation_max_len = config.translation_maxlen
-    nematode_config.num_encoder_layers = config.transformer_encoder_layers
-    nematode_config.num_decoder_layers = config.transformer_decoder_layers
-    nematode_config.ffn_hidden_size = config.transformer_ffn_hidden_size
-    nematode_config.num_heads = config.transformer_num_heads
-    nematode_config.dropout_embeddings = config.transformer_dropout_embeddings
-    nematode_config.dropout_residual = config.transformer_dropout_residual
-    nematode_config.dropout_relu = config.transformer_dropout_relu
-    nematode_config.dropout_attn = config.transformer_dropout_attn
-    return nematode_config
 
 
 # for backwards compatibility with old models

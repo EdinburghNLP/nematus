@@ -17,7 +17,6 @@ import time
 import numpy
 import tensorflow as tf
 
-import compat
 from data_iterator import TextIterator
 import exception
 import inference
@@ -74,9 +73,6 @@ def train(config, sess):
     assert (config.prior_model != None and (tf.train.checkpoint_exists(os.path.abspath(config.prior_model))) or (config.map_decay_c==0.0)), \
     "MAP training requires a prior model file: Use command-line option --prior_model"
 
-    if config.model_type == "transformer":
-        nematode_config = compat.create_nematode_config_or_die(config)
-
     # Construct the graph, with one model replica per GPU
 
     num_gpus = len(util.get_available_gpus())
@@ -92,7 +88,7 @@ def train(config, sess):
             with tf.variable_scope(tf.get_variable_scope(),
                                    reuse=tf.AUTO_REUSE):
                 if config.model_type == "transformer":
-                    model = TransformerModel(nematode_config)
+                    model = TransformerModel(config)
                 else:
                     model = rnn_model.RNNModel(config)
                 replicas.append(model)

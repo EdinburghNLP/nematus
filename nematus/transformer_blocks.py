@@ -31,31 +31,31 @@ class AttentionBlock(object):
         else:
             attn_name = 'tied_attn'
 
-        memory_size = config.hidden_size
+        memory_size = config.state_size
         if from_rnn:
             memory_size *= 2
 
         # Build layers
-        self.pre_attn = ProcessingLayer(config.hidden_size,
+        self.pre_attn = ProcessingLayer(config.state_size,
                                         use_layer_norm=True,
                                         dropout_rate=0.,
                                         training=training,
                                         name='pre_{:s}_sublayer'.format(attn_name))
 
         self.attn = MultiHeadAttentionLayer(memory_size,
-                                            config.hidden_size,
-                                            config.hidden_size,
-                                            config.hidden_size,
-                                            config.hidden_size,
-                                            config.num_heads,
+                                            config.state_size,
+                                            config.state_size,
+                                            config.state_size,
+                                            config.state_size,
+                                            config.transformer_num_heads,
                                             float_dtype,
-                                            dropout_attn=config.dropout_attn,
+                                            dropout_attn=config.transformer_dropout_attn,
                                             training=training,
                                             name='{:s}_sublayer'.format(attn_name))
 
-        self.post_attn = ProcessingLayer(config.hidden_size,
+        self.post_attn = ProcessingLayer(config.state_size,
                                          use_layer_norm=False,
-                                         dropout_rate=config.dropout_residual,
+                                         dropout_rate=config.transformer_dropout_residual,
                                          training=training,
                                          name='post_{:s}_sublayer'.format(attn_name))
 
@@ -84,7 +84,7 @@ class FFNBlock(object):
         self.is_final = is_final
 
         # Build layers
-        self.pre_ffn = ProcessingLayer(config.hidden_size,
+        self.pre_ffn = ProcessingLayer(config.state_size,
                                        use_layer_norm=True,
                                        dropout_rate=0.,
                                        training=training,
@@ -94,16 +94,16 @@ class FFNBlock(object):
                                       use_bias=True,
                                       activation=tf.nn.relu,
                                       use_layer_norm=False,
-                                      dropout_rate=config.dropout_relu,
+                                      dropout_rate=config.transformer_dropout_relu,
                                       training=training,
                                       name='ffn_sublayer')
-        self.post_ffn = ProcessingLayer(config.hidden_size,
+        self.post_ffn = ProcessingLayer(config.state_size,
                                         use_layer_norm=False,
-                                        dropout_rate=config.dropout_residual,
+                                        dropout_rate=config.transformer_dropout_residual,
                                         training=training,
                                         name='post_ffn_sublayer')
         if is_final:
-            self.pre_final = ProcessingLayer(config.hidden_size,
+            self.pre_final = ProcessingLayer(config.state_size,
                                              use_layer_norm=True,
                                              dropout_rate=0.,
                                              training=training,

@@ -161,7 +161,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
         # Propagate inputs through the encoder stack
         dec_output = target_embeddings
         # NOTE: No self-attention mask is applied at decoding, as future information is unavailable
-        for layer_id in range(1, decoder.config.num_decoder_layers + 1):
+        for layer_id in range(1, decoder.config.transformer_decoder_layers + 1):
             dec_output, memories['layer_{:d}'.format(layer_id)] = \
                 decoder.decoder_stack[layer_id]['self_attn'].forward(
                     dec_output, None, None, memories['layer_{:d}'.format(layer_id)])
@@ -179,9 +179,9 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
         target_embeddings = decoder._embed(step_target_ids)
         signal_slice = positional_signal[:, current_time_step - 1: current_time_step, :]
         target_embeddings += signal_slice
-        if decoder.config.dropout_embeddings > 0:
+        if decoder.config.transformer_dropout_embeddings > 0:
             target_embeddings = tf.layers.dropout(target_embeddings,
-                                                  rate=decoder.config.dropout_embeddings, training=decoder.training)
+                                                  rate=decoder.config.transformer_dropout_embeddings, training=decoder.training)
         return target_embeddings
 
     def _decoding_function(step_target_ids, current_time_step, memories):
@@ -200,7 +200,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
             enc_output = tf.transpose(enc_output, [1, 0, 2])
             cross_attn_mask = tf.transpose(cross_attn_mask, [3, 1, 2, 0])
 
-        positional_signal = get_positional_signal(decoder.config.translation_max_len,
+        positional_signal = get_positional_signal(decoder.config.translation_maxlen,
                                                   decoder.config.embedding_size,
                                                   decoder.float_dtype)
         if beam_size > 0:
@@ -212,7 +212,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
                                                    initial_memories,
                                                    decoder.int_dtype,
                                                    decoder.float_dtype,
-                                                   decoder.config.translation_max_len,
+                                                   decoder.config.translation_maxlen,
                                                    batch_size,
                                                    beam_size,
                                                    decoder.embedding_layer.get_vocab_size(),
@@ -228,7 +228,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
                                                      initial_memories,
                                                      decoder.int_dtype,
                                                      decoder.float_dtype,
-                                                     decoder.config.translation_max_len,
+                                                     decoder.config.translation_maxlen,
                                                      batch_size,
                                                      0,
                                                      do_sample,
