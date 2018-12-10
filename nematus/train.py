@@ -235,7 +235,7 @@ def train(config, sess):
 
 def validate(session, model, config, text_iterator):
     ce_vals, token_counts = calc_cross_entropy_per_sentence(
-        sess, model, config, text_iterator, normalization_alpha=0.0)
+        session, model, config, text_iterator, normalization_alpha=0.0)
     num_sents = len(ce_vals)
     num_tokens = sum(token_counts)
     sum_ce = sum(ce_vals)
@@ -245,14 +245,14 @@ def validate(session, model, config, text_iterator):
     return avg_ce
 
 
-def validate_with_script(sess, model, config):
+def validate_with_script(session, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile()
     inference.translate_file(input_file=open(config.valid_source_dataset),
                              output_file=out,
-                             session=sess,
+                             session=session,
                              models=[model],
                              configs=[config],
                              beam_size=config.beam_size,
@@ -324,7 +324,7 @@ def calc_cross_entropy_per_sentence(session, model, config, text_iterator,
                  model.inputs.y: y,
                  model.inputs.y_mask: y_mask,
                  model.inputs.training: False}
-        batch_ce_vals = sess.run(model.loss_per_sentence, feed_dict=feeds)
+        batch_ce_vals = session.run(model.loss_per_sentence, feed_dict=feeds)
 
         # Optionally, do length normalization.
         batch_token_counts = [numpy.count_nonzero(s) for s in y_mask.T]
