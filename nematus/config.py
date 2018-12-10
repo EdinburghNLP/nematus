@@ -89,15 +89,18 @@ class ConfigSpecification:
         """Builds the collection of ParameterSpecifications."""
 
         # Define the parameter groups and their descriptions.
-        self._group_descriptions = collections.OrderedDict()
-        self._group_descriptions[''] = None
-        self._group_descriptions['data'] = 'data sets; model loading and ' \
-                                           'saving'
-        self._group_descriptions['network'] = 'network parameters'
-        self._group_descriptions['training'] = 'training parameters'
-        self._group_descriptions['validation'] = 'validation parameters'
-        self._group_descriptions['display'] = 'display parameters'
-        self._group_descriptions['translate'] = 'translate parameters'
+        description_pairs = [
+            ('',                      None),
+            ('data',                  'data sets; model loading and saving'),
+            ('network',               'network parameters (general)'),
+            ('network_transformer',   'network parameters (transformer-'
+                                      'specific)'),
+            ('training',              'training parameters'),
+            ('validation',            'validation parameters'),
+            ('display',               'display parameters'),
+            ('translate',             'translate parameters'),
+        ]
+        self._group_descriptions = collections.OrderedDict(description_pairs)
 
         # Add all the ParameterSpecification objects.
         self._param_specs = self._define_param_specs()
@@ -227,6 +230,12 @@ class ConfigSpecification:
         # Add command-line parameters for 'network' group.
 
         group = param_specs['network']
+
+        group.append(ParameterSpecification(
+            name='model_type', default='rnn',
+            visible_arg_names=['--model_type'],
+            type=str, choices=['rnn', 'transformer'],
+            help='model type (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='embedding_size', default=512,
@@ -387,9 +396,87 @@ class ConfigSpecification:
             type=int, metavar='INT',
             help='number of softmax components to use (default: %(default)s)'))
 
+        # Add command-line parameters for 'network_transformer' group.
+
+        group = param_specs['network_transformer']
+
+        group.append(ParameterSpecification(
+            name='transformer_encoder_layers', default=6,
+            visible_arg_names=['--transformer_encoder_layers'],
+            type=int, metavar='INT',
+            help='number of encoder layers (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_decoder_layers', default=6,
+            visible_arg_names=['--transformer_decoder_layers'],
+            type=int, metavar='INT',
+            help='number of decoder layers (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_ffn_hidden_size', default=2048,
+            visible_arg_names=['--transformer_ffn_hidden_size'],
+            type=int, metavar='INT',
+            help='inner dimensionality of feed-forward sub-layers in FAN '
+                 'models (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_num_heads', default=8,
+            visible_arg_names=['--transformer_num_heads'],
+            type=int, metavar='INT',
+            help='number of attention heads used in multi-head attention '
+                 '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_dropout_embeddings', default=0.1,
+            visible_arg_names=['--transformer_dropout_embeddings'],
+            type=float, metavar='FLOAT',
+            help='dropout applied to sums of word embeddings and positional '
+                 'encodings (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_dropout_residual', default=0.1,
+            visible_arg_names=['--transformer_dropout_residual'],
+            type=float, metavar='FLOAT',
+            help='dropout applied to residual connections (default: '
+                 '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_dropout_relu', default=0.1,
+            visible_arg_names=['--transformer_dropout_relu'],
+            type=float, metavar='FLOAT',
+            help='dropout applied to the internal activation of the '
+                 'feed-forward sub-layers (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_dropout_attn', default=0.1,
+            visible_arg_names=['--transformer_dropout_attn'],
+            type=float, metavar='FLOAT',
+            help='dropout applied to attention weights (default: '
+                 '%(default)s)'))
+
         # Add command-line parameters for 'training' group.
 
         group = param_specs['training']
+
+        group.append(ParameterSpecification(
+            name='loss_function', default="cross-entropy",
+            visible_arg_names=['--loss_function'],
+            type=str, choices=['cross-entropy', 'per-token-cross-entropy'],
+            help='loss function (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='warmup_steps', default=8000,
+            visible_arg_names=['--warmup_steps'],
+            type=int, metavar='INT',
+            help='number of initial updates during which the learning rate is '
+                 'increased linearly during learning rate scheduling '
+                 '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='learning_schedule', default='constant',
+            visible_arg_names=['--learning_schedule'],
+            type=str, choices=['constant', 'transformer'],
+            help='learning schedule (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='maxlen', default=100,
