@@ -192,7 +192,7 @@ class ConfigSpecification:
 
         group.append(ParameterSpecification(
             name='saveto', default='model',
-            visible_arg_names=['--model', '--saveto'],
+            visible_arg_names=['--model'], hidden_arg_names=['--saveto'],
             type=str, metavar='PATH',
             help='model file name (default: %(default)s)'))
 
@@ -234,20 +234,22 @@ class ConfigSpecification:
         group.append(ParameterSpecification(
             name='embedding_size', default=512,
             legacy_names=['dim_word'],
-            visible_arg_names=['--embedding_size', '--dim_word'],
+            visible_arg_names=['--embedding_size'],
+            hidden_arg_names=['--dim_word'],
             type=int, metavar='INT',
             help='embedding layer size (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='state_size', default=1000,
             legacy_names=['dim'],
-            visible_arg_names=['--state_size', '--dim'],
+            visible_arg_names=['--state_size'], hidden_arg_names=['--dim'],
             type=int, metavar='INT',
             help='hidden state size (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='source_vocab_sizes', default=None,
-            visible_arg_names=['--source_vocab_sizes', '--n_words_src'],
+            visible_arg_names=['--source_vocab_sizes'],
+            hidden_arg_names=['--n_words_src'],
             derivation_func=_derive_source_vocab_sizes,
             type=int, metavar='INT', nargs='+',
             help='source vocabulary sizes (one per input factor) (default: '
@@ -256,7 +258,8 @@ class ConfigSpecification:
         group.append(ParameterSpecification(
             name='target_vocab_size', default=-1,
             legacy_names=['n_words'],
-            visible_arg_names=['--target_vocab_size', '--n_words'],
+            visible_arg_names=['--target_vocab_size'],
+            hidden_arg_names=['--n_words'],
             derivation_func=_derive_target_vocab_size,
             type=int, metavar='INT',
             help='target vocabulary size (default: %(default)s)'))
@@ -494,7 +497,8 @@ class ConfigSpecification:
 
         group.append(ParameterSpecification(
             name='learning_rate', default=0.0001,
-            visible_arg_names=['--learning_rate', '--lrate'],
+            visible_arg_names=['--learning_rate'],
+            hidden_arg_names=['--lrate'],
             legacy_names=['lrate'],
             type=float, metavar='FLOAT',
             help='learning rate (default: %(default)s)'))
