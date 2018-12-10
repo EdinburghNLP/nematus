@@ -184,8 +184,9 @@ class ConfigSpecification:
                  'vocabulary)'))
 
         group.append(ParameterSpecification(
-            name='saveFreq', default=30000,
-            visible_arg_names=['--saveFreq'],
+            name='save_freq', default=30000,
+            legacy_names=['saveFreq'],
+            visible_arg_names=['--save_freq'], hidden_arg_names=['--saveFreq'],
             type=int, metavar='INT',
             help='save frequency (default: %(default)s)'))
 
@@ -218,8 +219,10 @@ class ConfigSpecification:
                  'as the --model file)'))
 
         group.append(ParameterSpecification(
-            name='summaryFreq', default=0,
-            visible_arg_names=['--summaryFreq'],
+            name='summary_freq', default=0,
+            legacy_names=['summaryFreq'],
+            visible_arg_names=['--summary_freq'],
+            hidden_arg_names=['--summaryFreq'],
             type=int, metavar='INT',
             help='Save summaries after INT updates, if 0 do not save '
                  'summaries (default: %(default)s)'))
@@ -556,8 +559,10 @@ class ConfigSpecification:
                  'sorting by length. (default: %(default)s)'))
 
         group.append(ParameterSpecification(
-            name='validFreq', default=10000,
-            visible_arg_names=['--validFreq'],
+            name='valid_freq', default=10000,
+            legacy_names=['validFreq'],
+            visible_arg_names=['--valid_freq'],
+            hidden_arg_names=['--validFreq'],
             type=int, metavar='INT',
             help='validation frequency (default: %(default)s)'))
 
@@ -582,21 +587,25 @@ class ConfigSpecification:
         group = param_specs['display']
 
         group.append(ParameterSpecification(
-            name='dispFreq', default=1000,
-            visible_arg_names=['--dispFreq'],
+            name='disp_freq', default=1000,
+            legacy_names=['dispFreq'],
+            visible_arg_names=['--disp_freq'], hidden_arg_names=['--dispFreq'],
             type=int, metavar='INT',
             help='display loss after INT updates (default: %(default)s)'))
 
         group.append(ParameterSpecification(
-            name='sampleFreq', default=10000,
-            visible_arg_names=['--sampleFreq'],
+            name='sample_freq', default=10000,
+            legacy_names=['sampleFreq'],
+            visible_arg_names=['--sample_freq'],
+            hidden_arg_names=['--sampleFreq'],
             type=int, metavar='INT',
             help='display some samples after INT updates (default: '
                  '%(default)s)'))
 
         group.append(ParameterSpecification(
-            name='beamFreq', default=10000,
-            visible_arg_names=['--beamFreq'],
+            name='beam_freq', default=10000,
+            legacy_names=['beamFreq'],
+            visible_arg_names=['--beam_freq'], hidden_arg_names=['--beamFreq'],
             type=int, metavar='INT',
             help='display some beam_search samples after INT updates '
                  '(default: %(default)s)'))
