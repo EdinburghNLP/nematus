@@ -46,7 +46,7 @@ def load_data(config):
                         token_batch_size=config.token_batch_size,
                         keep_data_in_memory=config.keep_train_set_in_memory)
 
-    if config.validFreq and config.valid_source_dataset and config.valid_target_dataset:
+    if config.valid_freq and config.valid_source_dataset and config.valid_target_dataset:
         valid_text_iterator = TextIterator(
                             source=config.valid_source_dataset,
                             target=config.valid_target_dataset,
@@ -115,7 +115,7 @@ def train(config, sess):
         logging.error('No valid optimizer defined: {}'.format(config.optimizer))
         sys.exit(1)
 
-    if config.summaryFreq:
+    if config.summary_freq:
         summary_dir = (config.summary_dir if config.summary_dir is not None
                        else os.path.abspath(os.path.dirname(config.saveto)))
         writer = tf.summary.FileWriter(summary_dir, sess.graph)
@@ -156,7 +156,7 @@ def train(config, sess):
             if x_in is None:
                 logging.info('Minibatch with zero sample under length {0}'.format(config.maxlen))
                 continue
-            write_summary_for_this_batch = config.summaryFreq and ((progress.uidx % config.summaryFreq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
+            write_summary_for_this_batch = config.summary_freq and ((progress.uidx % config.summary_freq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (factors, seqLen, batch_size) = x_in.shape
 
             loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in,
@@ -166,7 +166,7 @@ def train(config, sess):
             n_words += int(numpy.sum(y_mask_in))
             progress.uidx += 1
 
-            if config.dispFreq and progress.uidx % config.dispFreq == 0:
+            if config.disp_freq and progress.uidx % config.disp_freq == 0:
                 duration = time.time() - last_time
                 disp_time = datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
                 logging.info('{0} Epoch: {1} Update: {2} Loss/word: {3} Words/sec: {4} Sents/sec: {5}'.format(disp_time, progress.eidx, progress.uidx, total_loss/n_words, n_words/duration, n_sents/duration))
@@ -175,7 +175,7 @@ def train(config, sess):
                 n_sents = 0
                 n_words = 0
 
-            if config.sampleFreq and progress.uidx % config.sampleFreq == 0:
+            if config.sample_freq and progress.uidx % config.sample_freq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:, :10]
                 samples = model_set.sample(sess, x_small, x_mask_small)
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
@@ -187,7 +187,7 @@ def train(config, sess):
                     logging.info('TARGET: {}'.format(target))
                     logging.info('SAMPLE: {}'.format(sample))
 
-            if config.beamFreq and progress.uidx % config.beamFreq == 0:
+            if config.beam_freq and progress.uidx % config.beam_freq == 0:
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
                 samples = model_set.beam_search(sess, x_small, x_mask_small,
                                                config.beam_size,
@@ -205,7 +205,7 @@ def train(config, sess):
                             i, sample, cost, len(sample), cost/len(sample))
                         logging.info(msg)
 
-            if config.validFreq and progress.uidx % config.validFreq == 0:
+            if config.valid_freq and progress.uidx % config.valid_freq == 0:
                 valid_ce = validate(sess, replicas[0], config,
                                     valid_text_iterator)
                 if (len(progress.history_errs) == 0 or
@@ -236,7 +236,7 @@ def train(config, sess):
                         progress_path = '{}.progress.json'.format(save_path)
                         progress.save_to_json(progress_path)
 
-            if config.saveFreq and progress.uidx % config.saveFreq == 0:
+            if config.save_freq and progress.uidx % config.save_freq == 0:
                 saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
                 progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
                 progress.save_to_json(progress_path)
@@ -254,7 +254,7 @@ def train(config, sess):
 
 def validate(session, model, config, text_iterator):
     ce_vals, token_counts = calc_cross_entropy_per_sentence(
-        sess, model, config, text_iterator, normalization_alpha=0.0)
+        session, model, config, text_iterator, normalization_alpha=0.0)
     num_sents = len(ce_vals)
     num_tokens = sum(token_counts)
     sum_ce = sum(ce_vals)
@@ -264,14 +264,14 @@ def validate(session, model, config, text_iterator):
     return avg_ce
 
 
-def validate_with_script(sess, model, config):
+def validate_with_script(session, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile()
     inference.translate_file(input_file=open(config.valid_source_dataset),
                              output_file=out,
-                             session=sess,
+                             session=session,
                              models=[model],
                              configs=[config],
                              beam_size=config.beam_size,
@@ -343,7 +343,7 @@ def calc_cross_entropy_per_sentence(session, model, config, text_iterator,
                  model.inputs.y: y,
                  model.inputs.y_mask: y_mask,
                  model.inputs.training: False}
-        batch_ce_vals = sess.run(model.loss_per_sentence, feed_dict=feeds)
+        batch_ce_vals = session.run(model.loss_per_sentence, feed_dict=feeds)
 
         # Optionally, do length normalization.
         batch_token_counts = [numpy.count_nonzero(s) for s in y_mask.T]

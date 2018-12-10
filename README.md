@@ -102,20 +102,20 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --source_dataset PATH | parallel training corpus (source) |
 | --target_dataset PATH | parallel training corpus (target) |
 | --dictionaries PATH [PATH ...] | network vocabularies (one per source factor, plus target vocabulary) |
-| --saveFreq INT | save frequency (default: 30000) |
-| --model PATH, --saveto PATH | model file name (default: model) |
-| --reload PATH | load existing model from this path. Set to "latest_checkpoint" to reload the latest checkpoint in the same directory of --saveto |
+| --save_freq INT | save frequency (default: 30000) |
+| --model PATH | model file name (default: model) |
+| --reload PATH | load existing model from this path. Set to "latest_checkpoint" to reload the latest checkpoint in the same directory of --model |
 | --no_reload_training_progress | don't reload training progress (only used if --reload is enabled) |
-| --summary_dir PATH | directory for saving summaries (default: same directory as the --saveto file) |
-| --summaryFreq INT | Save summaries after INT updates, if 0 do not save summaries (default: 0) |
+| --summary_dir PATH | directory for saving summaries (default: same directory as the --model file) |
+| --summary_freq INT | Save summaries after INT updates, if 0 do not save summaries (default: 0) |
 
 #### network parameters
 | parameter | description |
 |---        |---          |
-| --embedding_size INT, --dim_word INT | embedding layer size (default: 512) |
-| --state_size INT, --dim INT | hidden state size (default: 1000) |
-| --source_vocab_sizes INT [INT ...], --n_words_src INT [INT ...] | source vocabulary sizes (one per input factor) (default: None) |
-| --target_vocab_size INT, --n_words INT | target vocabulary size (default: -1) |
+| --embedding_size INT | embedding layer size (default: 512) |
+| --state_size INT | hidden state size (default: 1000) |
+| --source_vocab_sizes INT [INT ...] | source vocabulary sizes (one per input factor) (default: None) |
+| --target_vocab_size INT | target vocabulary size (default: -1) |
 | --factors INT | number of input factors (default: 1) |
 | --dim_per_factor INT [INT ...] | list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: None) |
 | --enc_depth INT | number of encoder layers (default: 1) |
@@ -125,8 +125,8 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --dec_high_recurrence_transition_depth INT | number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: 1) |
 | --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
 | --use_dropout | use dropout layer (default: False) |
-| --dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: 0.2) |
-| --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
+| --dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: None) |
+| --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: None) |
 | --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
 | --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
 | --use_layer_norm, --layer_normalisation | Set to use layer normalization in encoder and decoder |
@@ -153,11 +153,10 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --no_sort_by_length | do not sort sentences in maxibatch by length |
 | --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --optimizer {adam} | optimizer (default: adam) |
-| --learning_rate FLOAT, --lrate FLOAT | learning rate (default: 0.0001) |
+| --learning_rate FLOAT | learning rate (default: 0.0001) |
 | --adam_beta1 FLOAT | exponential decay rate for the first moment estimates (default: 0.9) |
 | --adam_beta2 FLOAT | exponential decay rate for the second moment estimates (default: 0.999) |
 | --adam_epsilon FLOAT | constant for numerical stability (default: 1e-08) |
-| --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
 
 #### validation parameters
 | parameter | description |
@@ -165,16 +164,17 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --valid_source_dataset PATH | source validation corpus (default: None) |
 | --valid_target_dataset PATH | target validation corpus (default: None) |
 | --valid_batch_size INT | validation minibatch size (default: 80) |
-| --validFreq INT | validation frequency (default: 10000) |
+| --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
+| --valid_freq INT | validation frequency (default: 10000) |
 | --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
 | --patience INT | early stopping patience (default: 10) |
 
 #### display parameters
 | parameter | description |
 |---        |---          |
-| --dispFreq INT | display loss after INT updates (default: 1000) |
-| --sampleFreq INT | display some samples after INT updates (default: 10000) |
-| --beamFreq INT | display some beam_search samples after INT updates (default: 10000) |
+| --disp_freq INT | display loss after INT updates (default: 1000) |
+| --sample_freq INT | display some samples after INT updates (default: 10000) |
+| --beam_freq INT | display some beam_search samples after INT updates (default: 10000) |
 | --beam_size INT | size of the beam (default: 12) |
 
 #### translate parameters
