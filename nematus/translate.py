@@ -7,13 +7,12 @@ import logging
 
 import tensorflow as tf
 
-import compat
+from config import load_config_from_json_file
 import inference
 import model_loader
 import rnn_model
 from settings import TranslationSettings
 from transformer import Transformer as TransformerModel
-import util
 
 
 def main(settings):
@@ -33,10 +32,9 @@ def main(settings):
     # Load config file for each model.
     configs = []
     for model in settings.models:
-        config = util.load_config(model)
-        compat.fill_options(config)
-        config['reload'] = model
-        configs.append(argparse.Namespace(**config))
+        config = load_config_from_json_file(model)
+        setattr(config, 'reload', model)
+        configs.append(config)
 
     # Create the model graphs and restore their variables.
     logging.debug("Loading models\n")

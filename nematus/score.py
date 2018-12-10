@@ -12,9 +12,8 @@ import logging
 
 import numpy
 
+from config import load_config_from_json_file
 from data_iterator import TextIterator
-from util import load_config
-from compat import fill_options
 import model_loader
 import train
 import rnn_model
@@ -75,10 +74,9 @@ def main(source_file, target_file, output_file, scorer_settings):
     # load model model_options
     options = []
     for model in scorer_settings.models:
-        options.append(load_config(model))
-        fill_options(options[-1])
-        options[-1]['reload'] = model
-        options[-1] = argparse.Namespace(**options[-1])
+        config = load_config_from_json_file(model)
+        setattr(config, 'reload', model)
+        options.append(config)
 
     scores = score_model(source_file, target_file, scorer_settings, options)
     write_scores(source_file, target_file, scores, output_file, scorer_settings)

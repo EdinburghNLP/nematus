@@ -7,7 +7,6 @@ import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
-import compat
 import training_progress
 
 def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
@@ -36,7 +35,7 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
             continue
         if config.model_version == 0.1:
             # Backwards compatibility with the old variable naming scheme.
-            saved_name = compat.revert_variable_name(saved_name, 0.1)
+            saved_name = _revert_variable_name(saved_name, 0.1)
         var_map[saved_name] = v
     saver = tf.train.Saver(var_map, max_to_keep=None)
 
@@ -113,3 +112,33 @@ def load_prior(config, sess, saver):
              assign_tensors.append(prior_variable.assign(v))
      tf.variables_initializer(prior_variables)
      sess.run(assign_tensors)
+
+
+# for backwards compatibility with old models
+def _revert_variable_name(name, old_version):
+    assert old_version == 0.1
+    if name.endswith("/Adam"):
+        prefix = name[:-len("/Adam")]
+        return _revert_variable_name(prefix, old_version) + "/Adam"
+    if name.endswith("/Adam_1"):
+        prefix = name[:-len("/Adam_1")]
+        return _revert_variable_name(prefix, old_version) + "/Adam_1"
+    if "forward-stack/level0/gru0" in name:
+        return name.replace("forward-stack/level0/gru0", "forwardEncoder")
+    if "backward-stack/level0/gru0" in name:
+        return name.replace("backward-stack/level0/gru0", "backwardEncoder")
+    if "decoder/base/gru0" in name:
+        return name.replace("decoder/base/gru0", "decoder")
+    if "decoder/base/attention" in name:
+        return name.replace("decoder/base/attention", "decoder")
+    if "decoder/base/gru1" in name:
+        tmp = name.replace("decoder/base/gru1", "decoder")
+        if tmp.endswith("/new_mean"):
+            return tmp.replace("/new_mean", "_1/new_mean")
+        elif tmp.endswith("/new_std"):
+            return tmp.replace("/new_std", "_1/new_std")
+        else:
+            return tmp + "_1"
+    if "decoder/embedding" in name:
+        return name.replace("decoder/embedding", "decoder/y_embeddings_layer")
+    return name
