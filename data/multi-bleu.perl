@@ -31,12 +31,24 @@ while(-e "$stem$ref") {
 &add_to_ref($stem,\@REF) if -e $stem;
 die("ERROR: could not find reference file $stem") unless scalar @REF;
 
+# add additional references explicitly specified on the command line
+shift;
+foreach my $stem (@ARGV) {
+    &add_to_ref($stem,\@REF) if -e $stem;
+}
+
+
+
 sub add_to_ref {
     my ($file,$REF) = @_;
     my $s=0;
-    open(REF,$file) or die "Can't read $file";
+    if ($file =~ /.gz$/) {
+	open(REF,"gzip -dc $file|") or die "Can't read $file";
+    } else { 
+	open(REF,$file) or die "Can't read $file";
+    }
     while(<REF>) {
-	chop;
+	chomp;
 	push @{$$REF[$s++]}, $_;
     }
     close(REF);
@@ -45,7 +57,7 @@ sub add_to_ref {
 my(@CORRECT,@TOTAL,$length_translation,$length_reference);
 my $s=0;
 while(<STDIN>) {
-    chop;
+    chomp;
     $_ = lc if $lowercase;
     my @WORD = split;
     my %REF_NGRAM = ();
@@ -155,6 +167,9 @@ printf "BLEU = %.2f, %.1f/%.1f/%.1f/%.1f (BP=%.3f, ratio=%.3f, hyp_len=%d, ref_l
     $length_translation / $length_reference,
     $length_translation,
     $length_reference;
+
+
+print STDERR "It is not advisable to publish scores from multi-bleu.perl.  The scores depend on your tokenizer, which is unlikely to be reproducible from your paper or consistent across research groups.  Instead you should detokenize then use mteval-v14.pl, which has a standard tokenization.  Scores from multi-bleu.perl can still be used for internal purposes when you have a consistent tokenizer.\n";
 
 sub my_log {
   return -9999999999 unless $_[0];
