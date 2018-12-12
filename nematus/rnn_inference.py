@@ -121,8 +121,9 @@ class SampleGraph(object):
 
 """Builds a graph fragment for beam search over one or more RNNModels."""
 class BeamSearchGraph(object):
-    def __init__(self, models, beam_size):
+    def __init__(self, models, beam_size, normalization_alpha):
         self._beam_size = beam_size
+        self._normalization_alpha = normalization_alpha
         self._sampled_ys, self._parents, self._cost = \
             construct_beam_search_ops(models, beam_size)
 
@@ -133,6 +134,10 @@ class BeamSearchGraph(object):
     @property
     def beam_size(self):
         return self._beam_size
+
+    @property
+    def normalization_alpha(self):
+        return self._normalization_alpha
 
 
 def construct_sampling_ops(model):
