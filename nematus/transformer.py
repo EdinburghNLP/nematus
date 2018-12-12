@@ -1,3 +1,5 @@
+"""Adapted from Nematode: https://github.com/demelin/nematode """
+
 import tensorflow as tf
 import numpy
 

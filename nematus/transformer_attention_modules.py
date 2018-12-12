@@ -1,3 +1,5 @@
+"""Adapted from Nematode: https://github.com/demelin/nematode """
+
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 

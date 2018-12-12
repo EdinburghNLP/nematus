@@ -1,3 +1,5 @@
+"""Adapted from Nematode: https://github.com/demelin/nematode """
+
 # TODO: Add an attention visualization component - very important (~easy)
 
 """ Layer implementations. """
