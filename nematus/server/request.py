@@ -9,11 +9,10 @@ from abc import ABCMeta, abstractmethod
 
 from settings import TranslationSettings
 
-class TranslationRequest(object):
+class TranslationRequest(object, metaclass=ABCMeta):
     """
     Abstract translation request base class.
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, request):
         """

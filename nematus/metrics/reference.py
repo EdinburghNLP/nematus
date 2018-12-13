@@ -3,14 +3,12 @@
 
 from abc import ABCMeta, abstractmethod
 
-class Reference:
+class Reference(metaclass=ABCMeta):
     """
     Abstract base class for re-usable translation reference. Hypotheses can be
     scored against this reference through the evaluation metric implemented in
     its `score` function.
     """
-
-    __metaclass__ = ABCMeta #abstract base class
 
     def __init__(self, reference_tokens):
         """

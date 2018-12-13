@@ -47,7 +47,7 @@ class Client(object):
         """
         url = self._get_url('/status')
         response = requests.get(url, headers=self.headers)
-        print json.dumps(response.json(), indent=4)
+        print((json.dumps(response.json(), indent=4)))
 
 
 if __name__ == "__main__":
@@ -56,6 +56,6 @@ if __name__ == "__main__":
     client = Client(host, port)
     client.print_server_status()
     source_segment = SOURCE_SEGMENTS['de']
-    print 'Translating "{0}"'.format(source_segment)
+    print(('Translating "{0}"'.format(source_segment)))
     target_segment = client.translate(source_segment)
-    print target_segment
+    print(target_segment)

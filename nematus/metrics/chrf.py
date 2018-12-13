@@ -15,10 +15,10 @@ class CharacterFScorer(Scorer):
         """
         Scorer.__init__(self, argument_string)
         # use character n-gram order of 4 by default
-        if not 'n' in self._arguments.keys():
+        if not 'n' in list(self._arguments.keys()):
             self._arguments['n'] = 6
         # use beta = 1 by default (recommendation by Maja Popovic for generative modelling)
-        if not 'beta' in self._arguments.keys():
+        if not 'beta' in list(self._arguments.keys()):
             self._arguments['beta'] = 1
 
     def set_reference(self, reference_tokens):

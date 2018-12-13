@@ -1,8 +1,8 @@
 import argparse
-import cPickle as pkl
 import collections
 import json
 import logging
+import pickle
 import sys
 
 import util
@@ -929,12 +929,12 @@ def load_config_from_json_file(basename):
 
     # Load a config from a JSON (or Pickle) config file.
     try:
-        with open('%s.json' % basename, 'rb') as f:
+        with open('%s.json' % basename, 'r', encoding='utf-8') as f:
             config_as_dict = json.load(f)
     except:
         try:
-            with open('%s.pkl' % basename, 'rb') as f:
-                config_as_dict = pkl.load(f)
+            with open('%s.pkl' % basename, 'r', encoding='utf-8') as f:
+                config_as_dict = pickle.load(f)
         except:
             logging.error('config file {}.json is missing'.format(basename))
             sys.exit(1)

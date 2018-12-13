@@ -7,11 +7,10 @@ Defines the abstract response format for Nematus server.
 
 from abc import ABCMeta, abstractmethod
 
-class TranslationResponse(object):
+class TranslationResponse(object, metaclass=ABCMeta):
     """
     Abstract translation response base class.
     """
-    __metaclass__ = ABCMeta
 
     STATUS_OK = 0
     STATUS_ERROR = 1

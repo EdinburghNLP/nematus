@@ -2,7 +2,7 @@
 Utility functions
 '''
 
-import cPickle as pkl
+import pickle as pkl
 import exception
 import json
 import numpy
@@ -53,7 +53,7 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
     x_mask = numpy.zeros((maxlen_x, n_samples)).astype('float32')
     y_mask = numpy.zeros((maxlen_y, n_samples)).astype('float32')
     for idx, [s_x, s_y] in enumerate(zip(seqs_x, seqs_y)):
-        x[:, :lengths_x[idx], idx] = zip(*s_x)
+        x[:, :lengths_x[idx], idx] = list(zip(*s_x))
         x_mask[:lengths_x[idx]+1, idx] = 1.
         y[:lengths_y[idx], idx] = s_y
         y_mask[:lengths_y[idx]+1, idx] = 1.
@@ -63,14 +63,14 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
 
 #json loads strings as unicode; we currently still work with Python 2 strings, and need conversion
 def unicode_to_utf8(d):
-    return dict((key.encode("UTF-8"), value) for (key,value) in d.items())
+    return dict((key.encode("UTF-8"), value) for (key,value) in list(d.items()))
 
 def load_dict(filename):
     try:
-        with open(filename, 'rb') as f:
-            d = unicode_to_utf8(json.load(f))
+        with open(filename, 'r', encoding='utf-8') as f:
+            d = json.load(f)
     except:
-        with open(filename, 'rb') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             d = pkl.load(f)
     if "<GO>" not in d or d["<GO>"] != 1:
        update_old_vocab_dictionary(d)
@@ -151,8 +151,8 @@ def factoredseq2words(seq, inverse_dictionaries, join=True):
     return ' '.join(words) if join else words
 
 def reverse_dict(dictt):
-    keys, values = zip(*dictt.items())
-    r_dictt = dict(zip(values, keys))
+    keys, values = list(zip(*list(dictt.items())))
+    r_dictt = dict(list(zip(values, keys)))
     return r_dictt
 
 
@@ -171,7 +171,7 @@ def read_all_lines(config, sentences, batch_size):
         assert len(config.source_vocab_sizes) == len(source_to_num)
         for d, vocab_size in zip(source_to_num, config.source_vocab_sizes):
             if vocab_size != None and vocab_size > 0:
-                for key, idx in d.items():
+                for key, idx in list(d.items()):
                     if idx >= vocab_size:
                         del d[key]
 
@@ -191,8 +191,7 @@ def read_all_lines(config, sentences, batch_size):
             line.append(w)
         lines.append(line)
     lines = numpy.array(lines)
-    lengths = numpy.array(map(lambda l: len(l), lines))
-    lengths = numpy.array(lengths)
+    lengths = numpy.array([len(l) for l in lines])
     idxs = lengths.argsort()
     lines = lines[idxs]
 

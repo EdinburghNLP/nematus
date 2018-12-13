@@ -137,7 +137,7 @@ def train(config, sess):
 
     #save model options
     config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
-    json.dump(config_as_dict, open('%s.json' % config.saveto, 'wb'), indent=2)
+    json.dump(config_as_dict, open('%s.json' % config.saveto, 'w'), indent=2)
 
     text_iterator, valid_text_iterator = load_data(config)
     _, _, num_to_source, num_to_target = util.load_dictionaries(config)
@@ -145,7 +145,7 @@ def train(config, sess):
     n_sents, n_words = 0, 0
     last_time = time.time()
     logging.info("Initial uidx={}".format(progress.uidx))
-    for progress.eidx in xrange(progress.eidx, config.max_epochs):
+    for progress.eidx in range(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
         for source_sents, target_sents in text_iterator:
             if len(source_sents[0][0]) != config.factors:
@@ -268,7 +268,7 @@ def validate_with_script(session, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
-    out = tempfile.NamedTemporaryFile()
+    out = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8')
     inference.translate_file(input_file=open(config.valid_source_dataset),
                              output_file=out,
                              session=session,
@@ -281,7 +281,8 @@ def validate_with_script(session, model, config):
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
+    stdout_bytes, stderr_bytes = proc.communicate()
+    stdout, stderr = stdout_bytes.decode('utf-8'), stderr_bytes.decode('utf-8')
     if len(stderr) > 0:
         logging.info("Validation script wrote the following to standard "
                      "error:\n" + stderr)

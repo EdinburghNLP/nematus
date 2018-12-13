@@ -3,13 +3,11 @@
 
 from abc import ABCMeta, abstractmethod
 
-class Scorer:
+class Scorer(metaclass=ABCMeta):
     """
     Abstract base class for MT evaluation metric. Can be passed on to a
     Reference for scoring translation hypotheses.
     """
-
-    __metaclass__ = ABCMeta #abstract base class
 
     def __init__(self, argument_string):
         """

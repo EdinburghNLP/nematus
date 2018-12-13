@@ -68,7 +68,7 @@ def beam_search(session, models, x, x_mask, beam_size,
     for beam in _reconstruct_hypotheses(ys, parents, costs, beam_size):
         if normalization_alpha > 0.0:
             beam = [normalize(sent, cost) for (sent, cost) in beam]
-        beams.append(sorted(beam, key=lambda (sent, cost): cost))
+        beams.append(sorted(beam, key=lambda sent_cost: sent_cost[1]))
     return beams
 
 
@@ -96,7 +96,7 @@ def _reconstruct_hypotheses(ys, parents, cost, beam_size):
             return reconstruct_single(ys, parents, hypoId, hypo, pos - 1)
 
     hypotheses = []
-    batch_size = ys.shape[1] / beam_size
+    batch_size = ys.shape[1] // beam_size
     pos = ys.shape[0] - 1
     for batch in range(batch_size):
         hypotheses.append([])
@@ -242,7 +242,7 @@ def construct_beam_search_ops(models, beam_size):
     f_min = numpy.finfo(numpy.float32).min
     init_cost = [0.] + [f_min]*(beam_size-1) # to force first top k are from first hypo only
     init_cost = tf.constant(init_cost, dtype=tf.float32)
-    init_cost = tf.tile(init_cost, multiples=[batch_size/beam_size])
+    init_cost = tf.tile(init_cost, multiples=[batch_size//beam_size])
     ys_array = tf.TensorArray(
                 dtype=tf.int32,
                 size=translation_maxlen,
@@ -314,7 +314,7 @@ def construct_beam_search_ops(models, beam_size):
                     limit = batch_size,
                     dtype=tf.int32)
         offsets = tf.expand_dims(offsets, axis=1)
-        survivor_idxs = (indices/target_vocab_size) + offsets
+        survivor_idxs = (indices // target_vocab_size) + offsets
         new_ys = indices % target_vocab_size
         survivor_idxs = tf.reshape(survivor_idxs, shape=[batch_size])
         new_ys = tf.reshape(new_ys, shape=[batch_size])

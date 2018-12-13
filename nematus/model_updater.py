@@ -51,12 +51,12 @@ class ModelUpdater(object):
 
         grad_vars = self._average_gradients(all_grad_vars, self.replica_weights)
         if config.clip_c > 0.0:
-            grads, varss = zip(*grad_vars)
+            grads, varss = list(zip(*grad_vars))
             clipped_grads, global_norm = tf.clip_by_global_norm(
                 grads, clip_norm=config.clip_c)
             # Might be interesting to see how the global norm changes over time,
             # attach a summary?
-            grad_vars = zip(clipped_grads, varss)
+            grad_vars = list(zip(clipped_grads, varss))
         self.apply_grads = optimizer.apply_gradients(
             grad_vars, global_step=self.global_step)
 
@@ -147,7 +147,7 @@ class ModelUpdater(object):
         # For each variable, average the gradients from all replicas and store
         # the result in avg_grad_vars.
         avg_grad_vars = []
-        for var_name, gv_list in d.items():
+        for var_name, gv_list in list(d.items()):
             var = gv_list[0][1]
             found_none_value = False
             for g, v in gv_list:

@@ -9,11 +9,10 @@ import uuid
 import logging
 from abc import ABCMeta
 
-class BaseSettings(object):
+class BaseSettings(object, metaclass=ABCMeta):
     """
     All modes (abstract base class)
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, from_console_arguments=False):
         self._from_console_arguments = from_console_arguments
@@ -53,7 +52,7 @@ class BaseSettings(object):
             args = vars(self._parser.parse_args())
         else:
             args = {a.dest: self._parser.get_default(a.dest) for a in self._parser._actions}
-        for key, value in args.iteritems():
+        for key, value in list(args.items()):
             setattr(self, key, value)
 
     def _set_additional_vars(self):
@@ -75,12 +74,12 @@ class TranslationSettings(BaseSettings):
         if self._from_console_arguments:
             # don't open files if no console arguments are parsed
             self._parser.add_argument(
-                '-i', '--input', type=argparse.FileType('r'),
+                '-i', '--input', type=argparse.FileType('r', encoding='utf-8'),
                 default=sys.stdin, metavar='PATH',
                 help="input file (default: standard input)")
 
             self._parser.add_argument(
-                '-o', '--output', type=argparse.FileType('w'),
+                '-o', '--output', type=argparse.FileType('w', encoding='utf-8'),
                 default=sys.stdout, metavar='PATH',
                 help="output file (default: standard output)")
 
@@ -145,11 +144,10 @@ class ServerSettings(BaseSettings):
             help="number of processes (default: %(default)s)")
 
 
-class ScorerBaseSettings(BaseSettings):
+class ScorerBaseSettings(BaseSettings, metaclass=ABCMeta):
     """
     Base class for scorer and rescorer settings
     """
-    __metaclass__ = ABCMeta
 
     def _add_console_arguments(self):
         super(ScorerBaseSettings, self)._add_console_arguments()

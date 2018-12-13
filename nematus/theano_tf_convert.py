@@ -153,7 +153,7 @@ def theano_to_tensorflow_model(in_path, out_path):
         saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
-        for th_name in saved_model.keys():
+        for th_name in list(saved_model.keys()):
             # ignore adam parameters
             if th_name.startswith('adam'):
                 continue
@@ -190,12 +190,12 @@ def theano_to_tensorflow_model(in_path, out_path):
 def tensorflow_to_theano_model(in_path, out_path):
     config = load_config_from_json_file(in_path)
     th2tf = construct_parameter_map(config)
-    keys, values = zip(*th2tf.items())
+    keys, values = list(zip(*list(th2tf.items())))
     with tf.Session() as sess:
         new_saver = tf.train.import_meta_graph(in_path + '.meta')
         new_saver.restore(sess, in_path)
         params = {}
-        for th_name, tf_name in th2tf.items():
+        for th_name, tf_name in list(th2tf.items()):
             if tf_name is not None:
                 try:
                     v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))

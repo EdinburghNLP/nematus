@@ -17,7 +17,7 @@ class FileWrapper(object):
         self.lines = numpy.array(self.lines, dtype=numpy.object)
     def __iter__(self):
         return self
-    def next(self):
+    def __next__(self):
         if self.pos >= len(self.lines):
             raise StopIteration
         l = self.lines[self.pos]
@@ -29,7 +29,7 @@ class FileWrapper(object):
         assert pos == 0
         self.pos = 0
     def readline(self):
-        return self.next()
+        return next(self)
     def shuffle_lines(self, perm):
         self.lines = self.lines[perm]
         self.pos = 0
@@ -84,12 +84,12 @@ class TextIterator:
             assert len(self.source_vocab_sizes) == len(self.source_dicts)
             for d, vocab_size in zip(self.source_dicts, self.source_vocab_sizes):
                 if vocab_size != None and vocab_size > 0:
-                    for key, idx in d.items():
+                    for key, idx in list(d.items()):
                         if idx >= vocab_size:
                             del d[key]
 
         if self.target_vocab_size != None and self.target_vocab_size > 0:
-            for key, idx in self.target_dict.items():
+            for key, idx in list(self.target_dict.items()):
                 if idx >= self.target_vocab_size:
                     del self.target_dict[key]
 
@@ -118,7 +118,7 @@ class TextIterator:
             self.source.seek(0)
             self.target.seek(0)
 
-    def next(self):
+    def __next__(self):
         if self.end_of_data:
             self.end_of_data = False
             self.reset()

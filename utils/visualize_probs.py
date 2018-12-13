@@ -62,7 +62,7 @@ def print_probdist(infile, outfile):
             words = line.split()
             words.append('&lt;/s&gt;')
         elif i % 3 == 2:
-            probs = map(float, line.split())
+            probs = list(map(float, line.split()))
             entry = ""
             for w,p in zip(words, probs):
                 color = '#%02x%02x%02x' % (int((1-p)*255), int((1-p)*255), int((1-p)*255))
