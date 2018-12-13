@@ -181,10 +181,10 @@ class TransformerEncoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
-            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
-                if layer_id == self.config.transformer_encoder_layers:
+                if layer_id == self.config.transformer_enc_depth:
                     self.is_final_layer = True
                 # Specify ffn dimensions sequence
                 ffn_dims = [self.config.transformer_ffn_hidden_size, self.config.state_size]
@@ -236,7 +236,7 @@ class TransformerEncoder(object):
             enc_inputs, self_attn_mask, cross_attn_mask = _prepare_source()
             # Propagate inputs through the encoder stack
             enc_output = enc_inputs
-            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 enc_output, _ = self.encoder_stack[layer_id]['self_attn'].forward(enc_output, None, self_attn_mask)
                 enc_output = self.encoder_stack[layer_id]['ffn'].forward(enc_output)
         return enc_output, cross_attn_mask
@@ -283,7 +283,7 @@ class TransformerDecoder(object):
     def _get_initial_memories(self, batch_size, beam_size):
         """ Initializes decoder memories used for accelerated inference. """
         initial_memories = dict()
-        for layer_id in range(1, self.config.transformer_decoder_layers + 1):
+        for layer_id in range(1, self.config.transformer_dec_depth + 1):
             initial_memories['layer_{:d}'.format(layer_id)] = \
                 {'keys': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1]),
                  'values': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1])}
@@ -293,10 +293,10 @@ class TransformerDecoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
-            for layer_id in range(1, self.config.transformer_encoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
-                if layer_id == self.config.transformer_encoder_layers:
+                if layer_id == self.config.transformer_enc_depth:
                     self.is_final_layer = True
                 # Specify ffn dimensions sequence
                 ffn_dims = [self.config.transformer_ffn_hidden_size, self.config.state_size]
@@ -334,7 +334,7 @@ class TransformerDecoder(object):
                 tf.layers.dropout(target_embeddings, rate=self.config.transformer_dropout_embeddings, training=self.training)
             # Propagate inputs through the encoder stack
             dec_output = dec_input
-            for layer_id in range(1, self.config.transformer_decoder_layers + 1):
+            for layer_id in range(1, self.config.transformer_dec_depth + 1):
                 dec_output, _ = self.decoder_stack[layer_id]['self_attn'].forward(dec_output, None, self_attn_mask)
                 dec_output, _ = \
                     self.decoder_stack[layer_id]['cross_attn'].forward(dec_output, enc_output, cross_attn_mask)

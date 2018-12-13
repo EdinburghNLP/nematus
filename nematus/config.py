@@ -37,10 +37,10 @@ class ParameterSpecification:
           set during the initial pass then it is set to [embedding_size]
           (provided that factors == 1).
 
-    Note that unlike arparse.add_argument(), it is required to supply a default
-    value. Generally, we need a default value both for argparse.add_argument()
-    and also to fill in a missing parameter value when reading a config from an
-    older JSON file.
+    Note that unlike argparse.add_argument(), it is required to supply a
+    default value. Generally, we need a default value both for
+    argparse.add_argument() and also to fill in a missing parameter value when
+    reading a config from an older JSON file.
 
     Some parameters don't have corresponding command-line arguments (e.g.
     model_version). They can be represented as ParameterSpecification objects
@@ -69,7 +69,7 @@ class ParameterSpecification:
         if len(argparse_args) == 0:
             assert visible_arg_names == [] and hidden_arg_names == []
         else:
-            self.argparse_args['default'] = default
+            self.argparse_args['default'] = self.default
 
 
 class ConfigSpecification:
@@ -92,7 +92,8 @@ class ConfigSpecification:
         description_pairs = [
             ('',                      None),
             ('data',                  'data sets; model loading and saving'),
-            ('network',               'network parameters (general)'),
+            ('network',               'network parameters (all model types)'),
+            ('network_rnn',           'network parameters (rnn-specific)'),
             ('network_transformer',   'network parameters (transformer-'
                                       'specific)'),
             ('training',              'training parameters'),
@@ -108,6 +109,9 @@ class ConfigSpecification:
         # Check that there are no duplicated names.
         self._check_self()
 
+        # Build a dictionary for looking up ParameterSpecifications by name.
+        self._name_to_spec = self._build_name_to_spec()
+
     @property
     def group_names(self):
         """Returns the list of parameter group names."""
@@ -120,6 +124,10 @@ class ConfigSpecification:
     def params_by_group(self, group_name):
         """Returns the list of ParameterSpecifications for the given group."""
         return self._param_specs[group_name]
+
+    def lookup(self, name):
+        """Looks up a ParameterSpecification by name. None if not found."""
+        return self._name_to_spec.get(name, None)
 
     def _define_param_specs(self):
         """Adds all ParameterSpecification objects."""
@@ -277,7 +285,8 @@ class ConfigSpecification:
             name='factors', default=1,
             visible_arg_names=['--factors'],
             type=int, metavar='INT',
-            help='number of input factors (default: %(default)s)'))
+            help='number of input factors (default: %(default)s) - CURRENTLY '
+                 'ONLY WORKS FOR \'rnn\' MODEL'))
 
         group.append(ParameterSpecification(
             name='dim_per_factor', default=None,
@@ -287,92 +296,6 @@ class ConfigSpecification:
             help='list of word vector dimensionalities (one per factor): '
                  '\'--dim_per_factor 250 200 50\' for total dimensionality '
                  'of 500 (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='enc_depth', default=1,
-            visible_arg_names=['--enc_depth'],
-            type=int, metavar='INT',
-            help='number of encoder layers (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='enc_recurrence_transition_depth', default=1,
-            visible_arg_names=['--enc_recurrence_transition_depth'],
-            type=int, metavar='INT',
-            help='number of GRU transition operations applied in the '
-                 'encoder. Minimum is 1. (Only applies to gru). (default: '
-                 '%(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dec_depth', default=1,
-            visible_arg_names=['--dec_depth'],
-            type=int, metavar='INT',
-            help='number of decoder layers (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dec_base_recurrence_transition_depth', default=2,
-            visible_arg_names=['--dec_base_recurrence_transition_depth'],
-            type=int, metavar='INT',
-            help='number of GRU transition operations applied in the first '
-                 'layer of the decoder. Minimum is 2.  (Only applies to '
-                 'gru_cond). (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dec_high_recurrence_transition_depth', default=1,
-            visible_arg_names=['--dec_high_recurrence_transition_depth'],
-            type=int, metavar='INT',
-            help='number of GRU transition operations applied in the higher '
-                 'layers of the decoder. Minimum is 1. (Only applies to '
-                 'gru). (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dec_deep_context', default=False,
-            visible_arg_names=['--dec_deep_context'],
-            action='store_true',
-            help='pass context vector (from first layer) to deep decoder '
-                 'layers'))
-
-        group.append(ParameterSpecification(
-            name='use_dropout', default=False,
-            visible_arg_names=['--use_dropout'],
-            action="store_true",
-            help='use dropout layer (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dropout_embedding', default=None,
-            visible_arg_names=['--dropout_embedding'],
-            derivation_func=_derive_dropout_embedding,
-            type=float, metavar="FLOAT",
-            help='dropout for input embeddings (0: no dropout) (default: '
-                 '%(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dropout_hidden', default=None,
-            visible_arg_names=['--dropout_hidden'],
-            derivation_func=_derive_dropout_hidden,
-            type=float, metavar="FLOAT",
-            help='dropout for hidden layer (0: no dropout) (default: '
-                 '%(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dropout_source', default=0.0,
-            visible_arg_names=['--dropout_source'],
-            type=float, metavar='FLOAT',
-            help='dropout source words (0: no dropout) (default: '
-                 '%(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='dropout_target', default=0.0,
-            visible_arg_names=['--dropout_target'],
-            type=float, metavar='FLOAT',
-            help='dropout target words (0: no dropout) (default: '
-                 '%(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='use_layer_norm', default=False,
-            legacy_names=['layer_normalisation'],
-            visible_arg_names=['--use_layer_norm', '--layer_normalisation'],
-            action='store_true',
-            help='Set to use layer normalization in encoder and decoder'))
 
         group.append(ParameterSpecification(
             name='tie_encoder_decoder_embeddings', default=False,
@@ -394,27 +317,159 @@ class ConfigSpecification:
             visible_arg_names=['--output_hidden_activation'],
             type=str, choices=['tanh', 'relu', 'prelu', 'linear'],
             help='activation function in hidden layer of the output '
-                 'network (default: %(default)s)'))
+                 'network (default: %(default)s) - CURRENTLY ONLY WORKS '
+                 'FOR \'rnn\' MODEL'))
 
         group.append(ParameterSpecification(
             name='softmax_mixture_size', default=1,
             visible_arg_names=['--softmax_mixture_size'],
             type=int, metavar='INT',
-            help='number of softmax components to use (default: %(default)s)'))
+            help='number of softmax components to use (default: '
+                 '%(default)s) - CURRENTLY ONLY WORKS FOR \'rnn\' MODEL'))
+
+        # Add command-line parameters for 'network_rnn' group.
+
+        group = param_specs['network_rnn']
+
+        # NOTE: parameter names in this group must use the rnn_ prefix.
+        #       read_config_from_cmdline() uses this to check that only
+        #       model type specific options are only used with the appropriate
+        #       model type.
+
+        group.append(ParameterSpecification(
+            name='rnn_enc_depth', default=1,
+            legacy_names=['enc_depth'],
+            visible_arg_names=['--rnn_enc_depth'],
+            hidden_arg_names=['--enc_depth'],
+            type=int, metavar='INT',
+            help='number of encoder layers (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_enc_transition_depth', default=1,
+            legacy_names=['enc_recurrence_transition_depth'],
+            visible_arg_names=['--rnn_enc_transition_depth'],
+            hidden_arg_names=['--enc_recurrence_transition_depth'],
+            type=int, metavar='INT',
+            help='number of GRU transition operations applied in the '
+                 'encoder. Minimum is 1. (Only applies to gru). (default: '
+                 '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dec_depth', default=1,
+            legacy_names=['dec_depth'],
+            visible_arg_names=['--rnn_dec_depth'],
+            hidden_arg_names=['--dec_depth'],
+            type=int, metavar='INT',
+            help='number of decoder layers (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dec_base_transition_depth', default=2,
+            legacy_names=['dec_base_recurrence_transition_depth'],
+            visible_arg_names=['--rnn_dec_base_transition_depth'],
+            hidden_arg_names=['--dec_base_recurrence_transition_depth'],
+            type=int, metavar='INT',
+            help='number of GRU transition operations applied in the first '
+                 'layer of the decoder. Minimum is 2.  (Only applies to '
+                 'gru_cond). (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dec_high_transition_depth', default=1,
+            legacy_names=['dec_high_recurrence_transition_depth'],
+            visible_arg_names=['--rnn_dec_high_transition_depth'],
+            hidden_arg_names=['--dec_high_recurrence_transition_depth'],
+            type=int, metavar='INT',
+            help='number of GRU transition operations applied in the higher '
+                 'layers of the decoder. Minimum is 1. (Only applies to '
+                 'gru). (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dec_deep_context', default=False,
+            legacy_names=['dec_deep_context'],
+            visible_arg_names=['--rnn_dec_deep_context'],
+            hidden_arg_names=['--dec_deep_context'],
+            action='store_true',
+            help='pass context vector (from first layer) to deep decoder '
+                 'layers'))
+
+        group.append(ParameterSpecification(
+            name='rnn_use_dropout', default=False,
+            legacy_names=['use_dropout'],
+            visible_arg_names=['--rnn_use_dropout'],
+            hidden_arg_names=['--use_dropout'],
+            action='store_true',
+            help='use dropout layer (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dropout_embedding', default=None,
+            legacy_names=['dropout_embedding'],
+            visible_arg_names=['--rnn_dropout_embedding'],
+            hidden_arg_names=['--dropout_embedding'],
+            derivation_func=_derive_rnn_dropout_embedding,
+            type=float, metavar='FLOAT',
+            # FIXME rnn_dropout_embedding effectively has two defaults,
+            #       depending on whether we're reading from the command-
+            #       line or from a JSON config - does this make sense?
+            #       We hardcode the former here.
+            help='dropout for input embeddings (0: no dropout) (default: '
+                 '0.2)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dropout_hidden', default=None,
+            legacy_names=['dropout_hidden'],
+            visible_arg_names=['--rnn_dropout_hidden'],
+            hidden_arg_names=['--dropout_hidden'],
+            derivation_func=_derive_rnn_dropout_hidden,
+            type=float, metavar='FLOAT',
+            # FIXME rnn_dropout_hidden effectively has two defaults,
+            #       depending on whether we're reading from the command-
+            #       line or from a JSON config - does this make sense?
+            #       We hardcode the former here.
+            help='dropout for hidden layer (0: no dropout) (default: 0.2)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dropout_source', default=0.0,
+            legacy_names=['dropout_source'],
+            visible_arg_names=['--rnn_dropout_source'],
+            hidden_arg_names=['--dropout_source'],
+            type=float, metavar='FLOAT',
+            help='dropout source words (0: no dropout) (default: '
+                 '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_dropout_target', default=0.0,
+            legacy_names=['dropout_target'],
+            visible_arg_names=['--rnn_dropout_target'],
+            hidden_arg_names=['--dropout_target'],
+            type=float, metavar='FLOAT',
+            help='dropout target words (0: no dropout) (default: '
+                 '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='rnn_layer_normalization', default=False,
+            legacy_names=['use_layer_norm', 'layer_normalisation'],
+            visible_arg_names=['--rnn_layer_normalisation'],
+            hidden_arg_names=['--use_layer_norm', '--layer_normalisation'],
+            action='store_true',
+            help='Set to use layer normalization in encoder and decoder'))
 
         # Add command-line parameters for 'network_transformer' group.
 
         group = param_specs['network_transformer']
 
+        # NOTE: parameter names in this group must use the transformer_ prefix.
+        #       read_config_from_cmdline() uses this to check that only
+        #       model type specific options are only used with the appropriate
+        #       model type.
+
         group.append(ParameterSpecification(
-            name='transformer_encoder_layers', default=6,
-            visible_arg_names=['--transformer_encoder_layers'],
+            name='transformer_enc_depth', default=6,
+            visible_arg_names=['--transformer_enc_depth'],
             type=int, metavar='INT',
             help='number of encoder layers (default: %(default)s)'))
 
         group.append(ParameterSpecification(
-            name='transformer_decoder_layers', default=6,
-            visible_arg_names=['--transformer_decoder_layers'],
+            name='transformer_dec_depth', default=6,
+            visible_arg_names=['--transformer_dec_depth'],
             type=int, metavar='INT',
             help='number of decoder layers (default: %(default)s)'))
 
@@ -422,8 +477,8 @@ class ConfigSpecification:
             name='transformer_ffn_hidden_size', default=2048,
             visible_arg_names=['--transformer_ffn_hidden_size'],
             type=int, metavar='INT',
-            help='inner dimensionality of feed-forward sub-layers in FAN '
-                 'models (default: %(default)s)'))
+            help='inner dimensionality of feed-forward sub-layers (default: '
+                 '%(default)s)'))
 
         group.append(ParameterSpecification(
             name='transformer_num_heads', default=8,
@@ -465,59 +520,10 @@ class ConfigSpecification:
         group = param_specs['training']
 
         group.append(ParameterSpecification(
-            name='loss_function', default="cross-entropy",
+            name='loss_function', default='cross-entropy',
             visible_arg_names=['--loss_function'],
             type=str, choices=['cross-entropy', 'per-token-cross-entropy'],
             help='loss function (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='warmup_steps', default=8000,
-            visible_arg_names=['--warmup_steps'],
-            type=int, metavar='INT',
-            help='number of initial updates during which the learning rate is '
-                 'increased linearly during learning rate scheduling '
-                 '(default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='learning_schedule', default='constant',
-            visible_arg_names=['--learning_schedule'],
-            type=str, choices=['constant', 'transformer'],
-            help='learning schedule (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='maxlen', default=100,
-            visible_arg_names=['--maxlen'],
-            type=int, metavar='INT',
-            help='maximum sequence length for training and validation '
-                 '(default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='batch_size', default=80,
-            visible_arg_names=['--batch_size'],
-            type=int, metavar='INT',
-            help='minibatch size (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='token_batch_size', default=0,
-            visible_arg_names=['--token_batch_size'],
-            type=int, metavar='INT',
-            help='minibatch size (expressed in number of source or target '
-                 'tokens). Sentence-level minibatch size will be dynamic. If '
-                 'this is enabled, batch_size only affects sorting by '
-                 'length. (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='max_epochs', default=5000,
-            visible_arg_names=['--max_epochs'],
-            type=int, metavar='INT',
-            help='maximum number of epochs (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='finish_after', default=10000000,
-            visible_arg_names=['--finish_after'],
-            type=int, metavar='INT',
-            help='maximum number of updates (minibatches) (default: '
-                 '%(default)s)'))
 
         group.append(ParameterSpecification(
             name='decay_c', default=0.0,
@@ -552,43 +558,10 @@ class ConfigSpecification:
             help='label smoothing (default: %(default)s)'))
 
         group.append(ParameterSpecification(
-            name='shuffle_each_epoch', default=True,
-            visible_arg_names=['--no_shuffle'],
-            action='store_false',
-            help='disable shuffling of training data (for each epoch)'))
-
-        group.append(ParameterSpecification(
-            name='keep_train_set_in_memory', default=False,
-            visible_arg_names=['--keep_train_set_in_memory'],
-            action='store_true',
-            help='Keep training dataset lines stores in RAM during training'))
-
-        group.append(ParameterSpecification(
-            name='sort_by_length', default=True,
-            visible_arg_names=['--no_sort_by_length'],
-            action='store_false',
-            help='do not sort sentences in maxibatch by length'))
-
-        group.append(ParameterSpecification(
-            name='maxibatch_size', default=20,
-            visible_arg_names=['--maxibatch_size'],
-            type=int, metavar='INT',
-            help='size of maxibatch (number of minibatches that are sorted '
-                 'by length) (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
             name='optimizer', default='adam',
             visible_arg_names=['--optimizer'],
             type=str, choices=['adam'],
             help='optimizer (default: %(default)s)'))
-
-        group.append(ParameterSpecification(
-            name='learning_rate', default=0.0001,
-            visible_arg_names=['--learning_rate'],
-            hidden_arg_names=['--lrate'],
-            legacy_names=['lrate'],
-            type=float, metavar='FLOAT',
-            help='learning rate (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='adam_beta1', default=0.9,
@@ -609,6 +582,88 @@ class ConfigSpecification:
             visible_arg_names=['--adam_epsilon'],
             type=float, metavar='FLOAT',
             help='constant for numerical stability (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='learning_schedule', default='constant',
+            visible_arg_names=['--learning_schedule'],
+            type=str, choices=['constant', 'transformer'],
+            help='learning schedule (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='learning_rate', default=0.0001,
+            visible_arg_names=['--learning_rate'],
+            hidden_arg_names=['--lrate'],
+            legacy_names=['lrate'],
+            type=float, metavar='FLOAT',
+            help='learning rate (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='warmup_steps', default=8000,
+            visible_arg_names=['--warmup_steps'],
+            type=int, metavar='INT',
+            help='number of initial updates during which the learning rate is '
+                 'increased linearly during learning rate scheduling '
+                 '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='maxlen', default=100,
+            visible_arg_names=['--maxlen'],
+            type=int, metavar='INT',
+            help='maximum sequence length for training and validation '
+                 '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='batch_size', default=80,
+            visible_arg_names=['--batch_size'],
+            type=int, metavar='INT',
+            help='minibatch size (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='token_batch_size', default=0,
+            visible_arg_names=['--token_batch_size'],
+            type=int, metavar='INT',
+            help='minibatch size (expressed in number of source or target '
+                 'tokens). Sentence-level minibatch size will be dynamic. If '
+                 'this is enabled, batch_size only affects sorting by '
+                 'length. (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='maxibatch_size', default=20,
+            visible_arg_names=['--maxibatch_size'],
+            type=int, metavar='INT',
+            help='size of maxibatch (number of minibatches that are sorted '
+                 'by length) (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='sort_by_length', default=True,
+            visible_arg_names=['--no_sort_by_length'],
+            action='store_false',
+            help='do not sort sentences in maxibatch by length'))
+
+        group.append(ParameterSpecification(
+            name='shuffle_each_epoch', default=True,
+            visible_arg_names=['--no_shuffle'],
+            action='store_false',
+            help='disable shuffling of training data (for each epoch)'))
+
+        group.append(ParameterSpecification(
+            name='keep_train_set_in_memory', default=False,
+            visible_arg_names=['--keep_train_set_in_memory'],
+            action='store_true',
+            help='Keep training dataset lines stores in RAM during training'))
+
+        group.append(ParameterSpecification(
+            name='max_epochs', default=5000,
+            visible_arg_names=['--max_epochs'],
+            type=int, metavar='INT',
+            help='maximum number of epochs (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='finish_after', default=10000000,
+            visible_arg_names=['--finish_after'],
+            type=int, metavar='INT',
+            help='maximum number of updates (minibatches) (default: '
+                 '%(default)s)'))
 
         # Add command-line parameters for 'validation' group.
 
@@ -732,6 +787,15 @@ class ConfigSpecification:
 
         return param_specs
 
+    def _build_name_to_spec(self):
+        name_to_spec = {}
+        for group in self.group_names:
+            for param in self.params_by_group(group):
+                for name in [param.name] + param.legacy_names:
+                    assert name not in name_to_spec
+                    name_to_spec[name] = param
+        return name_to_spec
+
     def _check_self(self):
         # Check that there are no duplicated parameter names.
         param_names = set()
@@ -753,29 +817,20 @@ class ConfigSpecification:
                         arg_names.add(param.name)
 
 
-def read_config_from_cmdline():
-    """Reads a config from the command-line.
+def _construct_argument_parser(spec, suppress_missing=False):
+    """Constructs an argparse.ArgumentParser given a ConfigSpecification.
 
-    Logs an error and exits if the parameter values are not mutually
-    consistent.
+    Setting suppress_missing to True causes the parser to suppress arguments
+    that are not supplied by the user (as opposed to adding them with
+    their default values).
+
+    Args:
+        spec: a ConfigSpecification object.
+        suppress_missing: Boolean
 
     Returns:
-        An argparse.Namespace object representing the config.
+        An argparse.ArgumentParser.
     """
-
-    spec = ConfigSpecification()
-    config = argparse.Namespace()
-
-    # Set meta parameters.
-    meta_config = argparse.Namespace()
-    meta_config.from_cmdline = True
-    meta_config.from_theano = False
-
-    # Set non-command-line parameters to default values.
-    for param in spec.params_by_group(""):
-        if param.visible_arg_names == [] and param.hidden_arg_names == []:
-            setattr(config, param.name, param.default)
-
     # Construct an ArgumentParser and parse command-line args.
     parser = argparse.ArgumentParser()
     for group_name in spec.group_names:
@@ -791,6 +846,8 @@ def read_config_from_cmdline():
                 continue
             argparse_args = dict(param.argparse_args)
             argparse_args['dest'] = param.name
+            if suppress_missing:
+                argparse_args['default'] = argparse.SUPPRESS
             if param.visible_arg_names == []:
                 argparse_args['help'] = argparse.SUPPRESS
                 target.add_argument(*param.hidden_arg_names, **argparse_args)
@@ -807,14 +864,44 @@ def read_config_from_cmdline():
                 argparse_args['help'] = argparse.SUPPRESS
                 mutex_group.add_argument(*param.hidden_arg_names,
                                          **argparse_args)
-    config = parser.parse_args(namespace=config)
+    return parser
+
+
+def read_config_from_cmdline():
+    """Reads a config from the command-line.
+
+    Logs an error and exits if the parameter values are not mutually
+    consistent.
+
+    Returns:
+        An argparse.Namespace object representing the config.
+    """
+
+    spec = ConfigSpecification()
+
+    # Construct an argparse.ArgumentParser and parse command-line args.
+    parser = _construct_argument_parser(spec)
+    config = parser.parse_args()
+
+    # Construct a second ArgumentParser but using default=argparse.SUPPRESS
+    # in every argparse.add_argument() call. This allows us to determine
+    # which parameters were actually set by the user.
+    # Solution is from https://stackoverflow.com/a/45803037
+    aux_parser = _construct_argument_parser(spec, suppress_missing=True)
+    aux_config = aux_parser.parse_args()
+    set_by_user = set(vars(aux_config).keys())
 
     # Perform consistency checks.
-    error_messages = _check_config_consistency(config)
+    error_messages = _check_config_consistency(spec, config, set_by_user)
     if len(error_messages) > 0:
         for msg in error_messages:
             logging.error(msg)
         sys.exit(1)
+
+    # Set meta parameters.
+    meta_config = argparse.Namespace()
+    meta_config.from_cmdline = True
+    meta_config.from_theano = False
 
     # Run derivation functions.
     for group in spec.group_names:
@@ -887,17 +974,56 @@ def load_config_from_json_file(basename):
     return config
 
 
-def _check_config_consistency(config):
+def _check_config_consistency(spec, config, set_by_user):
     """Performs consistency checks on a config read from the command-line.
 
     Args:
+        spec: a ConfigSpecification object.
         config: an argparse.Namespace object.
+        set_by_user: a set of strings representing parameter names.
 
     Returns:
         A list of error messages, one for each check that failed. An empty
         list indicates that all checks passed.
     """
     error_messages = []
+
+    # Check parameters are appropriate for the model type.
+    assert config.model_type is not None
+    for group in spec.group_names:
+        for param in spec.params_by_group(group):
+            if param.name not in set_by_user:
+                continue
+            if ((param.name.startswith('rnn_') and
+                 config.model_type == 'transformer') or
+                 (param.name.startswith('transformer_') and
+                 config.model_type == 'rnn')):
+                arg_names = param.visible_arg_names + param.hidden_arg_names
+                msg = '{} cannot be used with \'{}\' model type'.format(
+                    ' / '.join(arg_names), config.model_type)
+                error_messages.append(msg)
+
+    # Check user-supplied learning schedule options are consistent.
+    if config.learning_schedule == 'constant':
+        param = spec.lookup('warmup_steps')
+        assert param != None
+        if param.name in set_by_user:
+            arg_names = param.visible_arg_names + param.hidden_arg_names
+            msg = '{} cannot be used with \'constant\' learning ' \
+                   'schedule'.format(' / '.join(arg_names), config.model_type)
+            error_messages.append(msg)
+    elif config.learning_schedule == 'transformer':
+        param = spec.lookup('learning_rate')
+        assert param != None
+        if param.name in set_by_user:
+            arg_names = param.visible_arg_names + param.hidden_arg_names
+            msg = '{} cannot be used with \'transformer\' learning ' \
+                  'schedule'.format(' / '.join(arg_names), config.model_type)
+            error_messages.append(msg)
+
+    # TODO Other similar checks? e.g. check user hasn't set adam parameters
+    #       if optimizer != 'adam' (not currently possible but probably will
+    #       be in in the future)...
 
     if config.datasets:
         if config.source_dataset or config.target_dataset:
@@ -954,7 +1080,7 @@ def _derive_model_version(config, meta_config):
         return 0.2
     if config.model_version is not None:
         return config.model_version
-    if meta_config.from_theano and config.use_dropout:
+    if meta_config.from_theano and config.rnn_use_dropout:
         logging.error('version 0 dropout is not supported in '
                       'TensorFlow Nematus')
         sys.exit(1)
@@ -1046,15 +1172,15 @@ def _derive_dim_per_factor(config, meta_config):
     return [config.embedding_size]
 
 
-def _derive_dropout_embedding(config, meta_config):
-    if config.dropout_embedding is not None:
-        return config.dropout_embedding
+def _derive_rnn_dropout_embedding(config, meta_config):
+    if config.rnn_dropout_embedding is not None:
+        return config.rnn_dropout_embedding
     return 0.2 if meta_config.from_cmdline else 0.0
 
 
-def _derive_dropout_hidden(config, meta_config):
-    if config.dropout_hidden is not None:
-        return config.dropout_hidden
+def _derive_rnn_dropout_hidden(config, meta_config):
+    if config.rnn_dropout_hidden is not None:
+        return config.rnn_dropout_hidden
     return 0.2 if meta_config.from_cmdline else 0.0
 
 

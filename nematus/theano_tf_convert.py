@@ -97,8 +97,8 @@ def construct_parameter_map(config):
         th2tf[th_name] = 'encoder/embedding/embeddings_{0}:0'.format(i)
 
     # Add GRU variables for the encoder.
-    for i in range(config.enc_depth):
-        for j in range(config.enc_recurrence_transition_depth):
+    for i in range(config.rnn_enc_depth):
+        for j in range(config.rnn_enc_transition_depth):
             th_prefix_f = "encoder_" + ("" if i == 0 else "{0}_".format(i+1))
             tf_prefix_f = "encoder/forward-stack/level{0}/gru{1}/".format(i, j)
             th_prefix_b = "encoder_r_" + ("" if i == 0 else "{0}_".format(i+1))
@@ -118,14 +118,14 @@ def construct_parameter_map(config):
 
     # Add GRU variables for the base level of the decoder.
     add_gru_variables(th2tf, "decoder_", "decoder/base/gru0/", "")
-    for j in range(1, config.dec_base_recurrence_transition_depth):
+    for j in range(1, config.rnn_dec_base_transition_depth):
         tf_prefix = "decoder/base/gru{0}/".format(j)
         add_gru_variables(th2tf, "decoder_", tf_prefix, drt_tag(j-1),
                           alt_names=True)
 
     # Add GRU variables for the high levels of the decoder.
-    for i in range(config.dec_depth-1):
-        for j in range(config.dec_high_recurrence_transition_depth):
+    for i in range(config.rnn_dec_depth-1):
+        for j in range(config.rnn_dec_high_transition_depth):
             th_prefix = "decoder_{0}_".format(i+2)
             tf_prefix = "decoder/high/level{0}/gru{1}/".format(i, j)
             add_gru_variables(th2tf, th_prefix, tf_prefix, drt_tag(j))

@@ -23,31 +23,33 @@ class RNNModel(object):
         # These probabilistically zero-out all embedding values for individual
         # words.
         dropout_source, dropout_target = None, None
-        if config.use_dropout and config.dropout_source > 0.0:
+        if config.rnn_use_dropout and config.rnn_dropout_source > 0.0:
             def dropout_source(x):
                 return tf.layers.dropout(
                     x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
-                    rate=config.dropout_source, training=self.inputs.training)
-        if config.use_dropout and config.dropout_target > 0.0:
+                    rate=config.rnn_dropout_source,
+                    training=self.inputs.training)
+        if config.rnn_use_dropout and config.rnn_dropout_target > 0.0:
             def dropout_target(y):
                 return tf.layers.dropout(
                     y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
-                    rate=config.dropout_target, training=self.inputs.training)
+                    rate=config.rnn_dropout_target,
+                    training=self.inputs.training)
 
         # Dropout functions for use within FF, GRU, and attention layers.
         # We use Gal and Ghahramani (2016)-style dropout, so these functions
         # will be used to create 2D dropout masks that are reused at every
         # timestep.
         dropout_embedding, dropout_hidden = None, None
-        if config.use_dropout and config.dropout_embedding > 0.0:
+        if config.rnn_use_dropout and config.rnn_dropout_embedding > 0.0:
             def dropout_embedding(e):
                 return tf.layers.dropout(e, noise_shape=tf.shape(e),
-                                         rate=config.dropout_embedding,
+                                         rate=config.rnn_dropout_embedding,
                                          training=self.inputs.training)
-        if config.use_dropout and config.dropout_hidden > 0.0:
+        if config.rnn_use_dropout and config.rnn_dropout_hidden > 0.0:
             def dropout_hidden(h):
                 return tf.layers.dropout(h, noise_shape=tf.shape(h),
-                                         rate=config.dropout_hidden,
+                                         rate=config.rnn_dropout_hidden,
                                          training=self.inputs.training)
 
         batch_size = tf.shape(self.inputs.x)[-1]  # dynamic value
@@ -100,11 +102,11 @@ class Decoder(object):
                                             tf.reduce_sum(x_mask, axis=0),
                                             axis=1)
             self.init_state_layer = layers.FeedForwardLayer(
-                                        in_size=config.state_size * 2,
-                                        out_size=config.state_size,
-                                        batch_size=batch_size,
-                                        use_layer_norm=config.use_layer_norm,
-                                        dropout_input=dropout_hidden)
+                in_size=config.state_size * 2,
+                out_size=config.state_size,
+                batch_size=batch_size,
+                use_layer_norm=config.rnn_layer_normalization,
+                dropout_input=dropout_hidden)
             self.init_state = self.init_state_layer.forward(context_mean)
 
             self.translation_maxlen = config.translation_maxlen
@@ -127,40 +129,40 @@ class Decoder(object):
                 else:
                     bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
                 self.grustep1 = layers.GRUStep(
-                                    input_size=config.target_embedding_size,
-                                    state_size=config.state_size,
-                                    batch_size=batch_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    legacy_bias_type=bias_type,
-                                    dropout_input=dropout_embedding,
-                                    dropout_state=dropout_hidden)
+                    input_size=config.target_embedding_size,
+                    state_size=config.state_size,
+                    batch_size=batch_size,
+                    use_layer_norm=config.rnn_layer_normalization,
+                    legacy_bias_type=bias_type,
+                    dropout_input=dropout_embedding,
+                    dropout_state=dropout_hidden)
             with tf.variable_scope("attention"):
                 self.attstep = layers.AttentionStep(
-                                context=context,
-                                context_state_size=2*config.state_size,
-                                context_mask=x_mask,
-                                state_size=config.state_size,
-                                hidden_size=2*config.state_size,
-                                use_layer_norm=config.use_layer_norm,
-                                dropout_context=dropout_hidden,
-                                dropout_state=dropout_hidden)
+                    context=context,
+                    context_state_size=2*config.state_size,
+                    context_mask=x_mask,
+                    state_size=config.state_size,
+                    hidden_size=2*config.state_size,
+                    use_layer_norm=config.rnn_layer_normalization,
+                    dropout_context=dropout_hidden,
+                    dropout_state=dropout_hidden)
             if config.theano_compat:
                 bias_type = layers.LegacyBiasType.THEANO_B
             else:
                 bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_TRUE
             self.grustep2 = layers.DeepTransitionGRUStep(
-                                    input_size=2*config.state_size,
-                                    state_size=config.state_size,
-                                    batch_size=batch_size,
-                                    use_layer_norm=config.use_layer_norm,
-                                    legacy_bias_type=bias_type,
-                                    dropout_input=dropout_hidden,
-                                    dropout_state=dropout_hidden,
-                                    transition_depth=config.dec_base_recurrence_transition_depth-1,
-                                    var_scope_fn=lambda i: "gru{0}".format(i+1))
+                input_size=2*config.state_size,
+                state_size=config.state_size,
+                batch_size=batch_size,
+                use_layer_norm=config.rnn_layer_normalization,
+                legacy_bias_type=bias_type,
+                dropout_input=dropout_hidden,
+                dropout_state=dropout_hidden,
+                transition_depth=config.rnn_dec_base_transition_depth-1,
+                var_scope_fn=lambda i: "gru{0}".format(i+1))
 
         with tf.variable_scope("high"):
-            if config.dec_depth == 1:
+            if config.rnn_dec_depth == 1:
                 self.high_gru_stack = None
             else:
                 if config.theano_compat:
@@ -171,13 +173,13 @@ class Decoder(object):
                     input_size=config.state_size,
                     state_size=config.state_size,
                     batch_size=batch_size,
-                    use_layer_norm=config.use_layer_norm,
+                    use_layer_norm=config.rnn_layer_normalization,
                     legacy_bias_type=bias_type,
                     dropout_input=dropout_hidden,
                     dropout_state=dropout_hidden,
-                    stack_depth=config.dec_depth-1,
-                    transition_depth=config.dec_high_recurrence_transition_depth,
-                    context_state_size=(2*config.state_size if config.dec_deep_context else 0),
+                    stack_depth=config.rnn_dec_depth-1,
+                    transition_depth=config.rnn_dec_high_transition_depth,
+                    context_state_size=(2*config.state_size if config.rnn_dec_deep_context else 0),
                     residual_connections=True,
                     first_residual_output=0)
 
@@ -235,28 +237,28 @@ class Predictor(object):
 
         with tf.variable_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = layers.FeedForwardLayer(
-                                in_size=config.target_embedding_size,
-                                out_size=config.target_embedding_size,
-                                batch_size=batch_size,
-                                non_linearity=lambda y: y,
-                                use_layer_norm=config.use_layer_norm,
-                                dropout_input=dropout_embedding)
+                in_size=config.target_embedding_size,
+                out_size=config.target_embedding_size,
+                batch_size=batch_size,
+                non_linearity=lambda y: y,
+                use_layer_norm=config.rnn_layer_normalization,
+                dropout_input=dropout_embedding)
         with tf.variable_scope("state_to_hidden"):
             self.state_to_hidden = layers.FeedForwardLayer(
-                                    in_size=config.state_size,
-                                    out_size=config.target_embedding_size,
-                                    batch_size=batch_size,
-                                    non_linearity=lambda y: y,
-                                    use_layer_norm=config.use_layer_norm,
-                                    dropout_input=dropout_hidden)
+                in_size=config.state_size,
+                out_size=config.target_embedding_size,
+                batch_size=batch_size,
+                non_linearity=lambda y: y,
+                use_layer_norm=config.rnn_layer_normalization,
+                dropout_input=dropout_hidden)
         with tf.variable_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = layers.FeedForwardLayer(
-                                    in_size=2*config.state_size,
-                                    out_size=config.target_embedding_size,
-                                    batch_size=batch_size,
-                                    non_linearity=lambda y: y,
-                                    use_layer_norm=config.use_layer_norm,
-                                    dropout_input=dropout_hidden)
+                in_size=2*config.state_size,
+                out_size=config.target_embedding_size,
+                batch_size=batch_size,
+                non_linearity=lambda y: y,
+                use_layer_norm=config.rnn_layer_normalization,
+                dropout_input=dropout_hidden)
 
         if config.output_hidden_activation == 'prelu':
             with tf.variable_scope("hidden_prelu"):
@@ -264,12 +266,12 @@ class Predictor(object):
 
         with tf.variable_scope("hidden_to_logits"):
             self.hidden_to_logits = layers.FeedForwardLayer(
-                            in_size=config.target_embedding_size,
-                            out_size=config.target_vocab_size,
-                            batch_size=batch_size,
-                            non_linearity=lambda y: y,
-                            W=hidden_to_logits_W,
-                            dropout_input=dropout_embedding)
+                in_size=config.target_embedding_size,
+                out_size=config.target_vocab_size,
+                batch_size=batch_size,
+                non_linearity=lambda y: y,
+                W=hidden_to_logits_W,
+                dropout_input=dropout_embedding)
 
         if config.softmax_mixture_size > 1:
             with tf.variable_scope("hidden_to_pi_logits"):
@@ -286,7 +288,7 @@ class Predictor(object):
                         in_size=config.target_embedding_size,
                         out_size=config.target_embedding_size,
                         batch_size=batch_size,
-                        use_layer_norm=config.use_layer_norm,
+                        use_layer_norm=config.rnn_layer_normalization,
                         dropout_input=dropout_embedding)
                     self.hidden_to_mos_hidden.append(layer)
 
@@ -354,34 +356,34 @@ class Encoder(object):
 
         with tf.variable_scope("forward-stack"):
             self.forward_encoder = layers.GRUStack(
-                    input_size=config.embedding_size,
-                    state_size=config.state_size,
-                    batch_size=batch_size,
-                    use_layer_norm=config.use_layer_norm,
-                    legacy_bias_type=bias_type,
-                    dropout_input=dropout_embedding,
-                    dropout_state=dropout_hidden,
-                    stack_depth=config.enc_depth,
-                    transition_depth=config.enc_recurrence_transition_depth,
-                    alternating=True,
-                    residual_connections=True,
-                    first_residual_output=1)
+                input_size=config.embedding_size,
+                state_size=config.state_size,
+                batch_size=batch_size,
+                use_layer_norm=config.rnn_layer_normalization,
+                legacy_bias_type=bias_type,
+                dropout_input=dropout_embedding,
+                dropout_state=dropout_hidden,
+                stack_depth=config.rnn_enc_depth,
+                transition_depth=config.rnn_enc_transition_depth,
+                alternating=True,
+                residual_connections=True,
+                first_residual_output=1)
 
         with tf.variable_scope("backward-stack"):
             self.backward_encoder = layers.GRUStack(
-                    input_size=config.embedding_size,
-                    state_size=config.state_size,
-                    batch_size=batch_size,
-                    use_layer_norm=config.use_layer_norm,
-                    legacy_bias_type=bias_type,
-                    dropout_input=dropout_embedding,
-                    dropout_state=dropout_hidden,
-                    stack_depth=config.enc_depth,
-                    transition_depth=config.enc_recurrence_transition_depth,
-                    alternating=True,
-                    reverse_alternation=True,
-                    residual_connections=True,
-                    first_residual_output=1)
+                input_size=config.embedding_size,
+                state_size=config.state_size,
+                batch_size=batch_size,
+                use_layer_norm=config.rnn_layer_normalization,
+                legacy_bias_type=bias_type,
+                dropout_input=dropout_embedding,
+                dropout_state=dropout_hidden,
+                stack_depth=config.rnn_enc_depth,
+                transition_depth=config.rnn_enc_transition_depth,
+                alternating=True,
+                reverse_alternation=True,
+                residual_connections=True,
+                first_residual_output=1)
 
     def get_context(self, x, x_mask):
 
