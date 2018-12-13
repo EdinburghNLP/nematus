@@ -69,7 +69,7 @@ def beam_search(session, models, x, x_mask, beam_size,
     hypotheses = []
     for i in range(len(target_batch)):
         pairs = zip(target_batch[i], scores[i])
-        hypotheses.append(sorted(pairs, key=lambda (sent, cost): cost,
+        hypotheses.append(sorted(pairs, key=lambda sent_cost: sent_cost[1],
                                  reverse=True))
     return hypotheses
 
