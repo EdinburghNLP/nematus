@@ -974,15 +974,17 @@ def _derive_dropout_hidden(config, meta_config):
 def _derive_valid_source_dataset(config, meta_config):
     if config.valid_source_dataset is not None:
         return config.valid_source_dataset
-    assert config.valid_datasets is not None
-    return config.valid_datasets[0]
+    if config.valid_datasets is not None:
+        return config.valid_datasets[0]
+    return None
 
 
 def _derive_valid_target_dataset(config, meta_config):
     if config.valid_target_dataset is not None:
         return config.valid_target_dataset
-    assert config.valid_datasets is not None
-    return config.valid_datasets[1]
+    if config.valid_datasets is not None:
+        return config.valid_datasets[1]
+    return None
 
 
 def _determine_vocab_size_from_file(path):
