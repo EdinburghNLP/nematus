@@ -163,7 +163,7 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
         # Propagate inputs through the encoder stack
         dec_output = target_embeddings
         # NOTE: No self-attention mask is applied at decoding, as future information is unavailable
-        for layer_id in range(1, decoder.config.transformer_decoder_layers + 1):
+        for layer_id in range(1, decoder.config.transformer_dec_depth + 1):
             dec_output, memories['layer_{:d}'.format(layer_id)] = \
                 decoder.decoder_stack[layer_id]['self_attn'].forward(
                     dec_output, None, None, memories['layer_{:d}'.format(layer_id)])
