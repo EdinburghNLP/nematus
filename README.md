@@ -109,54 +109,74 @@ for training a full-scale system, consider the training scripts at http://data.s
 | --summary_dir PATH | directory for saving summaries (default: same directory as the --model file) |
 | --summary_freq INT | Save summaries after INT updates, if 0 do not save summaries (default: 0) |
 
-#### network parameters
+#### network parameters (all model types)
 | parameter | description |
 |---        |---          |
+| --model_type {rnn,transformer} | model type (default: rnn) |
 | --embedding_size INT | embedding layer size (default: 512) |
 | --state_size INT | hidden state size (default: 1000) |
 | --source_vocab_sizes INT [INT ...] | source vocabulary sizes (one per input factor) (default: None) |
 | --target_vocab_size INT | target vocabulary size (default: -1) |
-| --factors INT | number of input factors (default: 1) |
+| --factors INT | number of input factors (default: 1) - CURRENTLY ONLY WORKS FOR 'rnn' MODEL |
 | --dim_per_factor INT [INT ...] | list of word vector dimensionalities (one per factor): '--dim_per_factor 250 200 50' for total dimensionality of 500 (default: None) |
-| --enc_depth INT | number of encoder layers (default: 1) |
-| --enc_recurrence_transition_depth INT | number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru). (default: 1) |
-| --dec_depth INT | number of decoder layers (default: 1) |
-| --dec_base_recurrence_transition_depth INT | number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond). (default: 2) |
-| --dec_high_recurrence_transition_depth INT | number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: 1) |
-| --dec_deep_context | pass context vector (from first layer) to deep decoder layers |
-| --use_dropout | use dropout layer (default: False) |
-| --dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: None) |
-| --dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: None) |
-| --dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
-| --dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
-| --use_layer_norm, --layer_normalisation | Set to use layer normalization in encoder and decoder |
 | --tie_encoder_decoder_embeddings | tie the input embeddings of the encoder and the decoder (first factor only). Source and target vocabulary size must be the same |
 | --tie_decoder_embeddings | tie the input embeddings of the decoder with the softmax output embeddings |
-| --output_hidden_activation {tanh,relu,prelu,linear} | activation function in hidden layer of the output network (default: tanh) |
-| --softmax_mixture_size INT | number of softmax components to use (default: 1) |
+| --output_hidden_activation {tanh,relu,prelu,linear} | activation function in hidden layer of the output network (default: tanh) - CURRENTLY ONLY WORKS FOR 'rnn' MODEL |
+| --softmax_mixture_size INT | number of softmax components to use (default: 1) - CURRENTLY ONLY WORKS FOR 'rnn' MODEL |
+
+#### network parameters (rnn-specific)
+| parameter | description |
+|---        |---          |
+| --rnn_enc_depth INT | number of encoder layers (default: 1) |
+| --rnn_enc_transition_depth INT | number of GRU transition operations applied in the encoder. Minimum is 1. (Only applies to gru). (default: 1) |
+| --rnn_dec_depth INT | number of decoder layers (default: 1) |
+| --rnn_dec_base_transition_depth INT | number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond). (default: 2) |
+| --rnn_dec_high_transition_depth INT | number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: 1) |
+| --rnn_dec_deep_context | pass context vector (from first layer) to deep decoder layers |
+| --rnn_use_dropout | use dropout layer (default: False) |
+| --rnn_dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: 0.2) |
+| --rnn_dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
+| --rnn_dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
+| --rnn_dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
+| --rnn_layer_normalisation | Set to use layer normalization in encoder and decoder |
+
+#### network parameters (transformer-specific)
+| parameter | description |
+|---        |---          |
+| --transformer_enc_depth INT | number of encoder layers (default: 6) |
+| --transformer_dec_depth INT | number of decoder layers (default: 6) |
+| --transformer_ffn_hidden_size INT | inner dimensionality of feed-forward sub-layers (default: 2048) |
+| --transformer_num_heads INT | number of attention heads used in multi-head attention (default: 8) |
+| --transformer_dropout_embeddings FLOAT | dropout applied to sums of word embeddings and positional encodings (default: 0.1) |
+| --transformer_dropout_residual FLOAT | dropout applied to residual connections (default: 0.1) |
+| --transformer_dropout_relu FLOAT | dropout applied to the internal activation of the feed-forward sub-layers (default: 0.1) |
+| --transformer_dropout_attn FLOAT | dropout applied to attention weights (default: 0.1) |
 
 #### training parameters
 | parameter | description |
 |---        |---          |
-| --maxlen INT | maximum sequence length for training and validation (default: 100) |
-| --batch_size INT | minibatch size (default: 80) |
-| --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: 0) |
-| --max_epochs INT | maximum number of epochs (default: 5000) |
-| --finish_after INT | maximum number of updates (minibatches) (default: 10000000) |
+| --loss_function {cross-entropy,per-token-cross-entropy} | loss function (default: cross-entropy) |
 | --decay_c FLOAT | L2 regularization penalty (default: 0.0) |
 | --map_decay_c FLOAT | MAP-L2 regularization penalty towards original weights (default: 0.0) |
 | --prior_model PATH | Prior model for MAP-L2 regularization. Unless using " --reload", this will also be used for initialization. |
 | --clip_c FLOAT | gradient clipping threshold (default: 1.0) |
 | --label_smoothing FLOAT | label smoothing (default: 0.0) |
-| --no_shuffle | disable shuffling of training data (for each epoch) |
-| --keep_train_set_in_memory | Keep training dataset lines stores in RAM during training |
-| --no_sort_by_length | do not sort sentences in maxibatch by length |
-| --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --optimizer {adam} | optimizer (default: adam) |
-| --learning_rate FLOAT | learning rate (default: 0.0001) |
 | --adam_beta1 FLOAT | exponential decay rate for the first moment estimates (default: 0.9) |
 | --adam_beta2 FLOAT | exponential decay rate for the second moment estimates (default: 0.999) |
 | --adam_epsilon FLOAT | constant for numerical stability (default: 1e-08) |
+| --learning_schedule {constant,transformer} | learning schedule (default: constant) |
+| --learning_rate FLOAT | learning rate (default: 0.0001) |
+| --warmup_steps INT | number of initial updates during which the learning rate is increased linearly during learning rate scheduling (default: 8000) |
+| --maxlen INT | maximum sequence length for training and validation (default: 100) |
+| --batch_size INT | minibatch size (default: 80) |
+| --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: 0) |
+| --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
+| --no_sort_by_length | do not sort sentences in maxibatch by length |
+| --no_shuffle | disable shuffling of training data (for each epoch) |
+| --keep_train_set_in_memory | Keep training dataset lines stores in RAM during training |
+| --max_epochs INT | maximum number of epochs (default: 5000) |
+| --finish_after INT | maximum number of updates (minibatches) (default: 10000000) |
 
 #### validation parameters
 | parameter | description |
