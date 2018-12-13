@@ -53,7 +53,7 @@ sub add_to_ref {
 	open(REF,$file) or die "Can't read $file";
     }
     while(<REF>) {
-	chop;
+	chomp;
 	$_ = tokenization($_);
 	push @{$$REF[$s++]}, $_;
     }
@@ -63,7 +63,7 @@ sub add_to_ref {
 my(@CORRECT,@TOTAL,$length_translation,$length_reference);
 my $s=0;
 while(<STDIN>) {
-    chop;
+    chomp;
     $_ = lc if $lowercase;
     $_ = tokenization($_);
     my @WORD = split;
