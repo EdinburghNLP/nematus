@@ -85,6 +85,10 @@ def update_old_vocab_dictionary(d):
         0 "eos"
         1 "UNK"
 
+    (Although there are JSON files in the wild that contain different strings
+    for token 0: in the tests, the downloaded test/models/en-de/vocab.en.json
+    file uses "</s>" and vocab.de.json uses both "<s>" and "</s>".)
+
     In the current version, they are:
 
         0 "<EOS>"
@@ -97,24 +101,25 @@ def update_old_vocab_dictionary(d):
     Returns:
         None (d is modified in-place).
     """
-    assert "eos" in d
-    assert "UNK" in d
-    # Delete the entries for "eos" and "UNK" unless they are actually BPE
-    # subwords.
-    if d["eos"] == 0:
-        del d["eos"]
-    if d["UNK"] == 1:
-        del d["UNK"]
+    # Find the token strings (among d's keys) for token IDs 0, 1, and 2 (in
+    # d's values). Normally there will only be one string for each ID, but not
+    # always...
+    keys_for_id = [[], [], []]
+    for k, v in d.items():
+        if v == 0 or v == 1 or v == 2:
+            keys_for_id[v].append(k)
+    # Delete the entries for tokens 0 and 1.
+    for k in keys_for_id[0] + keys_for_id[1]:
+        del d[k]
+    # Move the entry (or entries) for token 2.
+    v_max = max(d.values())
+    for i, k in enumerate(keys_for_id[2]):
+        d[k] = v_max + 1 + i
     # Add entries for "<EOS>", "<UNK>", and "<GO>".
-    # FIXME We shouldn't assume that they aren't subwords.
+    # FIXME We shouldn't assume that these strings aren't subwords.
     d["<EOS>"] = 0
     d["<GO>"] = 1
-    v_max = max(d.values())
-    for k, v in d.items():
-        if v == 2:
-            d[k] = v_max + 1
-            d["<UNK>"] = 2
-            break
+    d["<UNK>"] = 2
 
 
 def seq2words(seq, inverse_dictionary, join=True):
