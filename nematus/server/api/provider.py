@@ -11,7 +11,7 @@ def request_provider(style, request):
     Turns a raw request body into a TranslationRequest of a given API style
     @param style.
     """
-    from nematus_style import TranslationRequestNematus
+    from .nematus_style import TranslationRequestNematus
     mapping = {
         'Nematus': TranslationRequestNematus
     }
@@ -25,7 +25,7 @@ def response_provider(style, **response_args):
     Formats @param response_args as a TranslationResponse of a given API style
     @param style.
     """
-    from nematus_style import TranslationResponseNematus
+    from .nematus_style import TranslationResponseNematus
     mapping = {
         'Nematus': TranslationResponseNematus
     }
