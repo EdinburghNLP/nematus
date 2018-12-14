@@ -21,6 +21,7 @@ from settings import ScorerSettings
 
 import tensorflow as tf
 
+# FIXME pass in paths not file objects, since we need to know the paths anyway
 def score_model(source_file, target_file, scorer_settings, options):
     scores = []
     for option in options:

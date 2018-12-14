@@ -28,26 +28,24 @@ class TestTranslate(unittest.TestCase):
     def outputEqual(self, output1, output2):
         """given two translation outputs, check that output string is identical
         """
-        for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
-            self.assertEqual(line.strip(), line2.strip())
-
-    def get_settings(self):
-        """
-        Initialize and customize settings.
-        """
-        translation_settings = TranslationSettings()
-        translation_settings.input = open('../../en-de/in')
-        translation_settings.output = open('../../en-de/out','w')
-        translation_settings.models = ["model.npz"]
-        translation_settings.beam_size = 12
-        translation_settings.normalization_alpha = 1.0
-        return translation_settings
+        with open(output1, 'r', encoding='utf-8') as out1, \
+             open(output2, 'r', encoding='utf-8') as out2:
+            for (line1, line2) in zip(out1.readlines(), out2.readlines()):
+                self.assertEqual(line1.strip(), line2.strip())
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
-        os.chdir('models/en-de/')
-        translate(settings=self.get_settings())
-        os.chdir('../..')
+        with open('en-de/in', 'r', encoding='utf-8') as in_file, \
+             open('en-de/out', 'w', encoding='utf-8') as out_file:
+            os.chdir('models/en-de/')
+            settings = TranslationSettings()
+            settings.input = in_file
+            settings.output = out_file
+            settings.models = ["model.npz"]
+            settings.beam_size = 12
+            settings.normalization_alpha = 1.0
+            translate(settings=settings)
+            os.chdir('../..')
         self.outputEqual('en-de/ref2','en-de/out')
 
 

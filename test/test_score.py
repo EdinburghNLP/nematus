@@ -25,27 +25,31 @@ class TestScore(unittest.TestCase):
         """
         load_wmt16_model('en','de')
 
-    @staticmethod
-    def get_settings():
-        scorer_settings = ScorerSettings()
-        scorer_settings.models = ['model.npz']
-        scorer_settings.minibatch_size = 80
-        scorer_settings.normalization_alpha = 1.0
-        return scorer_settings
-
     def scoreEqual(self, output1, output2):
-        """given two files with translation scores, check that probabilities are equal within rounding error.
+        """Given two files with translation scores, check that probabilities
+           are equal within rounding error.
         """
-        for i, (line, line2) in enumerate(zip(open(output1).readlines(), open(output2).readlines())):
-            self.assertAlmostEqual(float(line.split()[-1]), float(line2.split()[-1]), 5)
+        with open(output1, 'r', encoding='utf-8') as out1, \
+             open(output2, 'r', encoding='utf-8') as out2:
+            for (line1, line2) in zip(out1.readlines(), out2.readlines()):
+                score1 = float(line1.split()[-1])
+                score2 = float(line2.split()[-1])
+                self.assertAlmostEqual(score1, score2)
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
-        scorer_settings = self.get_settings()
         os.chdir('models/en-de/')
-        score(open('../../en-de/in'), open('../../en-de/references'), open('../../en-de/out_score','w'), scorer_settings)
+        with open('../../en-de/in', 'r', encoding='utf-8') as in_file, \
+             open('../../en-de/references', 'r', encoding='utf-8') as ref_file, \
+             open('../../en-de/out_score', 'w', encoding='utf-8') as score_file:
+            settings = ScorerSettings()
+            settings.models = ['model.npz']
+            settings.minibatch_size = 80
+            settings.normalization_alpha = 1.0
+            score(in_file, ref_file, score_file, settings)
         os.chdir('../..')
         self.scoreEqual('en-de/ref_score', 'en-de/out_score')
+
 
 if __name__ == '__main__':
     unittest.main()
