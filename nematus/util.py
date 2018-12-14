@@ -87,7 +87,7 @@ def update_old_vocab_dictionary(d):
 
     (Although there are JSON files in the wild that contain different strings
     for token 0: in the tests, the downloaded test/models/en-de/vocab.en.json
-    file uses "</s>" and vocab.de.json uses both "<s>" and "</s>".)
+    file contains "</s>" and vocab.de.json contains both "<s>" and "</s>".)
 
     In the current version, they are:
 
@@ -101,25 +101,25 @@ def update_old_vocab_dictionary(d):
     Returns:
         None (d is modified in-place).
     """
-    # Find the token strings (among d's keys) for token IDs 0, 1, and 2 (in
-    # d's values). Normally there will only be one string for each ID, but not
-    # always...
-    keys_for_id = [[], [], []]
-    for k, v in d.items():
-        if v == 0 or v == 1 or v == 2:
-            keys_for_id[v].append(k)
-    # Delete the entries for tokens 0 and 1.
-    for k in keys_for_id[0] + keys_for_id[1]:
-        del d[k]
-    # Move the entry (or entries) for token 2.
-    v_max = max(d.values())
-    for i, k in enumerate(keys_for_id[2]):
-        d[k] = v_max + 1 + i
-    # Add entries for "<EOS>", "<UNK>", and "<GO>".
-    # FIXME We shouldn't assume that these strings aren't subwords.
-    d["<EOS>"] = 0
-    d["<GO>"] = 1
-    d["<UNK>"] = 2
+    # Invert the dictionary.
+    id_to_string = reverse_dict(d)
+    # Update d[0] and d[1]
+    id_to_string[0] = '<EOS>'
+    id_to_string[1] = '<GO>'
+    # Shift everything else along to make room for an extra token.
+    # It is important that the order is preserved because the tokens are
+    # ordered by frequency rank. When the vocabulary size limit is
+    # applied, we want the lowest rank items to be deleted.
+    max_id = max(d.values())
+    for i in range(max_id, 1, -1):
+        assert i+1 not in id_to_string
+        id_to_string[i+1] = id_to_string[i]
+        del id_to_string[i]
+    # Insert '<UNK>'
+    assert 2 not in id_to_string
+    id_to_string[2] = '<UNK>'
+    # Invert again to get the updated dictionary.
+    d = reverse_dict(id_to_string)
 
 
 def seq2words(seq, inverse_dictionary, join=True):
