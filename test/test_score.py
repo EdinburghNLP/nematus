@@ -34,7 +34,7 @@ class TestScore(unittest.TestCase):
             for (line1, line2) in zip(out1.readlines(), out2.readlines()):
                 score1 = float(line1.split()[-1])
                 score2 = float(line2.split()[-1])
-                self.assertAlmostEqual(score1, score2)
+                self.assertAlmostEqual(score1, score2, places=5)
 
     # English-German WMT16 system, no dropout
     def test_ende(self):
