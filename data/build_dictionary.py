@@ -12,7 +12,7 @@ def main():
     for filename in sys.argv[1:]:
         print('Processing', filename)
         word_freqs = OrderedDict()
-        with open(filename, 'r', encoding='utf-8') as f:
+        with open(filename, 'r') as f:
             for line in f:
                 words_in = line.strip().split(' ')
                 for w in words_in:
@@ -33,6 +33,9 @@ def main():
         for ii, ww in enumerate(sorted_words):
             worddict[ww] = ii+3
 
+        # The JSON RFC requires that JSON text be represented using either
+        # UTF-8, UTF-16, or UTF-32, with UTF-8 being recommended.
+        # We use UTF-8 regardless of the user's locale settings.
         with open('%s.json'%filename, 'w', encoding='utf-8') as f:
             json.dump(worddict, f, indent=2, ensure_ascii=False)
 

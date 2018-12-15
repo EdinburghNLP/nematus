@@ -74,12 +74,12 @@ class TranslationSettings(BaseSettings):
         if self._from_console_arguments:
             # don't open files if no console arguments are parsed
             self._parser.add_argument(
-                '-i', '--input', type=argparse.FileType('r', encoding='utf-8'),
+                '-i', '--input', type=argparse.FileType('r'),
                 default=sys.stdin, metavar='PATH',
                 help="input file (default: standard input)")
 
             self._parser.add_argument(
-                '-o', '--output', type=argparse.FileType('w', encoding='utf-8'),
+                '-o', '--output', type=argparse.FileType('w'),
                 default=sys.stdout, metavar='PATH',
                 help="output file (default: standard output)")
 

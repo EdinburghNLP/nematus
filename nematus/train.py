@@ -7,6 +7,7 @@ import collections
 from datetime import datetime
 import json
 import os
+import locale
 import logging
 import subprocess
 import sys
@@ -268,7 +269,7 @@ def validate_with_script(session, model, config):
     if config.valid_script == None:
         return None
     logging.info('Starting external validation.')
-    out = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8')
+    out = tempfile.NamedTemporaryFile(mode='w')
     inference.translate_file(input_file=open(config.valid_source_dataset),
                              output_file=out,
                              session=session,
@@ -282,7 +283,9 @@ def validate_with_script(session, model, config):
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     stdout_bytes, stderr_bytes = proc.communicate()
-    stdout, stderr = stdout_bytes.decode('utf-8'), stderr_bytes.decode('utf-8')
+    encoding = locale.getpreferredencoding()
+    stdout = stdout_bytes.decode(encoding=encoding)
+    stderr = stderr_bytes.decode(encoding=encoding)
     if len(stderr) > 0:
         logging.info("Validation script wrote the following to standard "
                      "error:\n" + stderr)

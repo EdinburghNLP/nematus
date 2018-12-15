@@ -2,10 +2,7 @@
 Training progress
 '''
 
-import sys
 import json
-
-import util
 
 class TrainingProgress(object):
     '''
@@ -13,7 +10,10 @@ class TrainingProgress(object):
     '''
 
     def load_from_json(self, file_name):
-        self.__dict__.update(json.load(open(file_name, 'r', encoding='utf-8')))
+        with open(file_name, 'r', encoding='utf-8') as fh:
+            self.__dict__.update(json.load(fh))
 
     def save_to_json(self, file_name):
-        json.dump(self.__dict__, open(file_name, 'w'), indent=2)
+        with open(file_name, 'w', encoding='utf-8') as fh:
+            # TODO ensure_ascii=False?
+            json.dump(self.__dict__, fh, indent=2)

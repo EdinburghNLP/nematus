@@ -61,15 +61,13 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
     return x, x_mask, y, y_mask
 
 
-#json loads strings as unicode; we currently still work with Python 2 strings, and need conversion
-def unicode_to_utf8(d):
-    return dict((key.encode("UTF-8"), value) for (key,value) in list(d.items()))
-
 def load_dict(filename):
     try:
+        # build_dictionary.py writes JSON files as UTF-8 so assume that here.
         with open(filename, 'r', encoding='utf-8') as f:
             d = json.load(f)
     except:
+        # FIXME Should we be assuming UTF-8?
         with open(filename, 'r', encoding='utf-8') as f:
             d = pkl.load(f)
     if "<GO>" not in d or d["<GO>"] != 1:
