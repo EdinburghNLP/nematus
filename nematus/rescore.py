@@ -4,7 +4,7 @@
 Rescoring an n-best list of translations using a translation model.
 '''
 import logging
-import tempfile
+from tempfile import NamedTemporaryFile
 
 from config import load_config_from_json_file
 from settings import RescorerSettings
@@ -17,21 +17,23 @@ def rescore(source_file, nbest_file, output_file, rescorer_settings, options):
     nbest_lines = nbest_file.readlines()
 
     # create plain text file for scoring
-    with tempfile.NamedTemporaryFile(prefix='rescore-tmpin') as tmp_in, tempfile.NamedTemporaryFile(prefix='rescore-tmpout') as tmp_out:
+    with NamedTemporaryFile(mode='w+', prefix='rescore-tmpin') as tmp_in, \
+         NamedTemporaryFile(mode='w+', prefix='rescore-tmpout') as tmp_out:
         for line in nbest_lines:
             linesplit = line.split(' ||| ')
-            idx = int(linesplit[0])   ##index from the source file. Starting from 0.
+            # Get the source file index (zero-based).
+            idx = int(linesplit[0])
             tmp_in.write(lines[idx])
             tmp_out.write(linesplit[1] + '\n')
 
         tmp_in.seek(0)
         tmp_out.seek(0)
-
         scores = score_model(tmp_in, tmp_out, rescorer_settings, options)
 
     for i, line in enumerate(nbest_lines):
-        score_str = ' '.join(map(str,[s[i] for s in scores]))
+        score_str = ' '.join([str(s[i]) for s in scores])
         output_file.write('{0} {1}\n'.format(line.strip(), score_str))
+
 
 def main(source_file, nbest_file, output_file, rescorer_settings):
     # load model model_options
@@ -42,6 +44,7 @@ def main(source_file, nbest_file, output_file, rescorer_settings):
         options.append(config)
 
     rescore(source_file, nbest_file, output_file, rescorer_settings, options)
+
 
 if __name__ == "__main__":
     rescorer_settings = RescorerSettings(from_console_arguments=True)
