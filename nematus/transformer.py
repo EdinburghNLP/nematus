@@ -168,9 +168,8 @@ class TransformerEncoder(object):
         self.encoder_stack = dict()
         self.is_final_layer = False
 
-        with tf.variable_scope(self.name):
-            # Create nodes
-            self._build_graph()
+        # Create nodes
+        self._build_graph()
 
     def _embed(self, index_sequence):
         """ Embeds source-side indices to obtain the corresponding dense tensor representations. """
@@ -272,9 +271,8 @@ class TransformerDecoder(object):
         self.decoder_stack = dict()
         self.is_final_layer = False
 
-        with tf.variable_scope(self.name):
-            # Create nodes
-            self._build_graph()
+        # Create nodes
+        self._build_graph()
 
     def _embed(self, index_sequence):
         """ Embeds target-side indices to obtain the corresponding dense tensor representations. """
