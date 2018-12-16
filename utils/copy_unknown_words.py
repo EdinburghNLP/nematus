@@ -1,4 +1,3 @@
-# -*- coding: utf8 -*-
 '''
 This script is to replace the unknown words in target sentences with their aligned words in source sentences.
 Args: 

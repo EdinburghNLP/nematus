@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 '''
 Rescoring an n-best list of translations using a translation model.
 '''
