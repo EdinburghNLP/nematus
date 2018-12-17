@@ -83,9 +83,7 @@ def train(config, sess):
         device_type = "GPU" if num_gpus > 0 else "CPU"
         device_spec = tf.DeviceSpec(device_type=device_type, device_index=i)
         with tf.device(device_spec):
-            #with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-            with tf.variable_scope(tf.get_variable_scope(),
-                                   reuse=tf.AUTO_REUSE):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
                 if config.model_type == "transformer":
                     model = TransformerModel(config)
                 else:
