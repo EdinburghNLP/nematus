@@ -42,8 +42,7 @@ def main(settings):
     for i, config in enumerate(configs):
         with tf.variable_scope("model%d" % i) as scope:
             if config.model_type == "transformer":
-                nematode_config = compat.create_nematode_config_or_die(config)
-                model = TransformerModel(nematode_config)
+                model = TransformerModel(config)
             else:
                 model = rnn_model.RNNModel(config)
             saver = model_loader.init_or_restore_variables(config, session,
