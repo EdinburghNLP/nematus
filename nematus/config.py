@@ -1025,6 +1025,18 @@ def _check_config_consistency(spec, config, set_by_user):
     #       if optimizer != 'adam' (not currently possible but probably will
     #       be in in the future)...
 
+    # Check if user is trying to use the Transformer with features that
+    # aren't supported yet.
+    if config.model_type == 'transformer':
+        if config.factors > 1:
+            msg = 'factors are not yet supported for the \'transformer\' ' \
+                  'model type'
+            error_messages.append(msg)
+        if config.softmax_mixture_size > 1:
+            msg = 'softmax mixtures are not yet supported for the ' \
+                  '\'transformer\' model type'
+            error_messages.append(msg)
+
     if config.datasets:
         if config.source_dataset or config.target_dataset:
             msg = 'argument clash: --datasets is mutually exclusive ' \
