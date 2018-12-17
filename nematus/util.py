@@ -5,6 +5,7 @@ Utility functions
 import pickle as pkl
 import exception
 import json
+import logging
 import numpy
 import sys
 
@@ -61,7 +62,7 @@ def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):
     return x, x_mask, y, y_mask
 
 
-def load_dict(filename):
+def load_dict(filename, model_type):
     try:
         # build_dictionary.py writes JSON files as UTF-8 so assume that here.
         with open(filename, 'r', encoding='utf-8') as f:
@@ -70,54 +71,18 @@ def load_dict(filename):
         # FIXME Should we be assuming UTF-8?
         with open(filename, 'r', encoding='utf-8') as f:
             d = pkl.load(f)
-    if "<GO>" not in d or d["<GO>"] != 1:
-       update_old_vocab_dictionary(d)
+
+    # The transformer model requires vocab dictionaries to use the new style
+    # special symbols. If the dictionary looks like an old one then tell the
+    # user to update it.
+    if model_type == 'transformer' and ("<GO>" not in d or d["<GO>"] != 1):
+        logging.error('you must update \'{}\' for use with the '
+                      '\'transformer\' model type. Please re-run '
+                      'build_dictionary.py to generate a new vocabulary '
+                      'dictionary.'.format(filename))
+        sys.exit(1)
+
     return d
-
-
-def update_old_vocab_dictionary(d):
-    """Updates a dictionary built with an old version of build_dictionary.py
-
-    In old versions of build_dictionary.py, the special symbols were:
-
-        0 "eos"
-        1 "UNK"
-
-    (Although there are JSON files in the wild that contain different strings
-    for token 0: in the tests, the downloaded test/models/en-de/vocab.en.json
-    file contains "</s>" and vocab.de.json contains both "<s>" and "</s>".)
-
-    In the current version, they are:
-
-        0 "<EOS>"
-        1 "<GO>"
-        2 "<UNK>"
-
-    Args:
-        d: a vocabulary dictionary.
-
-    Returns:
-        None (d is modified in-place).
-    """
-    # Invert the dictionary.
-    id_to_string = reverse_dict(d)
-    # Update d[0] and d[1]
-    id_to_string[0] = '<EOS>'
-    id_to_string[1] = '<GO>'
-    # Shift everything else along to make room for an extra token.
-    # It is important that the order is preserved because the tokens are
-    # ordered by frequency rank. When the vocabulary size limit is
-    # applied, we want the lowest rank items to be deleted.
-    max_id = max(d.values())
-    for i in range(max_id, 1, -1):
-        assert i+1 not in id_to_string
-        id_to_string[i+1] = id_to_string[i]
-        del id_to_string[i]
-    # Insert '<UNK>'
-    assert 2 not in id_to_string
-    id_to_string[2] = '<UNK>'
-    # Invert again to get the updated dictionary.
-    d = reverse_dict(id_to_string)
 
 
 def seq2words(seq, inverse_dictionary, join=True):
@@ -160,8 +125,9 @@ def reverse_dict(dictt):
 
 
 def load_dictionaries(config):
-    source_to_num = [load_dict(d) for d in config.source_dicts]
-    target_to_num = load_dict(config.target_dict)
+    model_type = config.model_type
+    source_to_num = [load_dict(d, model_type) for d in config.source_dicts]
+    target_to_num = load_dict(config.target_dict, model_type)
     num_to_source = [reverse_dict(d) for d in source_to_num]
     num_to_target = reverse_dict(target_to_num)
     return source_to_num, target_to_num, num_to_source, num_to_target

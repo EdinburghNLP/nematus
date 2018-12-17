@@ -1154,7 +1154,8 @@ def _derive_source_vocab_sizes(config, meta_config):
         if vocab_size >= 0:
             continue
         path = config.dictionaries[i]
-        vocab_sizes[i] = _determine_vocab_size_from_file(path)
+        vocab_sizes[i] = _determine_vocab_size_from_file(path,
+                                                         config.model_type)
     return vocab_sizes
 
 
@@ -1162,7 +1163,7 @@ def _derive_target_vocab_size(config, meta_config):
     if config.target_vocab_size != -1:
         return config.target_vocab_size
     path = config.dictionaries[-1]
-    return _determine_vocab_size_from_file(path)
+    return _determine_vocab_size_from_file(path, config.model_type)
 
 
 def _derive_dim_per_factor(config, meta_config):
@@ -1200,9 +1201,9 @@ def _derive_valid_target_dataset(config, meta_config):
     return None
 
 
-def _determine_vocab_size_from_file(path):
+def _determine_vocab_size_from_file(path, model_type):
     try:
-        d = util.load_dict(path)
+        d = util.load_dict(path, model_type)
     except IOError as x:
         logging.error('failed to determine vocabulary size from file: '
                       '{}: {}'.format(path, str(x)))

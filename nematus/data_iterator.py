@@ -40,6 +40,7 @@ class TextIterator:
     """Simple Bitext iterator."""
     def __init__(self, source, target,
                  source_dicts, target_dict,
+                 model_type,
                  batch_size=128,
                  maxlen=100,
                  source_vocab_sizes=None,
@@ -66,8 +67,8 @@ class TextIterator:
             self.target = fopen(target, 'r')
         self.source_dicts = []
         for source_dict in source_dicts:
-            self.source_dicts.append(load_dict(source_dict))
-        self.target_dict = load_dict(target_dict)
+            self.source_dicts.append(load_dict(source_dict, model_type))
+        self.target_dict = load_dict(target_dict, model_type)
 
         self.keep_data_in_memory = keep_data_in_memory
         self.batch_size = batch_size
