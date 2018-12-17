@@ -1,6 +1,25 @@
 CHANGELOG
 ---------
 
+v0.4 (17/12/2018)
+----------
+
+changes since 0.3:
+
+ - main new features:
+   -- Transformer architecture
+   -- multi-GPU training
+   -- codebase moved to Python 3
+
+ - other new features:
+   -- label smoothing
+   -- mixture of softmaxes
+
+ - fixes:
+   -- re-enable BLEU validation (via --valid_script)
+   -- fix MAP-L2 regularization
+   -- fix server mode
+
 v0.3 (23/5/2018)
 ----------
  - Tensorflow backend. The main model was rewritten to support Tensorflow in lieu of Theano.
