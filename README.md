@@ -106,7 +106,7 @@ USAGE INSTRUCTIONS
 All of the scripts below can be run with `--help` flag to get usage information.
 
 Sample commands with toy examples are available in the `test` directory;
-for training a full-scale system, consider the training scripts at http://data.statmt.org/wmt17_systems/training/
+for training a full-scale RNN system, consider the training scripts at http://data.statmt.org/wmt17_systems/training/ An updated version of these scripts that uses the Transformer model can be found at https://github.com/EdinburghNLP/wmt17-transformer-scripts
 
 #### `nematus/train.py` : use to train a new model
 
