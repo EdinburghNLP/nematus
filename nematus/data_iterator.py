@@ -70,6 +70,19 @@ class TextIterator:
             self.source_dicts.append(load_dict(source_dict, model_type))
         self.target_dict = load_dict(target_dict, model_type)
 
+        # Determine the UNK value for each dictionary (the value depends on
+        # which version of build_dictionary.py was used).
+
+        def determine_unk_val(d):
+            if '<UNK>' in d and d['<UNK>'] == 2:
+                return 2
+            return 1
+
+        self.source_unk_vals = [determine_unk_val(d)
+                                for d in self.source_dicts]
+        self.target_unk_val = determine_unk_val(self.target_dict)
+
+
         self.keep_data_in_memory = keep_data_in_memory
         self.batch_size = batch_size
         self.maxlen = maxlen
@@ -169,10 +182,7 @@ class TextIterator:
                 self.source_buffer.reverse()
                 self.target_buffer.reverse()
 
-        # FIXME Define the <UNK> value somewhere instead of hardcoding it here.
-        unk_val = 2
-
-        def lookup_token(t, d):
+        def lookup_token(t, d, unk_val):
             return d[t] if t in d else unk_val
 
         try:
@@ -187,18 +197,22 @@ class TextIterator:
                 tmp = []
                 for w in ss:
                     if self.use_factor:
-                        w = [lookup_token(f, self.source_dicts[i]) \
-                             for (i,f) in enumerate(w.split('|'))]
+                        w = [lookup_token(f, self.source_dicts[i],
+                                          self.source_unk_vals[i])
+                             for (i, f) in enumerate(w.split('|'))]
                     else:
-                        w = [lookup_token(w, self.source_dicts[0])]
+                        w = [lookup_token(w, self.source_dicts[0],
+                                          self.source_unk_vals[0])]
                     tmp.append(w)
                 ss_indices = tmp
 
                 # read from source file and map to word index
                 tt = self.target_buffer.pop()
-                tt_indices = [lookup_token(w, self.target_dict) for w in tt]
+                tt_indices = [lookup_token(w, self.target_dict,
+                                           self.target_unk_val) for w in tt]
                 if self.target_vocab_size != None:
-                    tt_indices = [w if w < self.target_vocab_size else unk_val \
+                    tt_indices = [w if w < self.target_vocab_size
+                                    else self.target_unk_val
                                   for w in tt_indices]
 
                 source.append(ss_indices)
