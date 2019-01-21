@@ -913,6 +913,19 @@ def read_config_from_cmdline():
     return config
 
 
+def write_config_to_json_file(config, path):
+    """
+    Writes a config object to a JSON file.
+
+    Args:
+        config: a config Namespace object
+        path: full path to the JSON file except ".json" suffix
+    """
+
+    config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
+    json.dump(config_as_dict, open('%s.json' % path, 'w'), indent=2)
+
+
 def load_config_from_json_file(basename):
     """Loads and, if necessary, updates a config from a JSON (or Pickle) file.
 

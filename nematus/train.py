@@ -16,7 +16,7 @@ import time
 import numpy
 import tensorflow as tf
 
-from config import read_config_from_cmdline
+from config import read_config_from_cmdline, write_config_to_json_file
 from data_iterator import TextIterator
 import inference
 from learning_schedule import ConstantSchedule, TransformerSchedule
@@ -136,8 +136,7 @@ def train(config, sess):
     model_set = inference.InferenceModelSet([replicas[0]], [config])
 
     #save model options
-    config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
-    json.dump(config_as_dict, open('%s.json' % config.saveto, 'w'), indent=2)
+    write_config_to_json_file(config, config.saveto)
 
     text_iterator, valid_text_iterator = load_data(config)
     _, _, num_to_source, num_to_target = util.load_dictionaries(config)
@@ -233,17 +232,23 @@ def train(config, sess):
                     if need_to_save:
                         save_path = config.saveto + ".best-valid-script"
                         saver.save(sess, save_path=save_path)
+                        write_config_to_json_file(config, save_path)
+
                         progress_path = '{}.progress.json'.format(save_path)
                         progress.save_to_json(progress_path)
 
             if config.save_freq and progress.uidx % config.save_freq == 0:
                 saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
+                write_config_to_json_file(config, "%s-%s" % (config.saveto, progress.uidx))
+
                 progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
                 progress.save_to_json(progress_path)
 
             if config.finish_after and progress.uidx % config.finish_after == 0:
                 logging.info("Maximum number of updates reached")
                 saver.save(sess, save_path=config.saveto, global_step=progress.uidx)
+                write_config_to_json_file(config, "%s-%s" % (config.saveto, progress.uidx))
+
                 progress.estop=True
                 progress_path = '{0}-{1}.progress.json'.format(config.saveto, progress.uidx)
                 progress.save_to_json(progress_path)
