@@ -3,9 +3,6 @@ import math
 import numpy
 import tensorflow as tf
 
-# TODO REMOVE ME
-import logging
-
 
 class ModelUpdater(object):
     """Helper class for training using multiple GPUs and/or large minibatches.
@@ -292,20 +289,6 @@ class ModelUpdater(object):
             weights.append(0.0)
 
         return split_x, split_x_mask, split_y, split_y_mask, weights
-
-
-def _print_debug_stuff(split_x_mask, split_y_mask, weights):
-    logging.info("DEBUG: weights: {}".format(", ".join([str(w) for w in weights])))
-
-    sizes = [int(a.shape[0] * a.shape[1]) for a in split_x_mask]
-    total = sum(sizes)
-    logging.info("DEBUG: sub-batch sizes (source): {} = {}".format(total, " + ".join([str(size) for size in sizes])))
-
-    sizes = [int(a.shape[0] * a.shape[1]) for a in split_y_mask]
-    total = sum(sizes)
-    logging.info("DEBUG: sub-batch sizes (target): {} = {}".format(total, " + ".join([str(size) for size in sizes])))
-
-    logging.info('')
 
 
 class _ModelUpdateGraph(object):
