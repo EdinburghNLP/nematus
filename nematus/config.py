@@ -628,6 +628,30 @@ class ConfigSpecification:
                  'length. (default: %(default)s)'))
 
         group.append(ParameterSpecification(
+            name='max_sentences_per_device', default=0,
+            visible_arg_names=['--max_sentences_per_device'],
+            type=int, metavar='INT',
+            help='maximum size of minibatch subset to run on a single device, '
+                 'in number of sentences (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='max_tokens_per_device', default=0,
+            visible_arg_names=['--max_tokens_per_device'],
+            type=int, metavar='INT',
+            help='maximum size of minibatch subset to run on a single device, '
+                 'in number of tokens (either source or target - whichever is '
+                 'highest) (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='gradient_aggregation_steps', default=1,
+            visible_arg_names=['--gradient_aggregation_steps'],
+            type=int, metavar='INT',
+            help='number of times to accumulate gradients before aggregating '
+                 'and applying; the minibatch is split between steps, so '
+                 'adding more steps allows larger minibatches to be used '
+                 '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
             name='maxibatch_size', default=20,
             visible_arg_names=['--maxibatch_size'],
             type=int, metavar='INT',
@@ -999,6 +1023,11 @@ def _check_config_consistency(spec, config, set_by_user):
         A list of error messages, one for each check that failed. An empty
         list indicates that all checks passed.
     """
+
+    def arg_names_string(param):
+        arg_names = param.visible_arg_names + param.hidden_arg_names
+        return ' / '.join(arg_names)
+
     error_messages = []
 
     # Check parameters are appropriate for the model type.
@@ -1011,27 +1040,25 @@ def _check_config_consistency(spec, config, set_by_user):
                  config.model_type == 'transformer') or
                  (param.name.startswith('transformer_') and
                  config.model_type == 'rnn')):
-                arg_names = param.visible_arg_names + param.hidden_arg_names
                 msg = '{} cannot be used with \'{}\' model type'.format(
-                    ' / '.join(arg_names), config.model_type)
+                    arg_names_string(param), config.model_type)
                 error_messages.append(msg)
 
     # Check user-supplied learning schedule options are consistent.
     if config.learning_schedule == 'constant':
         param = spec.lookup('warmup_steps')
-        assert param != None
+        assert param is not None
         if param.name in set_by_user:
-            arg_names = param.visible_arg_names + param.hidden_arg_names
             msg = '{} cannot be used with \'constant\' learning ' \
-                   'schedule'.format(' / '.join(arg_names), config.model_type)
+                   'schedule'.format(arg_names_string(param),
+                                     config.model_type)
             error_messages.append(msg)
     elif config.learning_schedule == 'transformer':
         param = spec.lookup('learning_rate')
-        assert param != None
+        assert param is not None
         if param.name in set_by_user:
-            arg_names = param.visible_arg_names + param.hidden_arg_names
             msg = '{} cannot be used with \'transformer\' learning ' \
-                  'schedule'.format(' / '.join(arg_names), config.model_type)
+                  'schedule'.format(arg_names_string(param), config.model_type)
             error_messages.append(msg)
 
     # TODO Other similar checks? e.g. check user hasn't set adam parameters
@@ -1094,6 +1121,29 @@ def _check_config_consistency(spec, config, set_by_user):
     if len(config.dictionaries) != config.factors + 1:
         msg = '\'--dictionaries\' must specify one dictionary per source ' \
               'factor and one target dictionary'
+        error_messages.append(msg)
+
+    max_sents_param = spec.lookup('max_sentences_per_device')
+    max_tokens_param = spec.lookup('max_tokens_per_device')
+
+    # TODO Extend ParameterSpecification to support mutually exclusive
+    #      command-line args.
+    if (max_sents_param.name in set_by_user
+        and max_tokens_param.name in set_by_user):
+        msg = '{} is mutually exclusive with {}'.format(
+            arg_names_string(max_sents_param),
+            arg_names_string(max_tokens_param))
+        error_messages.append(msg)
+
+    aggregation_param = spec.lookup('gradient_aggregation_steps')
+
+    if (aggregation_param.name in set_by_user
+        and (max_sents_param.name in set_by_user
+             or max_tokens_param.name in set_by_user)):
+        msg = '{} is mutually exclusive with {} / {}'.format(
+            arg_names_string(aggregation_param),
+            arg_names_string(max_sents_param),
+            arg_names_string(max_tokens_param))
         error_messages.append(msg)
 
     return error_messages
