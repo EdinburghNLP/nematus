@@ -13,6 +13,10 @@ import sys
 import tempfile
 import time
 
+# Start logging.
+level = logging.INFO
+logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
 import numpy
 import tensorflow as tf
 
@@ -368,10 +372,6 @@ def calc_cross_entropy_per_sentence(session, model, config, text_iterator,
 
 
 if __name__ == "__main__":
-    # Start logging.
-    level = logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-
     # Parse command-line arguments.
     config = read_config_from_cmdline()
     logging.info(config)
