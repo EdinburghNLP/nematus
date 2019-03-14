@@ -92,12 +92,13 @@ class EmbeddingLayer(object):
         self.name = name
 
         # Create embedding matrix and its transposes
-        self.embedding_table = tf.get_variable(name='embedding_table',
-                                               shape=[vocabulary_size, embedding_size],
-                                               dtype=float_dtype,
-                                               initializer=glorot_uniform_initializer(),
-                                               trainable=True)
-        self.projection_matrix = tf.transpose(self.embedding_table, name='vocab_projection_matrix')
+        with tf.variable_scope(self.name):
+            self.embedding_table = tf.get_variable(name='embedding_table',
+                                                shape=[vocabulary_size, embedding_size],
+                                                dtype=float_dtype,
+                                                initializer=glorot_uniform_initializer(),
+                                                trainable=True)
+            self.projection_matrix = tf.transpose(self.embedding_table, name='vocab_projection_matrix')
 
     def embed(self, one_hot_inputs):
         """ Embeds one-hot-vectors corresponding to input tokens. """
