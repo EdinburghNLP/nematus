@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y \
 	vim \
 	nano \
 	libopenblas-dev \
-	python-dev \
-	python-pip \
+	python3-dev \
+	python3-pip \
 	xml-twig-tools
 
-RUN pip install --upgrade pip
+RUN pip3 install --upgrade pip3
 
-RUN pip install tensorflow
+RUN pip3 install tensorflow
 
 RUN mkdir -p /path/to
 WORKDIR /path/to/

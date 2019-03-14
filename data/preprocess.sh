@@ -20,10 +20,10 @@ perl $P1/tokenizer.perl -threads 5 -l $T < {P}.${T} > {P}.${T}.tok
 # learn BPE on joint vocabulary:
 cat {P}.${S}.tok {P}.${T}.tok | python $P2/learn_bpe.py -s 20000 > ${S}${T}.bpe
 
-python $P2/apply_bpe.py -c ${S}${T}.bpe < {P}.${S}.tok > {P}.${S}.tok.bpe
-python $P2/apply_bpe.py -c ${S}${T}.bpe < {P}.${T}.tok > {P}.${T}.tok.bpe
+python3 $P2/apply_bpe.py -c ${S}${T}.bpe < {P}.${S}.tok > {P}.${S}.tok.bpe
+python3 $P2/apply_bpe.py -c ${S}${T}.bpe < {P}.${T}.tok > {P}.${T}.tok.bpe
 
 # build dictionary
-python $P1/build_dictionary.py {P}.${S}.tok.bpe
-python $P1/build_dictionary.py {P}.${T}.tok.bpe
+python3 $P1/build_dictionary.py {P}.${S}.tok.bpe
+python3 $P1/build_dictionary.py {P}.${T}.tok.bpe
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 '''
 Rescoring an n-best list of translations using a translation model.
 '''

@@ -6,7 +6,7 @@ Runs Nematus as a web service.
 The command
 
 ```bash
-python server.py -m model.npz
+python3 server.py -m model.npz
 ```
 
 will start Nematus Server at `localhost` on port 8080, using translation model `model.npz`. Once the model has been loaded, the server is ready to answer translation requests according to the API outlined below.
@@ -16,7 +16,7 @@ will start Nematus Server at `localhost` on port 8080, using translation model `
 Nematus Server needs at least one translation model, provided via the `-m` or `--models` parameter. Multiple models (for ensemble decoding) are delimited with spaces:
 
 ```bash
-python server.py -m model1.npz model2.npz model3.npz model4.npz
+python3 server.py -m model1.npz model2.npz model3.npz model4.npz
 ```
 
 ### Optional Arguments

@@ -3,11 +3,11 @@ Testing Nematus
 
 To test translation (on GPU 0), execute
 
-CUDA_VISIBLE_DEVICES=0 python test_translate.py
+CUDA_VISIBLE_DEVICES=0 python3 test_translate.py
 
 To test scoring (on GPU 0), execute
 
-CUDA_VISIBLE_DEVICES=0 python test_score.py
+CUDA_VISIBLE_DEVICES=0 python3 test_score.py
 
 more sample models (including scripts for pre- and postprocessing)
 are provided at: http://statmt.org/rsennrich/wmt16_systems/

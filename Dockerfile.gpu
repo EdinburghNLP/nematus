@@ -10,17 +10,17 @@ RUN apt-get update && apt-get install -y \
   nano \
   python3 \
   libopenblas-dev \
-  python-dev \
-  python-pip \
-  python-nose \
-  python-numpy \
-  python-scipy \
-  python-pygraphviz \
+  python3-dev \
+  python3-pip \
+  python3-nose \
+  python3-numpy \
+  python3-scipy \
+  python3-pygraphviz \
   xml-twig-tools
 
-RUN pip install --upgrade pip
-RUN pip install -U setuptools
-RUN pip install tensorflow-gpu
+RUN pip3 install --upgrade pip3
+RUN pip3 install -U setuptools
+RUN pip3 install tensorflow-gpu
 
 # Set CUDA_ROOT
 ENV CUDA_ROOT /usr/local/cuda/bin
@@ -38,7 +38,7 @@ RUN git clone https://github.com/rsennrich/subword-nmt
 # Install nematus
 COPY . /path/to/nematus
 WORKDIR /path/to/nematus
-RUN python setup.py install
+RUN python3 setup.py install
 
 WORKDIR /
 
