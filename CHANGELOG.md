@@ -7,18 +7,18 @@ v0.4 (17/12/2018)
 changes since 0.3:
 
  - main new features:
-   -- Transformer architecture
-   -- multi-GPU training
-   -- codebase moved to Python 3
+   - Transformer architecture
+   - multi-GPU training
+   - codebase moved to Python 3
 
  - other new features:
-   -- label smoothing
-   -- mixture of softmaxes
+   - label smoothing
+   - mixture of softmaxes
 
  - fixes:
-   -- re-enable BLEU validation (via --valid_script)
-   -- fix MAP-L2 regularization
-   -- fix server mode
+   - re-enable BLEU validation (via --valid_script)
+   - fix MAP-L2 regularization
+   - fix server mode
 
 v0.3 (23/5/2018)
 ----------
@@ -26,23 +26,23 @@ v0.3 (23/5/2018)
    A few features have not been implemented in the Tensorflow model.
 
  - currently supported:
-   -- re-implementation of default Nematus model
-   -- model compatibility with Theano version and conversion via `theano_tf_convert.py`
-   -- same scripts and command line API for training, translating and (re)scoring
-   -- layer normalisation
-   -- tied embeddings
-   -- deep models
-   -- ensemble decoding
-   -- input features
+   - re-implementation of default Nematus model
+   - model compatibility with Theano version and conversion via `theano_tf_convert.py`
+   - same scripts and command line API for training, translating and (re)scoring
+   - layer normalisation
+   - tied embeddings
+   - deep models
+   - ensemble decoding
+   - input features
  
  - not yet supported:
-   -- minimum risk training
-   -- LSTM cells
-   -- learning rate annealing
+   - minimum risk training
+   - LSTM cells
+   - learning rate annealing
 
  - new features:
-   -- batch decoding
-   -- more efficient training with --token_batch_size
+   - batch decoding
+   - more efficient training with --token_batch_size
 
 v0.2 (17/12/2017)
 ----------
