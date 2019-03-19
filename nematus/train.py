@@ -274,7 +274,7 @@ def save_non_checkpoint(session, saver, save_path):
     best-so-far model instead of the last checkpoint when it is restarted. To
     avoid this, we save the best-so-far models to a temporary directory, then
     move them to their desired location. The 'checkpoint' file that is written
-    to the temporary directory can safely be deleted.
+    to the temporary directory can safely be deleted along with the directory.
 
     Args:
         session: a TensorFlow session.
@@ -291,7 +291,6 @@ def save_non_checkpoint(session, saver, save_path):
         tmp_save_path = os.path.join(tmp_dir, tail)
         saver.save(session, save_path=tmp_save_path)
         for filename in os.listdir(tmp_dir):
-            print(filename)
             if filename == 'checkpoint':
                 continue
             new = os.path.join(tmp_dir, filename)

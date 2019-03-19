@@ -78,9 +78,6 @@ class ModelUpdater(object):
         split_x, split_x_mask, split_y, split_y_mask, weights = \
             self._split_and_pad_minibatch(x, x_mask, y, y_mask, start_points)
 
-        # TODO REMOVE ME
-        # _print_debug_stuff(split_x_mask, split_y_mask, weights)
-
         # Normalize the weights so that _ModelUpdateGraph can just sum the
         # weighted gradients from each sub-batch (without needing a
         # subsequent division step).
