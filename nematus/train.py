@@ -215,7 +215,7 @@ def train(config, sess):
                     valid_ce < min(progress.history_errs)):
                     progress.history_errs.append(valid_ce)
                     progress.bad_counter = 0
-                    saver.save(sess, save_path=config.saveto)
+                    save_non_checkpoint(sess, saver, config.saveto)
                     progress_path = '{0}.progress.json'.format(config.saveto)
                     progress.save_to_json(progress_path)
                 else:
@@ -235,7 +235,7 @@ def train(config, sess):
                     progress.valid_script_scores.append(score)
                     if need_to_save:
                         save_path = config.saveto + ".best-valid-script"
-                        saver.save(sess, save_path=save_path)
+                        save_non_checkpoint(sess, saver, save_path)
                         write_config_to_json_file(config, save_path)
 
                         progress_path = '{}.progress.json'.format(save_path)
@@ -259,6 +259,44 @@ def train(config, sess):
                 break
         if progress.estop:
             break
+
+
+def save_non_checkpoint(session, saver, save_path):
+    """Saves the model to a temporary directory then moves it to save_path.
+
+    Rationale: we use TensorFlow's standard tf.train.Saver mechanism for saving
+    training checkpoints and also for saving the current best model according
+    to validation metrics. Since these are all stored in the same directory,
+    their paths would normally all get written to the same 'checkpoint' file,
+    with the file containing whichever one was last saved. That creates a
+    problem if training is interrupted after a best-so-far model is saved but
+    before a regular checkpoint is saved, since Nematus will try to load the
+    best-so-far model instead of the last checkpoint when it is restarted. To
+    avoid this, we save the best-so-far models to a temporary directory, then
+    move them to their desired location. The 'checkpoint' file that is written
+    to the temporary directory can safely be deleted.
+
+    Args:
+        session: a TensorFlow session.
+        saver: a tf.train.Saver
+        save_path: string containing the path to save the model to.
+
+    Returns:
+        None.
+    """
+    head, tail = os.path.split(save_path)
+    assert tail != ""
+    base_dir = "." if head == "" else head
+    with tempfile.TemporaryDirectory(dir=base_dir) as tmp_dir:
+        tmp_save_path = os.path.join(tmp_dir, tail)
+        saver.save(session, save_path=tmp_save_path)
+        for filename in os.listdir(tmp_dir):
+            print(filename)
+            if filename == 'checkpoint':
+                continue
+            new = os.path.join(tmp_dir, filename)
+            old = os.path.join(base_dir, filename)
+            os.replace(src=new, dst=old)
 
 
 def validate(session, model, config, text_iterator):
