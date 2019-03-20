@@ -791,10 +791,11 @@ class ConfigSpecification:
         group = param_specs['translate']
 
         group.append(ParameterSpecification(
-            name='normalize', default=True,
-            visible_arg_names=['--no_normalize'],
-            action='store_false',
-            help='Cost of sentences will not be normalized by length'))
+            name='normalization_alpha', type=float, default=0.0, nargs="?",
+            const=1.0, metavar="ALPHA",
+            visible_arg_names=['--normalization_alpha'],
+            help='normalize scores by sentence length (with argument, " \
+                 "exponentiate lengths by ALPHA)'))
 
         group.append(ParameterSpecification(
             name='n_best', default=False,

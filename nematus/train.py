@@ -194,7 +194,7 @@ def train(config, sess):
                 x_small, x_mask_small, y_small = x_in[:, :, :10], x_mask_in[:, :10], y_in[:,:10]
                 samples = model_set.beam_search(sess, x_small, x_mask_small,
                                                config.beam_size,
-                                               normalization_alpha=0.0)
+                                               normalization_alpha=config.normalization_alpha)
                 # samples is a list with shape batch x beam x len
                 assert len(samples) == len(x_small.T) == len(y_small.T), (len(samples), x_small.shape, y_small.shape)
                 for xx, yy, ss in zip(x_small.T, y_small.T, samples):
@@ -322,7 +322,7 @@ def validate_with_script(session, model, config):
                              configs=[config],
                              beam_size=config.beam_size,
                              minibatch_size=config.valid_batch_size,
-                             normalization_alpha=1.0)
+                             normalization_alpha=config.normalization_alpha)
     out.flush()
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,
