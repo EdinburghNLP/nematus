@@ -83,9 +83,19 @@ class ModelUpdater(object):
         # subsequent division step).
         normalized_weights = [w / sum(weights) for w in weights]
 
+        # Scale the weights so that short minibatches (e.g. at the end of
+        # maxibatches) contribute less.
+        if self._config.token_batch_size == 0:
+            # Actual batch size / Max batch size, in sentences
+            scaling_factor = x.shape[-1] / self._config.batch_size
+        else:
+            # Actual batch size / Max batch size, in tokens
+            scaling_factor = (x_mask.shape[0] * x_mask.shape[1]) / self._config.token_batch_size
+
         # Accumulate gradients.
         for i in range(0, len(split_x), len(self._replicas)):
             feed_dict = {}
+            feed_dict[self._graph.scaling_factor] = scaling_factor
             for j in range(len(self._replicas)):
                 feed_dict[self._graph.replica_weights[j]] \
                     = normalized_weights[i+j]
@@ -323,6 +333,10 @@ class _ModelUpdateGraph(object):
         self._optimizer = optimizer
         self._global_step = global_step
 
+        # Create the placeholder for the scaling factor.
+        self._scaling_factor = tf.placeholder(name='scaling_factor',
+                                              shape=(), dtype=tf.float32)
+
         # Create the placeholders for the replica weights.
         self._replica_weights = []
         for i in range(len(self._replicas)):
@@ -353,6 +367,10 @@ class _ModelUpdateGraph(object):
         self._define_apply_ops()
         self._define_reset_ops()
         self._define_summary_ops()
+
+    @property
+    def scaling_factor(self):
+        return self._scaling_factor
 
     @property
     def replica_weights(self):
@@ -418,7 +436,8 @@ class _ModelUpdateGraph(object):
         self._accum_ops = [tf.assign_add(self._accumulated_loss, summed_loss)]
 
         self._accum_ops += [tf.assign_add(self._accumulated_gradients[v.name],
-                                          g) for g, v in summed_grad_vars]
+                                          g * self._scaling_factor)
+                            for g, v in summed_grad_vars]
 
     def _define_apply_ops(self):
         """Defines the graph nodes for applying the accumulated gradients."""
