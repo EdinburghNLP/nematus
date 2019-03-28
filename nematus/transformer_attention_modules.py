@@ -22,6 +22,7 @@ class MultiHeadAttentionLayer(object):
                  num_heads,
                  float_dtype,
                  dropout_attn,
+                 q_zero_init,
                  training,
                  name=None):
 
@@ -55,7 +56,8 @@ class MultiHeadAttentionLayer(object):
                                                        use_bias=False,
                                                        use_layer_norm=False,
                                                        training=self.training,
-                                                       name='queries_projection')
+                                                       name='queries_projection',
+                                                       zero_init=q_zero_init)
 
             self.keys_projection = FeedForwardLayer(self.reference_dims,
                                                     self.total_key_dims,

@@ -16,10 +16,13 @@ class ConstantSchedule(object):
 See Section 5.3 of "Attention Is All You Need" (Vaswani et al., 2017).
 """
 class TransformerSchedule(object):
-    def __init__(self, global_step, dim, warmup_steps):
+    def __init__(self, global_step, dim, warmup_steps, start_high=False):
         t = tf.cast(global_step+1, tf.float32)
         a = tf.pow(t, -0.5)
-        b = t * (warmup_steps ** (-1.5))
+        if start_high:
+            b = warmup_steps ** (-0.5)
+        else:
+            b = t * (warmup_steps ** (-1.5))
         self._learning_rate = dim ** (-0.5) * tf.minimum(a, b)
 
     @property

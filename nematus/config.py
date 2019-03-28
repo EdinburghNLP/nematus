@@ -586,7 +586,7 @@ class ConfigSpecification:
         group.append(ParameterSpecification(
             name='learning_schedule', default='constant',
             visible_arg_names=['--learning_schedule'],
-            type=str, choices=['constant', 'transformer'],
+            type=str, choices=['constant', 'transformer', 'transformer_start_high'],
             help='learning schedule (default: %(default)s)'))
 
         group.append(ParameterSpecification(
@@ -688,6 +688,12 @@ class ConfigSpecification:
             type=int, metavar='INT',
             help='maximum number of updates (minibatches) (default: '
                  '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_q_zero_init', default=False,
+            visible_arg_names=['--transformer_q_zero_init'],
+            action='store_true',
+            help='initialize the Q matrices in the transformer attention heads to zero'))
 
         # Add command-line parameters for 'validation' group.
 
@@ -825,7 +831,7 @@ class ConfigSpecification:
         param_names = set()
         for group in self.group_names:
             for param in self.params_by_group(group):
-                assert param.name not in param_names
+                assert param.name not in param_names, ("%s" % param.name)
                 param_names.add(param.name)
                 for name in param.legacy_names:
                     assert name not in param_names
@@ -1053,11 +1059,11 @@ def _check_config_consistency(spec, config, set_by_user):
                    'schedule'.format(arg_names_string(param),
                                      config.model_type)
             error_messages.append(msg)
-    elif config.learning_schedule == 'transformer':
+    elif (config.learning_schedule == 'transformer') or (config.learning_schedule == 'transformer_start_high'):
         param = spec.lookup('learning_rate')
         assert param is not None
         if param.name in set_by_user:
-            msg = '{} cannot be used with \'transformer\' learning ' \
+            msg = '{} cannot be used with \'transformer\' or \'transformer_start_high\' learning ' \
                   'schedule'.format(arg_names_string(param), config.model_type)
             error_messages.append(msg)
 

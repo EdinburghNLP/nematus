@@ -197,7 +197,8 @@ class FeedForwardLayer(object):
                  use_bias,
                  use_layer_norm,
                  training,
-                 name):
+                 name,
+                 zero_init=False):
         # Set attributes
         self.in_size = in_size
         self.out_size = out_size
@@ -206,6 +207,7 @@ class FeedForwardLayer(object):
         self.use_bias = use_bias
         self.training = training
         self.name = name
+        self.zero_init = zero_init
 
         with tf.variable_scope(self.name):
             # Set up layer normalization
@@ -219,7 +221,7 @@ class FeedForwardLayer(object):
             self.weights = tf.get_variable(name='dense_layer_weights',
                                            shape=weights_shape,
                                            dtype=float_dtype,
-                                           initializer=glorot_uniform_initializer(),
+                                           initializer= (tf.zeros_initializer() if self.zero_init else glorot_uniform_initializer()),
                                            trainable=True)
             if use_bias:
                 biases_shape = [out_size] if out_size is not None else [in_size]

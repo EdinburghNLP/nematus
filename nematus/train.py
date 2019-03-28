@@ -100,7 +100,13 @@ def train(config, sess):
     elif config.learning_schedule == "transformer":
         schedule = TransformerSchedule(global_step=global_step,
                                        dim=config.state_size,
-                                       warmup_steps=config.warmup_steps)
+                                       warmup_steps=config.warmup_steps,
+                                       start_high=False)
+    elif config.learning_schedule == "transformer_start_high":
+        schedule = TransformerSchedule(global_step=global_step,
+                                       dim=config.state_size,
+                                       warmup_steps=config.warmup_steps,
+                                       start_high=True)
     else:
         logging.error('Learning schedule type is not valid: {}'.format(
             config.learning_schedule))
