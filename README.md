@@ -8,7 +8,7 @@ Notable features include:
   - support for RNN and Transformer architectures
 
   - support for advanced RNN architectures:
-     - arbitrary input features [factored neural machine translation](doc/factored_neural_machine_translation.md) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
+     - [arbitrary input features](doc/factored_neural_machine_translation.md) (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
      - deep models (Miceli Barone et al., 2017) https://arxiv.org/abs/1707.07631
      - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
