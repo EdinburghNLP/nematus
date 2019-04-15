@@ -234,6 +234,7 @@ def train(config, sess):
                         score = 0.0  # ensure a valid value is written
                     progress.valid_script_scores.append(score)
                     if need_to_save:
+                        progress.bad_counter = 0
                         save_path = config.saveto + ".best-valid-script"
                         save_non_checkpoint(sess, saver, save_path)
                         write_config_to_json_file(config, save_path)
