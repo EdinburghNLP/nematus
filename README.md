@@ -8,7 +8,7 @@ Notable features include:
   - support for RNN and Transformer architectures
 
   - support for advanced RNN architectures:
-     - arbitrary input features (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
+     - arbitrary input features [factored neural machine translation](doc/factored_neural_machine_translation.md) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
      - deep models (Miceli Barone et al., 2017) https://arxiv.org/abs/1707.07631
      - dropout on all layers (Gal, 2015) http://arxiv.org/abs/1512.05287
      - tied embeddings (Press and Wolf, 2016) https://arxiv.org/abs/1608.05859
@@ -16,7 +16,7 @@ Notable features include:
      - mixture of softmaxes (Yang et al., 2017) https://arxiv.org/abs/1711.03953
 
  - training features:
-     - multi-GPU support
+     - multi-GPU support [documentation](doc/multi_gpu_training.md)
      - label smoothing
      - early stopping with user-defined stopping criterion
      - resume training (optionally with MAP-L2 regularization towards original model)
@@ -187,6 +187,9 @@ An updated version of these scripts that uses the Transformer model can be found
 | --maxlen INT | maximum sequence length for training and validation (default: 100) |
 | --batch_size INT | minibatch size (default: 80) |
 | --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: 0) |
+| --max_sentences_per_device INT | maximum size of minibatch subset to run on a single device, in number of sentences (default: 0) |
+| --max_tokens_per_device INT | maximum size of minibatch subset to run on a single device, in number of tokens (either source or target - whichever is highest) (default: 0) |
+| --gradient_aggregation_steps INT | number of times to accumulate gradients before aggregating and applying; the minibatch is split between steps, so adding more steps allows larger minibatches to be used (default: 1) |
 | --maxibatch_size INT | size of maxibatch (number of minibatches that are sorted by length) (default: 20) |
 | --no_sort_by_length | do not sort sentences in maxibatch by length |
 | --no_shuffle | disable shuffling of training data (for each epoch) |
