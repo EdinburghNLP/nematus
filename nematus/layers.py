@@ -170,8 +170,11 @@ class GRUStep(object):
             self.input_to_gates = tf.get_variable('input_to_gates',
                                                   initializer=init)
 
-        self.gates_bias = tf.get_variable('gates_bias', [2*state_size],
+        if input_size > 0 or legacy_bias_type == LegacyBiasType.THEANO_A:
+            self.gates_bias = tf.get_variable('gates_bias', [2*state_size],
                                           initializer=tf.zeros_initializer)
+        else:
+            self.gates_bias = None
 
         init = initializers.ortho_weight(state_size)
         self.state_to_proposal = tf.get_variable('state_to_proposal',
