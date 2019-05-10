@@ -32,7 +32,7 @@ Notable features include:
      - JSON-formatted storage of model hyperparameters, vocabulary files and training progress
      - pretrained models for 13 translation directions (many top-performing at WMT shared task of respective year):
        - http://data.statmt.org/rsennrich/wmt16_systems/
-       - http://data.statmt.org/rsennrich/wmt17_systems/
+       - http://data.statmt.org/wmt17_systems/
      - backward compatibility: continue using publicly released models with current codebase (scripts to convert from Theano to Tensorflow-style models are provided)
 
 
