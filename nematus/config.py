@@ -100,6 +100,7 @@ class ConfigSpecification:
             ('validation',            'validation parameters'),
             ('display',               'display parameters'),
             ('translate',             'translate parameters'),
+            ('sampling',              'sampling parameters'),
         ]
         self._group_descriptions = collections.OrderedDict(description_pairs)
 
@@ -809,6 +810,28 @@ class ConfigSpecification:
             type=int, metavar='INT',
             help='Maximum length of translation output sentence (default: '
                  '%(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='translation_strategy', default='beam_search',
+            visible_arg_names=['--translation_strategy'],
+            type=str, choices=['beam_search', 'sampling'],
+            help='translation_strategy, either beam_search or sampling (default: %(default)s)'))
+
+        # Add command-line parameters for 'sampling' group.
+
+        group = param_specs['sampling']
+
+        group.append(ParameterSpecification(
+            name='sampling_temperature', type=float, default=1.0,
+            metavar="FLOAT",
+            visible_arg_names=['--sampling_temperature'],
+            help='softmax temperature used for sampling (default %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='sampling_truncation_prob', type=float, default=1.0,
+            metavar="FLOAT",
+            visible_arg_names=['--sampling_truncation_prob'],
+            help='truncate the sampling distribution to the most frequent tokens up to this cumulative probability (default %(default)s)'))
 
         return param_specs
 

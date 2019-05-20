@@ -90,6 +90,33 @@ class InferenceModelSet(object):
                                       beam_size, normalization_alpha,
                                       self._cached_beam_search_graph)
 
+    def decode(self, session, x, x_mask, beam_size,
+               normalization_alpha=0.0):
+        """Decode using either beam search or sampling, depending on the translation strategy set in the first model
+
+        Args:
+            session: TensorFlow session.
+            x: Numpy array with shape (factors, max_seq_len, batch_size).
+            x_mask: Numpy array with shape (max_seq_len, batch_size).
+            beam_size: beam width (only for beam search).
+            normalization_alpha: length normalization hyperparamter (only for beam search).
+
+        Returns:
+            A list of lists of (translation, score) pairs. The outer list
+            contains one list for each input sentence in the batch. The inner
+            lists contain k elements (where k is the beam size), sorted by
+            score in ascending order (i.e. best first, assuming lower scores
+            are better). When sampling beam size is always one and score is 0.0
+        """
+
+        if self._models[0].sampling_utils.translation_strategy == 'beam_search':
+            return self.beam_search(session, x, x_mask, beam_size, normalization_alpha)
+        elif self._models[0].sampling_utils.translation_strategy == 'sampling':
+            samples = self.sample(session, x, x_mask)
+            beams = [[(sample, 0.0)] for sample in samples]
+            return beams
+        else:
+            assert False
 
 def translate_file(input_file, output_file, session, models, configs,
                    beam_size=12, nbest=False, minibatch_size=80,
@@ -135,7 +162,7 @@ def translate_file(input_file, output_file, session, models, configs,
             y_dummy = numpy.zeros(shape=(len(x),1))
             x, x_mask, _, _ = util.prepare_data(x, y_dummy, configs[0].factors,
                                                 maxlen=None)
-            sample = model_set.beam_search(
+            sample = model_set.decode(
                 session=session,
                 x=x,
                 x_mask=x_mask,

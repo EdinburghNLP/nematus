@@ -108,6 +108,20 @@ class TranslationSettings(BaseSettings):
             help="size of maxibatch (number of minibatches that are sorted " \
                  "by length) (default: %(default)s)")
 
+        self._parser.add_argument(
+            '--sampling_temperature', type=float, default=1.0, nargs="?",
+            const=1.0, metavar="FLOAT",
+            help="softmax temperature used for sampling (default %(default)s)")
+
+        self._parser.add_argument(
+            '--sampling_truncation_prob', type=float, default=1.0, nargs="?",
+            const=1.0, metavar="float",
+            help="truncate the sampling distribution to the most frequent tokens up to this cumulative probability (default %(default)s)")
+
+        self._parser.add_argument(
+            '--translation_strategy', type=str, choices=['beam_search', 'sampling'], default="beam_search",
+            help="translation_strategy, either beam_search or sampling (default: %(default)s)")
+
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
         self.num_processes = 1

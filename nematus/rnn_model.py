@@ -3,6 +3,8 @@ import tensorflow as tf
 import layers
 import model_inputs
 
+from sampling_utils import SamplingUtils
+
 
 """Builds a GRU-based attentional encoder-decoder model.
 
@@ -75,6 +77,8 @@ class RNNModel(object):
                 training=self.inputs.training)
             self._loss_per_sentence = self.loss_layer.forward(self.logits)
             self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
+
+        self.sampling_utils = SamplingUtils(config)
 
     @property
     def loss_per_sentence(self):

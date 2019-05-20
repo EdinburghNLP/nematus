@@ -13,6 +13,7 @@ import model_loader
 import rnn_model
 from settings import TranslationSettings
 from transformer import Transformer as TransformerModel
+from sampling_utils import SamplingUtils
 
 
 def main(settings):
@@ -47,6 +48,7 @@ def main(settings):
                 model = rnn_model.RNNModel(config)
             saver = model_loader.init_or_restore_variables(config, session,
                                                            ensemble_scope=scope)
+            model.sampling_utils = SamplingUtils(settings)
             models.append(model)
 
     # TODO Ensembling is currently only supported for RNNs, so if
