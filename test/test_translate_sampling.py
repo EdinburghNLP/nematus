@@ -45,7 +45,6 @@ class TestTranslate(unittest.TestCase):
             settings.normalization_alpha = 1.0
             settings.translation_strategy = 'sampling'
             settings.sampling_temperature = 0.4
-#            settings.sampling_truncation_prob = 0.9
             translate(settings=settings)
             os.chdir('../..')
         self.outputEqual('en-de/ref2','en-de/out')

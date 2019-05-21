@@ -114,11 +114,6 @@ class TranslationSettings(BaseSettings):
             help="softmax temperature used for sampling (default %(default)s)")
 
         self._parser.add_argument(
-            '--sampling_truncation_prob', type=float, default=1.0, nargs="?",
-            const=1.0, metavar="float",
-            help="truncate the sampling distribution to the most frequent tokens up to this cumulative probability (default %(default)s)")
-
-        self._parser.add_argument(
             '--translation_strategy', type=str, choices=['beam_search', 'sampling'], default="beam_search",
             help="translation_strategy, either beam_search or sampling (default: %(default)s)")
 

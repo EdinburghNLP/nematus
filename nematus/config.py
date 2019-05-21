@@ -827,12 +827,6 @@ class ConfigSpecification:
             visible_arg_names=['--sampling_temperature'],
             help='softmax temperature used for sampling (default %(default)s)'))
 
-        group.append(ParameterSpecification(
-            name='sampling_truncation_prob', type=float, default=1.0,
-            metavar="FLOAT",
-            visible_arg_names=['--sampling_truncation_prob'],
-            help='truncate the sampling distribution to the most frequent tokens up to this cumulative probability (default %(default)s)'))
-
         return param_specs
 
     def _build_name_to_spec(self):
