@@ -188,6 +188,7 @@ def construct_sampling_ops(model):
                     prev_high_states, base_state, context=att_ctx)
         logits = decoder.predictor.get_logits(prev_emb, output, att_ctx,
                                            multi_step=False)
+        logits = model.sampling_utils.adjust_logits(logits)
         new_y = tf.multinomial(logits, num_samples=1)
         new_y = tf.cast(new_y, dtype=tf.int32)
         new_y = tf.squeeze(new_y, axis=1)

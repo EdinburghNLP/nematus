@@ -13,6 +13,7 @@ from transformer_layers import \
 from transformer_blocks import AttentionBlock, FFNBlock
 from transformer_inference import greedy_search, beam_search
 
+from sampling_utils import SamplingUtils
 
 class Transformer(object):
     """ The main transformer model class. """
@@ -69,6 +70,8 @@ class Transformer(object):
             sent_lens = tf.reduce_sum(self.target_mask, axis=1, keepdims=False)
             self._loss_per_sentence = sentence_loss * sent_lens
             self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
+        
+        self.sampling_utils = SamplingUtils(config)
 
     def _build_graph(self):
         """ Defines the model graph. """

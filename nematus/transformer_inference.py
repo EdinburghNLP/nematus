@@ -149,12 +149,12 @@ def decode_greedy(model, do_sample=False, beam_size=0,
                                                        model.source_mask)
     # Decode into target sequences
     with tf.name_scope('{:s}_decode'.format(model.name)):
-        dec_output, scores = decode_at_test(model.dec, enc_output,
+        dec_output, scores = decode_at_test(model, model.dec, enc_output,
             cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha)
     return dec_output, scores
 
 
-def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha):
+def decode_at_test(model, decoder, enc_output, cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha):
     """ Returns the probability distribution over target-side tokens conditioned on the output of the encoder;
      performs decoding via auto-regression at test time. """
 
@@ -225,7 +225,8 @@ def decode_at_test(decoder, enc_output, cross_attn_mask, batch_size, beam_size, 
             # Initialize target IDs with <GO>
             initial_ids = tf.cast(tf.fill([batch_size, 1], 1), dtype=decoder.int_dtype)
             initial_memories = decoder._get_initial_memories(batch_size, beam_size=1)
-            output_sequences, scores = greedy_search(_decoding_function,
+            output_sequences, scores = greedy_search(model,
+                                                     _decoding_function,
                                                      initial_ids,
                                                      initial_memories,
                                                      decoder.int_dtype,
@@ -335,7 +336,8 @@ def gather_top_sequences(all_sequences,
 # ============================================= Decoding functions =================================================== #
 
 
-def greedy_search(decoding_function,
+def greedy_search(model,
+                  decoding_function,
                   initial_ids,
                   initial_memories,
                   int_dtype,
@@ -355,6 +357,7 @@ def greedy_search(decoding_function,
         """ Defines a single step of greedy decoding. """
         # Propagate through decoder
         step_logits, memories = decoding_function(next_ids, current_time_step, memories)
+        step_logits = model.sampling_utils.adjust_logits(step_logits)
         # Calculate log probabilities for token prediction at current time-step
         step_scores = tf.nn.log_softmax(step_logits)
         # Determine next token to be generated, next_ids has shape [batch_size]
