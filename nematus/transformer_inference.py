@@ -458,9 +458,14 @@ def _beam_search(decoding_function,
                              ((5. + 1.) ** normalization_alpha)
         curr_scores = curr_log_probs / length_penalty
 
+        # at first time step, all beams are identical - pick first
+        # at other time steps, flatten all beams
+        flat_curr_scores = tf.cond(tf.equal(current_time_step, 1),
+                      lambda: curr_scores[:,0],
+                      lambda: tf.reshape(curr_scores, [batch_size, -1]))
+
         # Select top-k highest scores
-        flat_curr_scores = tf.reshape(curr_scores, [batch_size, -1])
-        top_scores, top_ids = tf.nn.top_k(flat_curr_scores, k=beam_size ** 2)
+        top_scores, top_ids = tf.nn.top_k(flat_curr_scores, k=beam_size)
 
         # Recover non-normalized scores for tracking
         top_log_probs = top_scores * length_penalty
@@ -470,11 +475,11 @@ def _beam_search(decoding_function,
         top_ids %= vocab_size
 
         # Determine the location of top candidates
-        batch_index_matrix = compute_batch_indices(batch_size, beam_size ** 2)  # [batch_size, beam_size * factor]
+        batch_index_matrix = compute_batch_indices(batch_size, beam_size)  # [batch_size, beam_size]
         top_coordinates = tf.stack([batch_index_matrix, top_beam_indices], axis=2)
 
         # Extract top decoded sequences
-        top_sequences = tf.gather_nd(alive_sequences, top_coordinates)  # [batch_size, beam_size * factor, sent_len]
+        top_sequences = tf.gather_nd(alive_sequences, top_coordinates)  # [batch_size, beam_size, sent_len]
         top_sequences = tf.concat([top_sequences, tf.expand_dims(top_ids, axis=2)], axis=2)
 
         # Extract top memories
@@ -482,22 +487,7 @@ def _beam_search(decoding_function,
         # top_memories = alive_memories
 
         # Check how many of the top sequences have terminated
-        top_eos_flags = tf.equal(top_ids, eos_id)  # [batch_size, beam_size * factor]
-
-        # Diversify beams at the outset of the generation
-        init_top_sequences = tf.reshape(
-            tf.reshape(top_sequences, [batch_size, beam_size, beam_size, -1])[:, :, 1, :], [batch_size, beam_size, -1])
-        init_top_log_probs = \
-            tf.reshape(tf.reshape(top_log_probs, [batch_size, beam_size, beam_size])[:, :, 1], [batch_size, beam_size])
-        init_top_scores = \
-            tf.reshape(tf.reshape(top_scores, [batch_size, beam_size, beam_size])[:, :, 1], [batch_size, beam_size])
-        init_top_eos_flags = \
-            tf.reshape(tf.reshape(top_eos_flags, [batch_size, beam_size, beam_size])[:, :, 1], [batch_size, beam_size])
-
-        top_sequences, top_log_probs, top_scores, top_eos_flags = \
-            tf.cond(tf.equal(current_time_step, 1),
-                    lambda: [init_top_sequences, init_top_log_probs, init_top_scores, init_top_eos_flags],
-                    lambda: [top_sequences, top_log_probs, top_scores, top_eos_flags])
+        top_eos_flags = tf.equal(top_ids, eos_id)  # [batch_size, beam_size]
 
         return top_sequences, top_log_probs, top_scores, top_eos_flags, top_memories
 
