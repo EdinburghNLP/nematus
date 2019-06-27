@@ -238,8 +238,7 @@ def construct_beam_search_ops(models, beam_size):
     embedding_size = decoder.embedding_size
     translation_maxlen = decoder.translation_maxlen
     target_vocab_size = decoder.target_vocab_size
-    high_depth = 0 if decoder.high_gru_stack == None \
-                   else len(decoder.high_gru_stack.grus)
+    high_depths = [0 if m.decoder.high_gru_stack == None else len(m.decoder.high_gru_stack.grus) for m in models]
 
     # Initialize loop variables
     i = tf.constant(0)
@@ -261,7 +260,7 @@ def construct_beam_search_ops(models, beam_size):
                 clear_after_read=True,
                 name='parent_idx_array')
     init_base_states = [m.decoder.init_state for m in models]
-    init_high_states = [[m.decoder.init_state] * high_depth for m in models]
+    init_high_states = [[m.decoder.init_state] * depth for (m,depth) in zip(models, high_depths)]
     init_loop_vars = [i, init_base_states, init_high_states, init_ys, init_embs,
                       init_cost, ys_array, p_array]
 
