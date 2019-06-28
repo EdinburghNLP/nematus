@@ -245,7 +245,8 @@ class Decoder(object):
         if self.high_gru_stack != None:
             states = self.high_gru_stack.forward(
                 states,
-                context_layer=(attended_states if self.high_gru_stack.context_state_size > 0 else None))
+                context_layer=(attended_states if self.high_gru_stack.context_state_size > 0 else None)
+                init_state=self.init_state)
 
         if self.lexical_layer is not None:
             lexical_states = self.lexical_layer.forward(self.x_embs, attention_weights, multi_step=True)

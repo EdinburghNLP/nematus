@@ -433,7 +433,7 @@ class GRUStack(object):
         return x, states
 
     # Layer version
-    def forward(self, x, x_mask=None, context_layer=None):
+    def forward(self, x, x_mask=None, context_layer=None, init_state=None):
 
         assert not (self.reverse_alternation and x_mask == None)
 
@@ -456,7 +456,8 @@ class GRUStack(object):
                 return new_state
             return step_fn
 
-        init_state = tf.zeros(shape=[self.batch_size, self.state_size],
+        if init_state is None:
+            init_state = tf.zeros(shape=[self.batch_size, self.state_size],
                               dtype=tf.float32)
         if x_mask != None:
             x_mask_r = tf.reverse(x_mask, axis=[0])
@@ -488,7 +489,7 @@ class GRUStack(object):
                 h = tf.reverse(h_reversed, axis=[0])
             # Compute the word states, which will become the input for the
             # next layer (or the output of the stack if we're at the top).
-            if i == 0:
+            if not self.residual_connections or i < self.first_residual_output:
                 x = h
             else:
                 x += h # Residual connection
