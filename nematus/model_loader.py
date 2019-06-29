@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import sys
 
 import numpy
@@ -19,6 +20,17 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
     #   2. The saved model is from an old version of Nematus (before deep model
     #        support was added) and uses a different variable naming scheme
     #        for the GRUs.
+
+    accum_regex = re.compile('^accum\d+$')
+
+    def is_excluded_variable(name):
+        # Exclude gradient accumulation variables.
+        if accum_regex.match(name):
+            return True
+        if name == 'accumulated_loss':
+            return True
+        return False
+
     variables = slim.get_variables_to_restore()
     var_map = {}
     for v in variables:
@@ -32,6 +44,8 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
             if saved_name.startswith(ensemble_scope.name + "/"):
                 saved_name = saved_name[len(ensemble_scope.name)+1:]
         else: # v belongs to a different model in the ensemble.
+            continue
+        if is_excluded_variable(saved_name):
             continue
         if config.model_version == 0.1:
             # Backwards compatibility with the old variable naming scheme.
@@ -80,13 +94,21 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
     if train and config.prior_model != None:
         load_prior(config, sess, saver)
 
+    init_op = tf.global_variables_initializer()
+
     # initialize or restore model
     if reload_filename == None:
         logging.info('Initializing model parameters from scratch...')
-        init_op = tf.global_variables_initializer()
         sess.run(init_op)
     else:
         logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
+        # Initialize all variables even though most will be overwritten by
+        # the subsequent saver.restore() call. This is to allow for variables
+        # that are not saved to the checkpoint. Currently that is just the
+        # gradient accumulation variables, which are unusual in that they
+        # persist across multiple sessions during training (and therefore need
+        # to be variables) but are regularly reset to zero.
+        sess.run(init_op)
         saver.restore(sess, os.path.abspath(reload_filename))
 
     logging.info('Done')
