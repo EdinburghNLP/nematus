@@ -567,6 +567,13 @@ class ConfigSpecification:
             help='label smoothing (default: %(default)s)'))
 
         group.append(ParameterSpecification(
+            name='exponential_smoothing', default=0.0,
+            visible_arg_names=['--exponential_smoothing'],
+            type=float, metavar='FLOAT',
+            help='exponential smoothing factor; use 0 to disable (default: '
+                 '%(default)s)'))
+
+        group.append(ParameterSpecification(
             name='optimizer', default='adam',
             visible_arg_names=['--optimizer'],
             type=str, choices=['adam'],

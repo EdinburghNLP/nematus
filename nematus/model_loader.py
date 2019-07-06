@@ -8,9 +8,15 @@ import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
+from exponential_smoothing import ExponentialSmoothing
 import training_progress
 
 def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
+    # Add variables and ops for exponential smoothing, if enabled (unless
+    # training, as they will already have been added).
+    if not train and config.exponential_smoothing > 0.0:
+        smoothing = ExponentialSmoothing(config.exponential_smoothing)
+
     # Construct a mapping between saved variable names and names in the current
     # scope. There are two reasons why names might be different:
     #
@@ -110,8 +116,13 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
         # to be variables) but are regularly reset to zero.
         sess.run(init_op)
         saver.restore(sess, os.path.abspath(reload_filename))
-
     logging.info('Done')
+
+    # For everything apart from training, use the smoothed version of the
+    # parameters (if available).
+    if not train and config.exponential_smoothing > 0.0:
+        logging.info('Using smoothed model parameters')
+        sess.run(fetches=smoothing.swap_ops)
 
     if train:
         return saver, progress
