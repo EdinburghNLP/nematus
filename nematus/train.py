@@ -337,7 +337,7 @@ def validate_with_script(session, model, config):
         return None
     logging.info('Starting external validation.')
     out = tempfile.NamedTemporaryFile(mode='w')
-    inference.translate_file(input_file=open(config.valid_source_dataset),
+    inference.translate_file(input_file=open(config.valid_source_dataset, encoding="UTF-8"),
                              output_file=out,
                              session=session,
                              models=[model],

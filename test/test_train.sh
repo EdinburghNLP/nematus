@@ -19,9 +19,5 @@
   --lrate 0.0001 \
   --batch_size 40 \
   --no_shuffle \
-  --dispFreq 1 \
-  --finish_after 500 \
-  --rnn_enc_transition_depth 2 \
-  --rnn_dec_base_transition_depth 3 \
-  --layer_normalisation \
-  --tie_decoder_embeddings
+  --dispFreq 500 \
+  --finish_after 500

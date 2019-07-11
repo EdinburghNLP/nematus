@@ -980,7 +980,7 @@ def write_config_to_json_file(config, path):
     """
 
     config_as_dict = collections.OrderedDict(sorted(vars(config).items()))
-    json.dump(config_as_dict, open('%s.json' % path, 'w'), indent=2)
+    json.dump(config_as_dict, open('%s.json' % path, 'w', encoding="UTF-8"), indent=2)
 
 
 def load_config_from_json_file(basename):

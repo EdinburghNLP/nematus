@@ -8,7 +8,7 @@ from subprocess import call
 
 def main(files, temporary=False):
 
-    fds = [open(ff) for ff in files]
+    fds = [open(ff, encoding="UTF-8") for ff in files]
 
     lines = []
     for l in fds[0]:
@@ -25,10 +25,11 @@ def main(files, temporary=False):
             path, filename = os.path.split(os.path.realpath(ff))
             fd = tempfile.TemporaryFile(prefix=filename+'.shuf',
                                         dir=path,
-                                        mode='w+')
+                                        mode='w+',
+                                        encoding="UTF-8")
             fds.append(fd)
     else:
-        fds = [open(ff+'.shuf', mode='w') for ff in files]
+        fds = [open(ff+'.shuf', mode='w', encoding="UTF-8") for ff in files]
 
     for l in lines:
         for ii, fd in enumerate(fds):

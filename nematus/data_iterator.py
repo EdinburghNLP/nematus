@@ -7,8 +7,8 @@ from util import load_dict
 
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):
-        return gzip.open(filename, mode)
-    return open(filename, mode)
+        return gzip.open(filename, mode, encoding="UTF-8")
+    return open(filename, mode, encoding="UTF-8")
 
 class FileWrapper(object):
     def __init__(self, fname):
