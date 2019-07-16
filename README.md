@@ -150,9 +150,8 @@ An updated version of these scripts that uses the Transformer model can be found
 | --rnn_dec_base_transition_depth INT | number of GRU transition operations applied in the first layer of the decoder. Minimum is 2. (Only applies to gru_cond). (default: 2) |
 | --rnn_dec_high_transition_depth INT | number of GRU transition operations applied in the higher layers of the decoder. Minimum is 1. (Only applies to gru). (default: 1) |
 | --rnn_dec_deep_context | pass context vector (from first layer) to deep decoder layers |
-| --rnn_use_dropout | use dropout layer (default: False) |
-| --rnn_dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: 0.2) |
-| --rnn_dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.2) |
+| --rnn_dropout_embedding FLOAT | dropout for input embeddings (0: no dropout) (default: 0.0) |
+| --rnn_dropout_hidden FLOAT | dropout for hidden layer (0: no dropout) (default: 0.0) |
 | --rnn_dropout_source FLOAT | dropout source words (0: no dropout) (default: 0.0) |
 | --rnn_dropout_target FLOAT | dropout target words (0: no dropout) (default: 0.0) |
 | --rnn_layer_normalisation | Set to use layer normalization in encoder and decoder |

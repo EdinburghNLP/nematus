@@ -392,40 +392,33 @@ class ConfigSpecification:
             help='pass context vector (from first layer) to deep decoder '
                  'layers'))
 
+        # option should no longer be set in command line;
+        # code only remains to ensure backward-compatible loading of JSON files
         group.append(ParameterSpecification(
             name='rnn_use_dropout', default=False,
             legacy_names=['use_dropout'],
             visible_arg_names=['--rnn_use_dropout'],
             hidden_arg_names=['--use_dropout'],
             action='store_true',
-            help='use dropout layer (default: %(default)s)'))
+            help='REMOVED: has no effect'))
 
         group.append(ParameterSpecification(
-            name='rnn_dropout_embedding', default=None,
+            name='rnn_dropout_embedding', default=0.0,
             legacy_names=['dropout_embedding'],
             visible_arg_names=['--rnn_dropout_embedding'],
             hidden_arg_names=['--dropout_embedding'],
-            derivation_func=_derive_rnn_dropout_embedding,
             type=float, metavar='FLOAT',
-            # FIXME rnn_dropout_embedding effectively has two defaults,
-            #       depending on whether we're reading from the command-
-            #       line or from a JSON config - does this make sense?
-            #       We hardcode the former here.
             help='dropout for input embeddings (0: no dropout) (default: '
-                 '0.2)'))
+                 '%(default)s)'))
 
         group.append(ParameterSpecification(
-            name='rnn_dropout_hidden', default=None,
+            name='rnn_dropout_hidden', default=0.0,
             legacy_names=['dropout_hidden'],
             visible_arg_names=['--rnn_dropout_hidden'],
             hidden_arg_names=['--dropout_hidden'],
-            derivation_func=_derive_rnn_dropout_hidden,
             type=float, metavar='FLOAT',
-            # FIXME rnn_dropout_hidden effectively has two defaults,
-            #       depending on whether we're reading from the command-
-            #       line or from a JSON config - does this make sense?
-            #       We hardcode the former here.
-            help='dropout for hidden layer (0: no dropout) (default: 0.2)'))
+            help='dropout for hidden layer (0: no dropout) (default: '
+                 '%(default)s)'))
 
         group.append(ParameterSpecification(
             name='rnn_dropout_source', default=0.0,
@@ -960,6 +953,9 @@ def read_config_from_cmdline():
     meta_config.from_cmdline = True
     meta_config.from_theano = False
 
+    # Set defaults for removed options
+    config.rnn_use_dropout = True
+
     # Run derivation functions.
     for group in spec.group_names:
         for param in spec.params_by_group(group):
@@ -1183,6 +1179,14 @@ def _check_config_consistency(spec, config, set_by_user):
     if config.softmax_mixture_size > 1 and config.rnn_lexical_model:
        error_messages.append('behavior of --rnn_lexical_model is undefined if softmax_mixture_size > 1')
 
+    if 'rnn_use_dropout' in set_by_user:
+        msg = '--rnn_use_dropout is no longer used. Set --rnn_dropout_* instead (0 by default).\n' \
+              'old defaults:\n' \
+              '--rnn_dropout_embedding: 0.2\n' \
+              '--rnn_dropout_hidden: 0.2\n' \
+              '--rnn_dropout_source: 0\n' \
+              '--rnn_dropout_target: 0'
+        error_messages.append(msg)
 
     return error_messages
 
@@ -1284,18 +1288,6 @@ def _derive_dim_per_factor(config, meta_config):
         return config.dim_per_factor
     assert config.factors == 1
     return [config.embedding_size]
-
-
-def _derive_rnn_dropout_embedding(config, meta_config):
-    if config.rnn_dropout_embedding is not None:
-        return config.rnn_dropout_embedding
-    return 0.2 if meta_config.from_cmdline else 0.0
-
-
-def _derive_rnn_dropout_hidden(config, meta_config):
-    if config.rnn_dropout_hidden is not None:
-        return config.rnn_dropout_hidden
-    return 0.2 if meta_config.from_cmdline else 0.0
 
 
 def _derive_valid_source_dataset(config, meta_config):
