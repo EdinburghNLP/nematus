@@ -178,6 +178,7 @@ An updated version of these scripts that uses the Transformer model can be found
 | --prior_model PATH | Prior model for MAP-L2 regularization. Unless using " --reload", this will also be used for initialization. |
 | --clip_c FLOAT | gradient clipping threshold (default: 1.0) |
 | --label_smoothing FLOAT | label smoothing (default: 0.0) |
+| --exponential_smoothing FLOAT | exponential smoothing factor; use 0 to disable (default: 0.0) |
 | --optimizer {adam} | optimizer (default: adam) |
 | --adam_beta1 FLOAT | exponential decay rate for the first moment estimates (default: 0.9) |
 | --adam_beta2 FLOAT | exponential decay rate for the second moment estimates (default: 0.999) |
@@ -220,9 +221,10 @@ An updated version of these scripts that uses the Transformer model can be found
 #### translate parameters
 | parameter | description |
 |---        |---          |
-| --no_normalize | Cost of sentences will not be normalized by length |
+| --normalization_alpha [ALPHA] | normalize scores by sentence length (with argument, " "exponentiate lengths by ALPHA) |
 | --n_best | Print full beam |
 | --translation_maxlen INT | Maximum length of translation output sentence (default: 200) |
+| --translation_strategy {beam_search,sampling} | translation_strategy, either beam_search or sampling (default: beam_search) |
 
 #### `nematus/translate.py` : use an existing model to translate a source text
 
