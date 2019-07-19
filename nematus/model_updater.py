@@ -194,16 +194,16 @@ class ModelUpdater(object):
         assert max_sents_per_device == 0 or max_tokens_per_device == 0
         assert not (max_sents_per_device == 0 and max_tokens_per_device == 0)
 
+        source_lengths = numpy.sum(x_mask, axis=0)
+        target_lengths = numpy.sum(y_mask, axis=0)
+        assert len(source_lengths) == len(target_lengths)
+        num_sents = len(source_lengths)
+
         # Determine where to split the minibatch to produce sub-batches that
         # fit the device capacity.
         if max_sents_per_device != 0:
-            start_points = range(0, num_sents, max_sents_per_device)
+            start_points = list(range(0, num_sents, max_sents_per_device))
         else:
-            source_lengths = numpy.sum(x_mask, axis=0)
-            target_lengths = numpy.sum(y_mask, axis=0)
-            assert len(source_lengths) == len(target_lengths)
-            num_sents = len(source_lengths)
-
             start_points = [0]
             while True:
                 i = start_points[-1]
