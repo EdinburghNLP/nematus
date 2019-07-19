@@ -183,9 +183,10 @@ An updated version of these scripts that uses the Transformer model can be found
 | --adam_beta1 FLOAT | exponential decay rate for the first moment estimates (default: 0.9) |
 | --adam_beta2 FLOAT | exponential decay rate for the second moment estimates (default: 0.999) |
 | --adam_epsilon FLOAT | constant for numerical stability (default: 1e-08) |
-| --learning_schedule {constant,transformer} | learning schedule (default: constant) |
+| --learning_schedule {constant,transformer,warmup-plateau-decay} | learning schedule (default: constant) |
 | --learning_rate FLOAT | learning rate (default: 0.0001) |
 | --warmup_steps INT | number of initial updates during which the learning rate is increased linearly during learning rate scheduling (default: 8000) |
+| --plateau_steps INT | number of updates after warm-up before the learning rate starts to decay (applies to 'warmup-plateau-decay' learning schedule only). (default: 0) |
 | --maxlen INT | maximum sequence length for training and validation (default: 100) |
 | --batch_size INT | minibatch size (default: 80) |
 | --token_batch_size INT | minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, batch_size only affects sorting by length. (default: 0) |

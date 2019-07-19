@@ -595,7 +595,8 @@ class ConfigSpecification:
         group.append(ParameterSpecification(
             name='learning_schedule', default='constant',
             visible_arg_names=['--learning_schedule'],
-            type=str, choices=['constant', 'transformer'],
+            type=str, choices=['constant', 'transformer',
+                               'warmup-plateau-decay'],
             help='learning schedule (default: %(default)s)'))
 
         group.append(ParameterSpecification(
@@ -613,6 +614,14 @@ class ConfigSpecification:
             help='number of initial updates during which the learning rate is '
                  'increased linearly during learning rate scheduling '
                  '(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='plateau_steps', default=0,
+            visible_arg_names=['--plateau_steps'],
+            type=int, metavar='INT',
+            help='number of updates after warm-up before the learning rate '
+                 'starts to decay (applies to \'warmup-plateau-decay\' '
+                 'learning schedule only). (default: %(default)s)'))
 
         group.append(ParameterSpecification(
             name='maxlen', default=100,
@@ -1075,20 +1084,23 @@ def _check_config_consistency(spec, config, set_by_user):
 
     # Check user-supplied learning schedule options are consistent.
     if config.learning_schedule == 'constant':
-        param = spec.lookup('warmup_steps')
-        assert param is not None
-        if param.name in set_by_user:
-            msg = '{} cannot be used with \'constant\' learning ' \
-                   'schedule'.format(arg_names_string(param),
-                                     config.model_type)
-            error_messages.append(msg)
+        for key in ['warmup_steps', 'plateau_steps']:
+            param = spec.lookup(key)
+            assert param is not None
+            if param.name in set_by_user:
+                msg = '{} cannot be used with \'constant\' learning ' \
+                       'schedule'.format(arg_names_string(param),
+                                         config.model_type)
+                error_messages.append(msg)
     elif config.learning_schedule == 'transformer':
-        param = spec.lookup('learning_rate')
-        assert param is not None
-        if param.name in set_by_user:
-            msg = '{} cannot be used with \'transformer\' learning ' \
-                  'schedule'.format(arg_names_string(param), config.model_type)
-            error_messages.append(msg)
+        for key in ['learning_rate', 'plateau_steps']:
+            param = spec.lookup(key)
+            assert param is not None
+            if param.name in set_by_user:
+                msg = '{} cannot be used with \'transformer\' learning ' \
+                      'schedule'.format(arg_names_string(param),
+                                        config.model_type)
+                error_messages.append(msg)
 
     # TODO Other similar checks? e.g. check user hasn't set adam parameters
     #       if optimizer != 'adam' (not currently possible but probably will
