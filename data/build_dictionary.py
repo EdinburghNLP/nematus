@@ -12,7 +12,7 @@ def main():
     for filename in sys.argv[1:]:
         print('Processing', filename)
         word_freqs = OrderedDict()
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             for line in f:
                 words_in = line.strip().split(' ')
                 for w in words_in:
