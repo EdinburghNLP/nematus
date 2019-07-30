@@ -107,12 +107,12 @@ class ModelUpdater(object):
             session.run([self._graph.accum_ops], feed_dict=feed_dict)
 
         # Apply the gradients (and optionally write the summary).
-        fetches = self._graph.apply_ops
         if not write_summary:
+            fetches = self._graph.apply_ops
             global_step, apply_grads, mean_loss_per_sent = session.run(fetches)
         else:
             assert self._summary_writer is not None
-            fetches += self._graph.summary_ops
+            fetches = self._graph.apply_ops + self._graph.summary_ops
             global_step, apply_grads, mean_loss_per_sent, merged_summary = \
                 session.run(fetches)
             self._summary_writer.add_summary(merged_summary, global_step)
