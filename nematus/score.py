@@ -4,21 +4,28 @@ Given a parallel corpus of sentence pairs: with one-to-one of target and source 
 produce the score.
 """
 
-import sys
-import argparse
-import tempfile
 import logging
+if __name__ == '__main__':
+    # Parse console arguments.
+    from settings import ScorerSettings
+    scorer_settings = ScorerSettings(from_console_arguments=True)
+    # Set the logging level. This needs to be done before the tensorflow
+    # module is imported.
+    level = logging.DEBUG if scorer_settings.verbose else logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
-import numpy
+import argparse
+import sys
+import tempfile
+
+import tensorflow as tf
 
 from config import load_config_from_json_file
 from data_iterator import TextIterator
 import model_loader
 import train
 import rnn_model
-from settings import ScorerSettings
 
-import tensorflow as tf
 
 # FIXME pass in paths not file objects, since we need to know the paths anyway
 def score_model(source_file, target_file, scorer_settings, options):
@@ -82,11 +89,9 @@ def main(source_file, target_file, output_file, scorer_settings):
     scores = score_model(source_file, target_file, scorer_settings, options)
     write_scores(source_file, target_file, scores, output_file, scorer_settings)
 
+
 if __name__ == "__main__":
-    scorer_settings = ScorerSettings(from_console_arguments=True)
-    source_file = scorer_settings.source
-    target_file = scorer_settings.target
-    output_file = scorer_settings.output
-    level = logging.DEBUG if scorer_settings.verbose else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    main(source_file, target_file, output_file, scorer_settings)
+    main(source_file=scorer_settings.source,
+         target_file=scorer_settings.target,
+         output_file=scorer_settings.output,
+         scorer_settings=scorer_settings)

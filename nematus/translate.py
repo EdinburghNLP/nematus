@@ -2,8 +2,17 @@
 
 """Translates a source file using a translation model (or ensemble)."""
 
-import argparse
 import logging
+if __name__ == '__main__':
+    # Parse console arguments.
+    from settings import TranslationSettings
+    settings = TranslationSettings(from_console_arguments=True)
+    # Set the logging level. This needs to be done before the tensorflow
+    # module is imported.
+    level = logging.DEBUG if settings.verbose else logging.INFO
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
+import argparse
 
 import tensorflow as tf
 
@@ -11,7 +20,6 @@ from config import load_config_from_json_file
 import inference
 import model_loader
 import rnn_model
-from settings import TranslationSettings
 from transformer import Transformer as TransformerModel
 from sampling_utils import SamplingUtils
 
@@ -21,10 +29,6 @@ def main(settings):
     Translates a source language file (or STDIN) into a target language file
     (or STDOUT).
     """
-    # Start logging.
-    level = logging.DEBUG if settings.verbose else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-
     # Create the TensorFlow session.
     tf_config = tf.ConfigProto()
     tf_config.allow_soft_placement = True
@@ -68,6 +72,4 @@ def main(settings):
 
 
 if __name__ == "__main__":
-    # Parse console arguments.
-    settings = TranslationSettings(from_console_arguments=True)
     main(settings)

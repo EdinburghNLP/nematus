@@ -5,6 +5,12 @@ import logging
 import os
 import sys
 
+if __name__ == '__main__':
+    # Configure the logging output. This needs to be done before the
+    # tensorflow module is imported.
+    logging.basicConfig(level=logging.INFO,
+                        format='%(levelname)s: %(message)s')
+
 import numpy as np
 import tensorflow as tf
 
@@ -231,9 +237,6 @@ if __name__ == '__main__':
     opts = parser.parse_args()
     opts.inn = os.path.abspath(opts.inn)
     opts.out = os.path.abspath(opts.out)
-
-    # Start logging.
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
     if opts.from_theano:
         theano_to_tensorflow_model(opts.inn, opts.out)
