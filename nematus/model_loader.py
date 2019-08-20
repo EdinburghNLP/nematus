@@ -12,20 +12,30 @@ from exponential_smoothing import ExponentialSmoothing
 import training_progress
 
 def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
-    # Add variables and ops for exponential smoothing, if enabled (unless
-    # training, as they will already have been added).
-    if not train and config.exponential_smoothing > 0.0:
-        smoothing = ExponentialSmoothing(config.exponential_smoothing)
+    """Initializes all variables or restores variables from a checkpoint.
 
-    # Construct a mapping between saved variable names and names in the current
-    # scope. There are two reasons why names might be different:
-    #
-    #   1. This model is part of an ensemble, in which case a model-specific
-    #       name scope will be active.
-    #
-    #   2. The saved model is from an old version of Nematus (before deep model
-    #        support was added) and uses a different variable naming scheme
-    #        for the GRUs.
+    Prior to calling this function, the model (or models if using an ensemble)
+    should already have been created. If a model uses exponential smoothing,
+    then the _smooth versions of its variables should also have been created
+    (by constructing an ExponentialSmoothing object). This function will then
+    initialize the variables or restore them from a checkpoint (if one can be
+    found).
+
+    When using an ensemble, this function should be called once for each
+    model, with each call using model-specific config and ensemble_scope
+    arguments.
+
+    Args:
+      config: Namespace object specifying the config for the current model.
+      sess: a TensorFlow session.
+      ensemble_scope: a tf.variable_scope for the current model if ensembling.
+      train: Boolean specifying that the model is being used for training.
+
+    Returns:
+      If train is True, returns a pair (saver, progress) where saver is a
+      tf.train.Saver and progress is a training_progress.TrainingProgress
+      object. Otherwise, just returns the saver.
+    """
 
     accum_regex = re.compile('^accum\d+$')
 
@@ -38,6 +48,17 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
         return False
 
     variables = slim.get_variables_to_restore()
+
+    # Construct a mapping between saved variable names and names in the current
+    # scope. There are two reasons why names might be different:
+    #
+    #   1. This model is part of an ensemble, in which case a model-specific
+    #       name scope will be active.
+    #
+    #   2. The saved model is from an old version of Nematus (before deep model
+    #        support was added) and uses a different variable naming scheme
+    #        for the GRUs.
+
     var_map = {}
     for v in variables:
         name = v.name.split(':')[0]
@@ -108,21 +129,16 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
         sess.run(init_op)
     else:
         logging.info('Loading model parameters from file ' + os.path.abspath(reload_filename))
-        # Initialize all variables even though most will be overwritten by
-        # the subsequent saver.restore() call. This is to allow for variables
-        # that are not saved to the checkpoint. Currently that is just the
-        # gradient accumulation variables, which are unusual in that they
-        # persist across multiple sessions during training (and therefore need
-        # to be variables) but are regularly reset to zero.
-        sess.run(init_op)
+        if train:
+            # Initialize all variables before restoring from the checkpoint.
+            # This is to allow for variables that are not saved to the
+            # checkpoint. Currently that is just the gradient accumulation
+            # variables, which are unusual in that they persist across multiple
+            # sessions during training (and therefore need to be variables) but
+            # are regularly reset to zero.
+            sess.run(init_op)
         saver.restore(sess, os.path.abspath(reload_filename))
     logging.info('Done')
-
-    # For everything apart from training, use the smoothed version of the
-    # parameters (if available).
-    if not train and config.exponential_smoothing > 0.0:
-        logging.info('Using smoothed model parameters')
-        sess.run(fetches=smoothing.swap_ops)
 
     if train:
         return saver, progress

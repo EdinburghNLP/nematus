@@ -22,6 +22,7 @@ import tensorflow as tf
 
 from config import load_config_from_json_file
 from data_iterator import TextIterator
+from exponential_smoothing import ExponentialSmoothing
 import model_loader
 import rnn_model
 import train
@@ -53,12 +54,27 @@ def calc_scores(source_file, target_file, scorer_settings, configs):
             tf_config = tf.ConfigProto()
             tf_config.allow_soft_placement = True
             with tf.Session(config=tf_config) as sess:
+
                 logging.info('Building model...')
+
+                # Create the model graph.
                 if config.model_type == 'transformer':
                     model = transformer.Transformer(config)
                 else:
                     model = rnn_model.RNNModel(config)
+
+                # Add smoothing variables (if the model was trained with
+                # smoothing).
+                if config.exponential_smoothing > 0.0:
+                    smoothing = ExponentialSmoothing(
+                        config.exponential_smoothing)
+
+                # Restore the model variables.
                 saver = model_loader.init_or_restore_variables(config, sess)
+
+                # Swap-in the smoothed versions of the variables (if present).
+                if config.exponential_smoothing > 0.0:
+                    sess.run(fetches=smoothing.swap_ops)
 
                 text_iterator = TextIterator(
                     source=source_file.name,

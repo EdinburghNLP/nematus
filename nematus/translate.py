@@ -17,11 +17,12 @@ import argparse
 import tensorflow as tf
 
 from config import load_config_from_json_file
+from exponential_smoothing import ExponentialSmoothing
 import inference
 import model_loader
 import rnn_model
-from transformer import Transformer as TransformerModel
 from sampling_utils import SamplingUtils
+from transformer import Transformer as TransformerModel
 
 
 def main(settings):
@@ -41,7 +42,7 @@ def main(settings):
         setattr(config, 'reload', model)
         configs.append(config)
 
-    # Create the model graphs and restore their variables.
+    # Create the model graphs.
     logging.debug("Loading models\n")
     models = []
     for i, config in enumerate(configs):
@@ -50,10 +51,23 @@ def main(settings):
                 model = TransformerModel(config)
             else:
                 model = rnn_model.RNNModel(config)
-            saver = model_loader.init_or_restore_variables(config, session,
-                                                           ensemble_scope=scope)
             model.sampling_utils = SamplingUtils(settings)
             models.append(model)
+
+    # Add smoothing variables (if the models were trained with smoothing).
+    #FIXME Assumes either all models were trained with smoothing or none were.
+    if configs[0].exponential_smoothing > 0.0:
+        smoothing = ExponentialSmoothing(configs[0].exponential_smoothing)
+
+    # Restore the model variables.
+    for i, config in enumerate(configs):
+        with tf.variable_scope("model%d" % i) as scope:
+            _ = model_loader.init_or_restore_variables(config, session,
+                                                       ensemble_scope=scope)
+
+    # Swap-in the smoothed versions of the variables.
+    if configs[0].exponential_smoothing > 0.0:
+        session.run(fetches=smoothing.swap_ops)
 
     # TODO Ensembling is currently only supported for RNNs, so if
     # TODO len(models) > 1 then check models are all rnn
