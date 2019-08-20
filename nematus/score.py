@@ -23,40 +23,60 @@ import tensorflow as tf
 from config import load_config_from_json_file
 from data_iterator import TextIterator
 import model_loader
-import train
 import rnn_model
+import train
+import transformer
 
 
 # FIXME pass in paths not file objects, since we need to know the paths anyway
-def score_model(source_file, target_file, scorer_settings, options):
+def calc_scores(source_file, target_file, scorer_settings, configs):
+    """Calculates sentence pair scores using each of the specified models.
+
+    By default (when scorer_settings.normalization_alpha is 0.0), the score
+    is the sentence-level cross entropy, otherwise it's a normalized version.
+
+    Args:
+        source_file: file object for file containing source sentences.
+        target_file: file object for file containing target sentences.
+        scorer_settings: a ScorerSettings object.
+        configs: a list of Namespace objects specifying the model configs.
+
+    Returns:
+        A list of lists of floats. The outer list contains one list for each
+        model (in the same order given by configs). The inner list contains
+        one score for each sentence pair.
+    """
     scores = []
-    for option in options:
+    for config in configs:
         g = tf.Graph()
         with g.as_default():
             tf_config = tf.ConfigProto()
             tf_config.allow_soft_placement = True
             with tf.Session(config=tf_config) as sess:
                 logging.info('Building model...')
-                model = rnn_model.RNNModel(option)
-                saver = model_loader.init_or_restore_variables(option, sess)
+                if config.model_type == 'transformer':
+                    model = transformer.Transformer(config)
+                else:
+                    model = rnn_model.RNNModel(config)
+                saver = model_loader.init_or_restore_variables(config, sess)
 
                 text_iterator = TextIterator(
                     source=source_file.name,
                     target=target_file.name,
-                    source_dicts=option.source_dicts,
-                    target_dict=option.target_dict,
-                    model_type=option.model_type,
+                    source_dicts=config.source_dicts,
+                    target_dict=config.target_dict,
+                    model_type=config.model_type,
                     batch_size=scorer_settings.minibatch_size,
                     maxlen=float('inf'),
-                    source_vocab_sizes=option.source_vocab_sizes,
-                    target_vocab_size=option.target_vocab_size,
-                    use_factor=(option.factors > 1),
+                    source_vocab_sizes=config.source_vocab_sizes,
+                    target_vocab_size=config.target_vocab_size,
+                    use_factor=(config.factors > 1),
                     sort_by_length=False)
 
                 ce_vals, _ = train.calc_cross_entropy_per_sentence(
                     sess,
                     model,
-                    option,
+                    config,
                     text_iterator,
                     normalization_alpha=scorer_settings.normalization_alpha)
 
@@ -80,13 +100,13 @@ def write_scores(source_file, target_file, scores, output_file, scorer_settings)
 
 def main(source_file, target_file, output_file, scorer_settings):
     # load model model_options
-    options = []
+    configs = []
     for model in scorer_settings.models:
         config = load_config_from_json_file(model)
         setattr(config, 'reload', model)
-        options.append(config)
+        configs.append(config)
 
-    scores = score_model(source_file, target_file, scorer_settings, options)
+    scores = calc_scores(source_file, target_file, scorer_settings, configs)
     write_scores(source_file, target_file, scores, output_file, scorer_settings)
 
 

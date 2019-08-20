@@ -16,7 +16,7 @@ if __name__ == '__main__':
 from tempfile import NamedTemporaryFile
 
 from config import load_config_from_json_file
-from score import score_model
+from score import calc_scores
 
 
 def rescore(source_file, nbest_file, output_file, rescorer_settings, options):
@@ -36,7 +36,7 @@ def rescore(source_file, nbest_file, output_file, rescorer_settings, options):
 
         tmp_in.seek(0)
         tmp_out.seek(0)
-        scores = score_model(tmp_in, tmp_out, rescorer_settings, options)
+        scores = calc_scores(tmp_in, tmp_out, rescorer_settings, options)
 
     for i, line in enumerate(nbest_lines):
         score_str = ' '.join([str(s[i]) for s in scores])
