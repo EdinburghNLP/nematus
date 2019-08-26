@@ -17,6 +17,7 @@ import exception
 import inference
 import model_loader
 import rnn_model
+from transformer import Transformer as TransformerModel
 from settings import TranslationSettings
 import util
 
@@ -116,7 +117,10 @@ class Translator(object):
         models = []
         for i, options in enumerate(self._options):
             with tf.variable_scope("model%d" % i) as scope:
-                model = rnn_model.RNNModel(options)
+                if options.model_type == "transformer":
+                    model = TransformerModel(options)
+                else:
+                    model = rnn_model.RNNModel(options)
                 saver = model_loader.init_or_restore_variables(
                     options, sess, ensemble_scope=scope)
                 models.append(model)
