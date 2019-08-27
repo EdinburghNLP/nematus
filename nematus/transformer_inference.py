@@ -33,29 +33,27 @@ def sample(session, model, x, x_mask, graph=None):
 
 def beam_search(session, models, x, x_mask, beam_size,
                 normalization_alpha=0.0, graph=None):
-    """Beam search using one Transformer translation model (TODO ensemble)
+    """Beam search using one or more Transformer models.
 
-    TODO Ensemble
     If using an ensemble (i.e. more than one model), then at each timestep
     the top k tokens are selected according to the sum of the models'
     probabilities (where k is the beam size).
 
     Args:
-        session: TensorFlow session.
+        session: a TensorFlow session.
         models: a list of Transformer objects.
         x: input Tensor with shape (factors, max_seq_len, batch_size).
         x_mask: mask Tensor for x with shape (max_seq_len, batch_size).
-        beam_size: beam width.
+        beam_size: integer specifying the beam width.
         normalization_alpha: length normalization hyperparameter.
         graph: a BeamSearchGraph (to allow reuse if searching repeatedly).
 
     Returns:
-        A list of lists of (translation, score) pairs. The outer list has one
-        element for each input sentence in the batch. The inner lists have
-        k elements (where k is the beam size), sorted by score in best-first
-        order.
+        A list of lists of (translation, score) pairs. The outer list contains
+        one list for each input sentence in the batch. The inner lists contain
+        k elements (where k is the beam size), sorted by score in ascending
+        order (i.e. best first, assuming lower scores are better).
     """
-    assert len(models) == 1  # ensembles not supported yet
     feed_dict = {}
     for model in models:
         feed_dict[model.inputs.x] = x
@@ -84,7 +82,7 @@ class SampleGraph(object):
         return (self._ids, self._scores)
 
 
-"""Builds a graph fragment for beam search over a TransformerModel."""
+"""Builds a graph fragment for beam search over one or more Transformers."""
 class BeamSearchGraph(object):
     def __init__(self, models, beam_size, normalization_alpha):
         self._beam_size = beam_size
@@ -121,122 +119,171 @@ def construct_sampling_ops(model):
 
 
 def construct_beam_search_ops(models, beam_size, normalization_alpha):
-    """Builds a graph fragment for sampling over a TransformerModel.
+    """Builds a graph fragment for beam search over one or more Transformers.
 
     Args:
-        models: a list of TransformerModel objects.
+        models: a list of Transformer objects.
 
     Returns:
         A tuple (ids, scores), where ids is a Tensor with shape (batch_size, k,
         max_seq_len) containing k translations for each input sentence in
         model.inputs.x and scores is a Tensor with shape (batch_size, k)
     """
-    assert len(models) == 1
-    model = models[0]
-    ids, scores = decode_greedy(model,
+    ids, scores = decode_greedy(models,
                                 beam_size=beam_size,
                                 normalization_alpha=normalization_alpha)
     return ids, scores
 
 
-def decode_greedy(model, do_sample=False, beam_size=0,
+def decode_greedy(models, do_sample=False, beam_size=0,
                   normalization_alpha=None):
-    # Determine size of current batch
-    batch_size, _ = get_shape_list(model.source_ids)
-    # Encode source sequences
-    with tf.name_scope('{:s}_encode'.format(model.name)):
-        enc_output, cross_attn_mask = model.enc.encode(model.source_ids,
-                                                       model.source_mask)
+    """Decodes a source sequence using beam search or sampling.
+
+    Args:
+        models: a list of Transformer objects.
+        do_sample: randomly sample instead of argmax for greedy search
+        beam_size: integer specifying the beam width.
+        normalization_alpha: length normalization hyperparameter.
+
+    Returns:
+        A tuple (ids, scores), where ids is a Tensor with shape (batch_size, k,
+        max_seq_len) containing k translations for each input sentence in
+        model.inputs.x and scores is a Tensor with shape (batch_size, k)
+    """
+
+    # Get some parameter values. For ensembling, some settings are required to
+    # be consistent across all models but others are not.  In the former case,
+    # we assume that consistency has already been checked.  For the parameters
+    # that are allowed to vary across models, the first model's settings take
+    # precedence.
+    batch_size, _ = get_shape_list(models[0].source_ids)
+    model_name = models[0].name
+    decoder_name = models[0].dec.name
+    from_rnn = models[0].dec.from_rnn
+    config = models[0].dec.config
+    float_dtype = models[0].dec.float_dtype
+    int_dtype = models[0].dec.int_dtype
+    vocab_size = models[0].dec.embedding_layer.get_vocab_size(),
+
+    # Generate a positional signal for the longest possible output.
+    with tf.name_scope('{:s}_decode'.format(model_name)):
+        with tf.variable_scope(decoder_name):
+            positional_signal = get_positional_signal(
+                config.translation_maxlen,
+                config.embedding_size,
+                float_dtype)
+
+    # Generate a decoding function for each model.
+    decoding_functions = []
+    for model in models:
+        assert model.name == model_name
+
+        # Encode source sequences.
+        with tf.name_scope('{:s}_encode'.format(model.name)):
+            enc_output, cross_attn_mask = model.enc.encode(model.source_ids,
+                                                           model.source_mask)
+
+        # Generate a model-specific decoding function.
+        with tf.name_scope('{:s}_decode'.format(model.name)):
+            func = generate_decoding_function(enc_output, cross_attn_mask,
+                                              model.dec, positional_signal)
+            decoding_functions.append(func)
+
     # Decode into target sequences
-    with tf.name_scope('{:s}_decode'.format(model.name)):
-        dec_output, scores = decode_at_test(model, model.dec, enc_output,
-            cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha)
-    return dec_output, scores
+    with tf.name_scope('{:s}_decode'.format(model_name)):
+        with tf.variable_scope(decoder_name):
+
+            if beam_size > 0:
+                # Initialize target IDs with <GO>
+                initial_ids = tf.cast(tf.fill([batch_size], 1), dtype=int_dtype)
+                initial_memories = [
+                    model.dec._get_initial_memories(batch_size,
+                                                    beam_size=beam_size)
+                    for model in models]
+                output_sequences, scores = _beam_search(
+                    decoding_functions,
+                    initial_ids,
+                    initial_memories,
+                    int_dtype,
+                    float_dtype,
+                    config.translation_maxlen,
+                    batch_size,
+                    beam_size,
+                    vocab_size,
+                    0,
+                    normalization_alpha)
+
+            else:
+                # Initialize target IDs with <GO>
+                initial_ids = tf.cast(tf.fill([batch_size, 1], 1),
+                                      dtype=int_dtype)
+                initial_memories = [
+                    model.dec._get_initial_memories(batch_size, beam_size=1)
+                    for model in models]
+                output_sequences, scores = greedy_search(
+                    model,
+                    _decoding_function,
+                    initial_ids,
+                    initial_memories,
+                    int_dtype,
+                    float_dtype,
+                    config.translation_maxlen,
+                    batch_size,
+                    0,
+                    do_sample,
+                    time_major=False)
+
+    return output_sequences, scores
 
 
-def decode_at_test(model, decoder, enc_output, cross_attn_mask, batch_size, beam_size, do_sample, normalization_alpha):
-    """ Returns the probability distribution over target-side tokens conditioned on the output of the encoder;
-     performs decoding via auto-regression at test time. """
+def generate_decoding_function(enc_output, cross_attn_mask, decoder,
+                               positional_signal):
+    """Generates a function for decoding at a single timestep.
 
-    def _decode_step(target_embeddings, memories):
-        """ Decode the encoder-generated representations into target-side logits with auto-regression. """
-        # Propagate inputs through the encoder stack
-        dec_output = target_embeddings
-        # NOTE: No self-attention mask is applied at decoding, as future information is unavailable
-        for layer_id in range(1, decoder.config.transformer_dec_depth + 1):
-            dec_output, memories['layer_{:d}'.format(layer_id)] = \
-                decoder.decoder_stack[layer_id]['self_attn'].forward(
-                    dec_output, None, None, memories['layer_{:d}'.format(layer_id)])
-            dec_output, _ = \
-                decoder.decoder_stack[layer_id]['cross_attn'].forward(dec_output, enc_output, cross_attn_mask)
-            dec_output = decoder.decoder_stack[layer_id]['ffn'].forward(dec_output)
-        # Return prediction at the final time-step to be consistent with the inference pipeline
-        dec_output = dec_output[:, -1, :]
-        return dec_output, memories
+    Args:
+        enc_output: ...
+        cross_attn_mask: ...
+        decoder: a TransformerDecoder object.
+        positional_signal: ...
 
-    def _pre_process_targets(step_target_ids, current_time_step):
-        """ Pre-processes target token ids before they're passed on as input to the decoder
-        for auto-regressive decoding. """
-        # Embed target_ids
-        target_embeddings = decoder._embed(step_target_ids)
-        signal_slice = positional_signal[:, current_time_step - 1: current_time_step, :]
-        target_embeddings += signal_slice
-        if decoder.config.transformer_dropout_embeddings > 0:
-            target_embeddings = tf.layers.dropout(target_embeddings,
-                                                  rate=decoder.config.transformer_dropout_embeddings, training=decoder.training)
-        return target_embeddings
+    Returns:
+        ...
+    """
 
     def _decoding_function(step_target_ids, current_time_step, memories):
-        """ Generates logits for the target-side token predicted for the next-time step with auto-regression. """
-        # Embed the model's predictions up to the current time-step; add positional information, mask
-        target_embeddings = _pre_process_targets(step_target_ids, current_time_step)
-        # Pass encoder context and decoder embeddings through the decoder
-        dec_output, memories = _decode_step(target_embeddings, memories)
-        # Project decoder stack outputs and apply the soft-max non-linearity
+        """Generates logits for the token predicted for the next-time step."""
+        # Look up embeddings for target IDs.
+        target_embeddings = decoder._embed(step_target_ids)
+        # Add positional signal.
+        signal_slice = positional_signal[
+            :, current_time_step-1:current_time_step, :]
+        target_embeddings += signal_slice
+        # Optionally, apply dropout to embeddings.
+        if decoder.config.transformer_dropout_embeddings > 0:
+            target_embeddings = tf.layers.dropout(
+                target_embeddings,
+                rate=decoder.config.transformer_dropout_embeddings,
+                training=decoder.training)
+        # Propagate values through the decoder stack.
+        # NOTE: No self-attention mask is applied at decoding, as future
+        #       information is unavailable.
+        layer_output = target_embeddings
+        for layer_id in range(1, decoder.config.transformer_dec_depth + 1):
+            layer = decoder.decoder_stack[layer_id]
+            mem_key = 'layer_{:d}'.format(layer_id)
+            layer_output, memories[mem_key] = layer['self_attn'].forward(
+                layer_output, None, None, memories[mem_key])
+            layer_output, _ = layer['cross_attn'].forward(
+                layer_output, enc_output, cross_attn_mask)
+            layer_output = layer['ffn'].forward(layer_output)
+        # Return prediction at the final time-step to be consistent with the
+        # inference pipeline.
+        dec_output = layer_output[:, -1, :]
+        # Project decoder stack outputs and apply the soft-max non-linearity.
         step_logits = decoder.softmax_projection_layer.project(dec_output)
         return step_logits, memories
 
-    with tf.variable_scope(decoder.name):
-        # Transpose encoder information in hybrid models
-        if decoder.from_rnn:
-            enc_output = tf.transpose(enc_output, [1, 0, 2])
-            cross_attn_mask = tf.transpose(cross_attn_mask, [3, 1, 2, 0])
-
-        positional_signal = get_positional_signal(decoder.config.translation_maxlen,
-                                                  decoder.config.embedding_size,
-                                                  decoder.float_dtype)
-        if beam_size > 0:
-            # Initialize target IDs with <GO>
-            initial_ids = tf.cast(tf.fill([batch_size], 1), dtype=decoder.int_dtype)
-            initial_memories = decoder._get_initial_memories(batch_size, beam_size=beam_size)
-            output_sequences, scores = _beam_search(_decoding_function,
-                                                   initial_ids,
-                                                   initial_memories,
-                                                   decoder.int_dtype,
-                                                   decoder.float_dtype,
-                                                   decoder.config.translation_maxlen,
-                                                   batch_size,
-                                                   beam_size,
-                                                   decoder.embedding_layer.get_vocab_size(),
-                                                   0,
-                                                   normalization_alpha)
-
-        else:
-            # Initialize target IDs with <GO>
-            initial_ids = tf.cast(tf.fill([batch_size, 1], 1), dtype=decoder.int_dtype)
-            initial_memories = decoder._get_initial_memories(batch_size, beam_size=1)
-            output_sequences, scores = greedy_search(model,
-                                                     _decoding_function,
-                                                     initial_ids,
-                                                     initial_memories,
-                                                     decoder.int_dtype,
-                                                     decoder.float_dtype,
-                                                     decoder.config.translation_maxlen,
-                                                     batch_size,
-                                                     0,
-                                                     do_sample,
-                                                     time_major=False)
-    return output_sequences, scores
+    return _decoding_function
 
 
 """ Inference functions for the transformer model. The generative process follows the 'Look, Generate, Update' paradigm, 
@@ -265,18 +312,32 @@ def compute_batch_indices(batch_size, beam_size):
     return batch_index_matrix
 
 
-def get_memory_invariants(memories):
-    """ Calculates the invariant shapes for the model memories (i.e. states of th RNN ar layer-wise attentions of the
-    transformer). """
-    memory_type = type(memories)
-    if memory_type == dict:
-        memory_invariants = dict()
-        for layer_id in memories.keys():
-            memory_invariants[layer_id] = {key: tf.TensorShape([None] * len(get_shape_list(memories[layer_id][key])))
-                                           for key in memories[layer_id].keys()}
-    else:
-        raise ValueError('Memory type not supported, must be a dictionary.')
-    return memory_invariants
+def get_memory_invariants(ensemble_memories):
+    """Calculates the invariant shapes for the ensemble models' memories.
+
+    'Memories' are states of the RNN or layer-wise attentions of the
+    transformer.
+
+    Args:
+        memories: a list containing one dict for each model in the ensemble.
+
+    Returns:
+        A list containing an invariant dictionary for each model.
+    """
+    ensemble_memory_invariants = []
+    for model_memories in ensemble_memories:
+        if type(model_memories) != dict:
+            raise ValueError('Memory type not supported, must be a '
+                             'dictionary.')
+        model_invariants = dict()
+        for layer_id in model_memories.keys():
+            layer_mems = model_memories[layer_id]
+            model_invariants[layer_id] = {
+                key: tf.TensorShape([None]*len(get_shape_list(layer_mems[key])))
+                for key in model_memories[layer_id].keys()
+            }
+        ensemble_memory_invariants.append(model_invariants)
+    return ensemble_memory_invariants
 
 
 # Seems to work alright
@@ -327,8 +388,8 @@ def gather_top_sequences(all_sequences,
     gathered_eos_flags = tf.gather_nd(all_eos_flags, gather_coordinates, name='{:s}_eos_flags'.format(prefix))
     gathered_memories = None
     if all_memories is not None:
-        gathered_memories = gather_memories(all_memories, gather_coordinates)
-        # gathered_memories = all_memories
+        gathered_memories = [gather_memories(memories, gather_coordinates)
+                             for memories in all_memories]
 
     return gathered_sequences, gathered_scores, gathered_eos_flags, gathered_memories
 
@@ -416,17 +477,17 @@ def greedy_search(model,
     return decoded_ids, log_scores
 
 
-def _beam_search(decoding_function,
-                initial_ids,
-                initial_memories,
-                int_dtype,
-                float_dtype,
-                translation_maxlen,
-                batch_size,
-                beam_size,
-                vocab_size,
-                eos_id,
-                normalization_alpha):
+def _beam_search(decoding_functions,
+                 initial_ids,
+                 initial_memories,
+                 int_dtype,
+                 float_dtype,
+                 translation_maxlen,
+                 batch_size,
+                 beam_size,
+                 vocab_size,
+                 eos_id,
+                 normalization_alpha):
     """ Decodes the target sequence by maintaining a beam of candidate hypotheses, thus allowing for better exploration
     of the hypothesis space; optionally applies scaled length normalization; based on the T2T implementation.
 
@@ -439,23 +500,45 @@ def _beam_search(decoding_function,
         """ Generates top-k extensions of the alive beam candidates from the previous time-step, which are subsequently
         used to update the alive and finished sets at the current time-step; top-k = 2 s* beam_size """
         # Get logits for the current prediction step
-        next_ids = alive_sequences[:, :, -1]  # [batch_size, beam_size]
-        next_ids = tf.transpose(next_ids, [1, 0])  # [beam_size, batch_size]; transpose to match model
-        next_ids = tf.reshape(next_ids, [-1, 1])  # [beam_size * batch_size, 1]
 
-        step_logits, alive_memories = decoding_function(next_ids, current_time_step, alive_memories)
-        step_logits = tf.reshape(step_logits, [beam_size, batch_size, -1])  # [beam_size, batch_size, num_words]
-        step_logits = tf.transpose(step_logits, [1, 0, 2])  # [batch_size, beam_size, num_words]; transpose back
+        # [batch_size, beam_size]
+        next_ids = alive_sequences[:, :, -1]
+        # [beam_size, batch_size]; transpose to match model
+        next_ids = tf.transpose(next_ids, [1, 0])
+        # [beam_size * batch_size, 1]
+        next_ids = tf.reshape(next_ids, [-1, 1])
 
-        # Calculate the scores for all possible extensions of alive hypotheses
-        candidate_log_probs = tf.nn.log_softmax(step_logits, axis=-1)
-        curr_log_probs = candidate_log_probs + tf.expand_dims(alive_log_probs, axis=2)
+        sum_log_probs = None
+        new_alive_memories = []
+        for memories, decoding_func in zip(alive_memories, decoding_functions):
+            step_logits, memories = decoding_func(
+                next_ids, current_time_step, memories)
+            new_alive_memories.append(memories)
+
+            # Reshape / transpose to get [batch_size, beam_size, num_words].
+            step_logits = tf.reshape(step_logits, [beam_size, batch_size, -1])
+            step_logits = tf.transpose(step_logits, [1, 0, 2])
+
+            # Calculate the scores for all possible extensions of alive
+            # hypotheses.
+            candidate_log_probs = tf.nn.log_softmax(step_logits, axis=-1)
+
+            if sum_log_probs is None:
+                sum_log_probs = candidate_log_probs
+            else:
+                sum_log_probs += candidate_log_probs
+
+        alive_memories = new_alive_memories
+
+        curr_log_probs = sum_log_probs \
+                         + tf.expand_dims(alive_log_probs, axis=2)
 
         # Apply length normalization
         length_penalty = 1.
         if normalization_alpha > 0.:
-            length_penalty = ((5. + tf.to_float(current_time_step)) ** normalization_alpha) / \
-                             ((5. + 1.) ** normalization_alpha)
+            t = tf.to_float(current_time_step)
+            length_penalty = (((5. + t) ** normalization_alpha)
+                              / ((5. + 1.) ** normalization_alpha))
         curr_scores = curr_log_probs / length_penalty
 
         # at first time step, all beams are identical - pick first
@@ -464,32 +547,39 @@ def _beam_search(decoding_function,
                       lambda: curr_scores[:,0],
                       lambda: tf.reshape(curr_scores, [batch_size, -1]))
 
-        # Select top-k highest scores
+        # Select top-k highest scores.
         top_scores, top_ids = tf.nn.top_k(flat_curr_scores, k=beam_size)
 
-        # Recover non-normalized scores for tracking
+        # Recover non-normalized scores for tracking.
         top_log_probs = top_scores * length_penalty
 
-        # Determine the beam from which the top-scoring items originate and their identity (i.e. token-ID)
+        # Determine the beam from which the top-scoring items originate and
+        # their identity (i.e. token-ID).
         top_beam_indices = top_ids // vocab_size
         top_ids %= vocab_size
 
-        # Determine the location of top candidates
-        batch_index_matrix = compute_batch_indices(batch_size, beam_size)  # [batch_size, beam_size]
-        top_coordinates = tf.stack([batch_index_matrix, top_beam_indices], axis=2)
+        # Determine the location of top candidates.
+        # [batch_size, beam_size]
+        batch_index_matrix = compute_batch_indices(batch_size, beam_size)
+        top_coordinates = tf.stack([batch_index_matrix, top_beam_indices],
+                                   axis=2)
 
-        # Extract top decoded sequences
-        top_sequences = tf.gather_nd(alive_sequences, top_coordinates)  # [batch_size, beam_size, sent_len]
-        top_sequences = tf.concat([top_sequences, tf.expand_dims(top_ids, axis=2)], axis=2)
+        # Extract top decoded sequences.
+        # [batch_size, beam_size, sent_len]
+        top_sequences = tf.gather_nd(alive_sequences, top_coordinates)
+        top_sequences = tf.concat([top_sequences,
+                                   tf.expand_dims(top_ids, axis=2)],
+                                  axis=2)
 
-        # Extract top memories
-        top_memories = gather_memories(alive_memories, top_coordinates)
-        # top_memories = alive_memories
+        # Extract top memories for each model.
+        top_memories = [gather_memories(memories, top_coordinates)
+                        for memories in alive_memories]
 
-        # Check how many of the top sequences have terminated
+        # Check how many of the top sequences have terminated.
         top_eos_flags = tf.equal(top_ids, eos_id)  # [batch_size, beam_size]
 
-        return top_sequences, top_log_probs, top_scores, top_eos_flags, top_memories
+        return (top_sequences, top_log_probs, top_scores, top_eos_flags,
+                top_memories)
 
     def _update_alive(top_sequences, top_scores, top_log_probs, top_eos_flags, top_memories):
         """ Assembles an updated set of unfinished beam candidates from the set of top-k translation hypotheses

@@ -30,7 +30,6 @@ class InferenceModelSet(object):
         # Currently only supports RNN ensembles or single Transformer models
         assert len(set(self._model_types)) == 1
         if self._model_types[0] == "transformer":
-            assert len(models) == 1
             self._sample_func = transformer_inference.sample
             self._sample_graph_type = transformer_inference.SampleGraph
             self._beam_search_func = transformer_inference.beam_search

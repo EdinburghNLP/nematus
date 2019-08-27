@@ -38,12 +38,12 @@ def beam_search(session, models, x, x_mask, beam_size,
     probabilities (where k is the beam size).
 
     Args:
-        session: TensorFlow session.
+        session: a TensorFlow session.
         models: a list of RNNModel objects.
         x: Numpy array with shape (factors, max_seq_len, batch_size).
         x_mask: Numpy array with shape (max_seq_len, batch_size).
-        beam_size: beam width.
-        normalization_alpha: length normalization hyperparamter.
+        beam_size: integer specifying the beam width.
+        normalization_alpha: length normalization hyperparameter.
         graph: a BeamSearchGraph (to allow reuse if searching repeatedly).
 
     Returns:
