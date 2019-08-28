@@ -114,7 +114,7 @@ def construct_sampling_ops(model):
         max_seq_len) containing one sampled translation for each input sentence
         in model.inputs.x and scores is a Tensor with shape (batch_size)
     """
-    ids, scores = decode_greedy(model, do_sample=True)
+    ids, scores = decode_greedy([model], do_sample=True)
     return ids, scores
 
 
@@ -221,10 +221,10 @@ def decode_greedy(models, do_sample=False, beam_size=0,
                     model.dec._get_initial_memories(batch_size, beam_size=1)
                     for model in models]
                 output_sequences, scores = greedy_search(
-                    model,
-                    _decoding_function,
+                    models[0],
+                    decoding_functions[0],
                     initial_ids,
-                    initial_memories,
+                    initial_memories[0],
                     int_dtype,
                     float_dtype,
                     config.translation_maxlen,
@@ -312,32 +312,28 @@ def compute_batch_indices(batch_size, beam_size):
     return batch_index_matrix
 
 
-def get_memory_invariants(ensemble_memories):
-    """Calculates the invariant shapes for the ensemble models' memories.
+def get_memory_invariants(model_memories):
+    """Calculates the invariant shapes for a model's memories.
 
     'Memories' are states of the RNN or layer-wise attentions of the
     transformer.
 
     Args:
-        memories: a list containing one dict for each model in the ensemble.
+        model_memories: a dict of dicts.
 
     Returns:
-        A list containing an invariant dictionary for each model.
+        An invariant dictionary for the model.
     """
-    ensemble_memory_invariants = []
-    for model_memories in ensemble_memories:
-        if type(model_memories) != dict:
-            raise ValueError('Memory type not supported, must be a '
-                             'dictionary.')
-        model_invariants = dict()
-        for layer_id in model_memories.keys():
-            layer_mems = model_memories[layer_id]
-            model_invariants[layer_id] = {
-                key: tf.TensorShape([None]*len(get_shape_list(layer_mems[key])))
-                for key in model_memories[layer_id].keys()
-            }
-        ensemble_memory_invariants.append(model_invariants)
-    return ensemble_memory_invariants
+    if type(model_memories) != dict:
+        raise ValueError('Memory type not supported, must be a dictionary.')
+    invariants = dict()
+    for layer_id in model_memories.keys():
+        layer_mems = model_memories[layer_id]
+        invariants[layer_id] = {
+            key: tf.TensorShape([None]*len(get_shape_list(layer_mems[key])))
+            for key in model_memories[layer_id].keys()
+        }
+    return invariants
 
 
 # Seems to work alright
@@ -723,7 +719,8 @@ def _beam_search(decoding_functions,
                               tf.TensorShape([None, None, None]),
                               finished_scores.get_shape(),
                               finished_eos_flags.get_shape(),
-                              get_memory_invariants(alive_memories)],
+                              [get_memory_invariants(model_memories)
+                               for model_memories in alive_memories]],
             parallel_iterations=10,
             swap_memory=False,
             back_prop=False)
