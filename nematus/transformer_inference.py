@@ -2,6 +2,8 @@
 
 import tensorflow as tf
 
+from transformer import INT_DTYPE, FLOAT_DTYPE
+
 from transformer_layers import \
     get_shape_list, \
     get_positional_signal
@@ -161,8 +163,6 @@ def decode_greedy(models, do_sample=False, beam_size=0,
     decoder_name = models[0].dec.name
     from_rnn = models[0].dec.from_rnn
     config = models[0].dec.config
-    float_dtype = models[0].dec.float_dtype
-    int_dtype = models[0].dec.int_dtype
     vocab_size = models[0].dec.embedding_layer.get_vocab_size(),
 
     # Generate a positional signal for the longest possible output.
@@ -171,7 +171,7 @@ def decode_greedy(models, do_sample=False, beam_size=0,
             positional_signal = get_positional_signal(
                 config.translation_maxlen,
                 config.embedding_size,
-                float_dtype)
+                FLOAT_DTYPE)
 
     # Generate a decoding function for each model.
     decoding_functions = []
@@ -195,7 +195,7 @@ def decode_greedy(models, do_sample=False, beam_size=0,
 
             if beam_size > 0:
                 # Initialize target IDs with <GO>
-                initial_ids = tf.cast(tf.fill([batch_size], 1), dtype=int_dtype)
+                initial_ids = tf.cast(tf.fill([batch_size], 1), dtype=INT_DTYPE)
                 initial_memories = [
                     model.dec._get_initial_memories(batch_size,
                                                     beam_size=beam_size)
@@ -204,8 +204,6 @@ def decode_greedy(models, do_sample=False, beam_size=0,
                     decoding_functions,
                     initial_ids,
                     initial_memories,
-                    int_dtype,
-                    float_dtype,
                     config.translation_maxlen,
                     batch_size,
                     beam_size,
@@ -216,7 +214,7 @@ def decode_greedy(models, do_sample=False, beam_size=0,
             else:
                 # Initialize target IDs with <GO>
                 initial_ids = tf.cast(tf.fill([batch_size, 1], 1),
-                                      dtype=int_dtype)
+                                      dtype=INT_DTYPE)
                 initial_memories = [
                     model.dec._get_initial_memories(batch_size, beam_size=1)
                     for model in models]
@@ -225,8 +223,6 @@ def decode_greedy(models, do_sample=False, beam_size=0,
                     decoding_functions[0],
                     initial_ids,
                     initial_memories[0],
-                    int_dtype,
-                    float_dtype,
                     config.translation_maxlen,
                     batch_size,
                     0,
@@ -397,8 +393,6 @@ def greedy_search(model,
                   decoding_function,
                   initial_ids,
                   initial_memories,
-                  int_dtype,
-                  float_dtype,
                   max_prediction_length,
                   batch_size,
                   eos_id,
@@ -419,12 +413,12 @@ def greedy_search(model,
         step_scores = tf.nn.log_softmax(step_logits)
         # Determine next token to be generated, next_ids has shape [batch_size]
         if do_sample:
-            next_ids = tf.squeeze(tf.multinomial(step_scores, num_samples=1, output_dtype=int_dtype), axis=1)
+            next_ids = tf.squeeze(tf.multinomial(step_scores, num_samples=1, output_dtype=INT_DTYPE), axis=1)
         else:
             # Greedy decoding
-            next_ids = tf.argmax(step_scores, -1, output_type=int_dtype)
+            next_ids = tf.argmax(step_scores, -1, output_type=INT_DTYPE)
         # Collect scores associated with the selected tokens
-        score_coordinates = tf.stack([tf.range(batch_size, dtype=int_dtype), next_ids], axis=1)
+        score_coordinates = tf.stack([tf.range(batch_size, dtype=INT_DTYPE), next_ids], axis=1)
         decoded_score += tf.gather_nd(step_scores, score_coordinates)
         # Concatenate newly decoded token ID with the previously decoded ones
         decoded_ids = tf.concat([decoded_ids, tf.expand_dims(next_ids, 1)], 1)
@@ -450,8 +444,8 @@ def greedy_search(model,
     current_time_step = tf.constant(1)
     all_finished = tf.fill([batch_size], False)  # None of the sequences is marked as finished
     next_ids = initial_ids
-    decoded_ids = tf.zeros([batch_size, 0], dtype=int_dtype)  # Sequence buffer is empty
-    decoded_score = tf.zeros([batch_size], dtype=float_dtype)
+    decoded_ids = tf.zeros([batch_size, 0], dtype=INT_DTYPE)  # Sequence buffer is empty
+    decoded_score = tf.zeros([batch_size], dtype=FLOAT_DTYPE)
     memories = initial_memories
 
     # Execute the auto-regressive decoding step via while loop
@@ -476,8 +470,6 @@ def greedy_search(model,
 def _beam_search(decoding_functions,
                  initial_ids,
                  initial_memories,
-                 int_dtype,
-                 float_dtype,
                  translation_maxlen,
                  batch_size,
                  beam_size,
@@ -600,7 +592,7 @@ def _beam_search(decoding_functions,
         """ Updates the list of completed translation hypotheses (i.e. ones terminating in <EOS>) on the basis of the
         top-k hypotheses generated at the current time-step; top-k for the incoming sequences in 2 * beam_size """
         # Match the length of the 'finished sequences' tensor with the length of the 'finished scores' tensor
-        zero_padding = tf.zeros([batch_size, beam_size, 1], dtype=int_dtype)
+        zero_padding = tf.zeros([batch_size, beam_size, 1], dtype=INT_DTYPE)
         finished_sequences = tf.concat([finished_sequences, zero_padding], axis=2)
         # Exclude incomplete sequences from the finished beam by setting their scores to a large negative value
         top_scores += (1. - tf.to_float(top_eos_flags)) * (-1. * 1e7)
@@ -678,7 +670,7 @@ def _beam_search(decoding_functions,
 
         highest_alive_score = alive_log_probs[:, 0] / max_length_penalty
         # Calculate the score of the least likely sequence currently finished
-        lowest_finished_score = tf.reduce_min(finished_scores * tf.cast(finished_eos_flags, float_dtype), axis=1)
+        lowest_finished_score = tf.reduce_min(finished_scores * tf.cast(finished_eos_flags, FLOAT_DTYPE), axis=1)
         # Account for the case in which none of the sequences in 'finished' have terminated so far;
         # In that case, each of the unfinished sequences is assigned a high negative probability, so that the
         # termination condition is not met

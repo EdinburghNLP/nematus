@@ -15,6 +15,9 @@ from transformer_inference import greedy_search, beam_search
 
 from sampling_utils import SamplingUtils
 
+INT_DTYPE = tf.int32
+FLOAT_DTYPE = tf.float32
+
 class Transformer(object):
     """ The main transformer model class. """
 
@@ -24,8 +27,6 @@ class Transformer(object):
         self.source_vocab_size = config.source_vocab_sizes[0]
         self.target_vocab_size = config.target_vocab_size
         self.name = 'transformer'
-        self.int_dtype = tf.int32
-        self.float_dtype = tf.float32
 
         # Placeholders
         self.inputs = model_inputs.ModelInputs(config)
@@ -59,8 +60,8 @@ class Transformer(object):
             # Instantiate loss layer(s)
             loss_layer = MaskedCrossEntropy(self.dec_vocab_size,
                                             self.config.label_smoothing,
-                                            self.int_dtype,
-                                            self.float_dtype,
+                                            INT_DTYPE,
+                                            FLOAT_DTYPE,
                                             time_major=False,
                                             name='loss_layer')
             # Calculate loss
@@ -88,13 +89,13 @@ class Transformer(object):
             encoder_embedding_layer = EmbeddingLayer(enc_vocab_size,
                                                      self.config.embedding_size,
                                                      self.config.state_size,
-                                                     self.float_dtype,
+                                                     FLOAT_DTYPE,
                                                      name='encoder_embedding_layer')
             if not self.config.tie_encoder_decoder_embeddings:
                 decoder_embedding_layer = EmbeddingLayer(dec_vocab_size,
                                                          self.config.embedding_size,
                                                          self.config.state_size,
-                                                         self.float_dtype,
+                                                         FLOAT_DTYPE,
                                                          name='decoder_embedding_layer')
             else:
                 decoder_embedding_layer = encoder_embedding_layer
@@ -103,7 +104,7 @@ class Transformer(object):
                 softmax_projection_layer = EmbeddingLayer(dec_vocab_size,
                                                           self.config.embedding_size,
                                                           self.config.state_size,
-                                                          self.float_dtype,
+                                                          FLOAT_DTYPE,
                                                           name='softmax_projection_layer')
             else:
                 softmax_projection_layer = decoder_embedding_layer
@@ -112,14 +113,11 @@ class Transformer(object):
             self.enc = TransformerEncoder(self.config,
                                           encoder_embedding_layer,
                                           self.training,
-                                          self.float_dtype,
                                           'encoder')
             self.dec = TransformerDecoder(self.config,
                                           decoder_embedding_layer,
                                           softmax_projection_layer,
                                           self.training,
-                                          self.int_dtype,
-                                          self.float_dtype,
                                           'decoder')
 
         return dec_vocab_size
@@ -158,13 +156,11 @@ class TransformerEncoder(object):
                  config,
                  embedding_layer,
                  training,
-                 float_dtype,
                  name):
         # Set attributes
         self.config = config
         self.embedding_layer = embedding_layer
         self.training = training
-        self.float_dtype = float_dtype
         self.name = name
 
         # Track layers
@@ -193,12 +189,12 @@ class TransformerEncoder(object):
                 with tf.variable_scope(layer_name):
                     # Build layer blocks (see layers.py)
                     self_attn_block = AttentionBlock(self.config,
-                                                     self.float_dtype,
+                                                     FLOAT_DTYPE,
                                                      self_attention=True,
                                                      training=self.training)
                     ffn_block = FFNBlock(self.config,
                                          ffn_dims,
-                                         self.float_dtype,
+                                         FLOAT_DTYPE,
                                          is_final=self.is_final_layer,
                                          training=self.training)
 
@@ -217,7 +213,7 @@ class TransformerEncoder(object):
             # Obtain length and depth of the input tensors
             _, time_steps, depth = get_shape_list(source_embeddings)
             # Transform input mask into attention mask
-            inverse_mask = tf.cast(tf.equal(source_mask, 0.0), dtype=self.float_dtype)
+            inverse_mask = tf.cast(tf.equal(source_mask, 0.0), dtype=FLOAT_DTYPE)
             attn_mask = inverse_mask * -1e9
             # Expansion to shape [batch_size, 1, 1, time_steps] is needed for compatibility with attention logits
             attn_mask = tf.expand_dims(tf.expand_dims(attn_mask, 1), 1)
@@ -225,7 +221,7 @@ class TransformerEncoder(object):
             self_attn_mask = attn_mask
             cross_attn_mask = attn_mask
             # Add positional encodings
-            positional_signal = get_positional_signal(time_steps, depth, self.float_dtype)
+            positional_signal = get_positional_signal(time_steps, depth, FLOAT_DTYPE)
             source_embeddings += positional_signal
             # Apply dropout
             if self.config.transformer_dropout_embeddings > 0:
@@ -252,8 +248,6 @@ class TransformerDecoder(object):
                  embedding_layer,
                  softmax_projection_layer,
                  training,
-                 int_dtype,
-                 float_dtype,
                  name,
                  from_rnn=False):
 
@@ -262,8 +256,6 @@ class TransformerDecoder(object):
         self.embedding_layer = embedding_layer
         self.softmax_projection_layer = softmax_projection_layer
         self.training = training
-        self.int_dtype = int_dtype
-        self.float_dtype = float_dtype
         self.name = name
         self.from_rnn = from_rnn
 
@@ -304,17 +296,17 @@ class TransformerDecoder(object):
                 with tf.variable_scope(layer_name):
                     # Build layer blocks (see layers.py)
                     self_attn_block = AttentionBlock(self.config,
-                                                     self.float_dtype,
+                                                     FLOAT_DTYPE,
                                                      self_attention=True,
                                                      training=self.training)
                     cross_attn_block = AttentionBlock(self.config,
-                                                      self.float_dtype,
+                                                      FLOAT_DTYPE,
                                                       self_attention=False,
                                                       training=self.training,
                                                       from_rnn=self.from_rnn)
                     ffn_block = FFNBlock(self.config,
                                          ffn_dims,
-                                         self.float_dtype,
+                                         FLOAT_DTYPE,
                                          is_final=self.is_final_layer,
                                          training=self.training)
 
@@ -372,6 +364,6 @@ class TransformerDecoder(object):
             self_attn_mask = get_right_context_mask(tf.shape(target_ids)[-1])
             positional_signal = get_positional_signal(tf.shape(target_ids)[-1],
                                                       self.config.embedding_size,
-                                                      self.float_dtype)
+                                                      FLOAT_DTYPE)
             logits = _decoding_function()
         return logits
