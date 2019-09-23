@@ -11,7 +11,6 @@ from transformer_layers import \
     get_right_context_mask, \
     get_positional_signal
 from transformer_blocks import AttentionBlock, FFNBlock
-from transformer_inference import greedy_search, beam_search
 
 from sampling_utils import SamplingUtils
 
