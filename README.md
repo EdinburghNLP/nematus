@@ -223,6 +223,7 @@ An updated version of these scripts that uses the Transformer model can be found
 | --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
 | --valid_freq INT | validation frequency (default: 10000) |
 | --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
+| --valid_bleu_source_dataset | source validation corpus for external validation (default: None). If set to None, the dataset for calculating validation loss (valid_source_dataset) will be used |
 | --patience INT | early stopping patience (default: 10) |
 
 #### display parameters
