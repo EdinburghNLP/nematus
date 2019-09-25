@@ -720,6 +720,13 @@ class ConfigSpecification:
             help='source validation corpus (default: %(default)s)'))
 
         group.append(ParameterSpecification(
+            name='valid_bleu_source_dataset', default=None,
+            visible_arg_names=['--valid_bleu_source_dataset'],
+            derivation_func=_derive_valid_source_bleu_dataset,
+            type=str, metavar='PATH',
+            help='source validation corpus for external evaluation bleu (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
             name='valid_target_dataset', default=None,
             visible_arg_names=['--valid_target_dataset'],
             derivation_func=_derive_valid_target_dataset,
@@ -1371,6 +1378,14 @@ def _derive_valid_source_dataset(config, meta_config):
     if config.valid_datasets is not None:
         return config.valid_datasets[0]
     return None
+
+# if 'valid_bleu_source_dataset' is not declared, then set it same
+# as 'valid_source_dataset'
+def _derive_valid_source_bleu_dataset(config, meta_config):
+    if config.valid_bleu_source_dataset is not None:
+        return config.valid_bleu_source_dataset
+    else:
+        return config.valid_source_dataset
 
 
 def _derive_valid_target_dataset(config, meta_config):

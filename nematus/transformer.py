@@ -303,10 +303,10 @@ class TransformerDecoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
-            for layer_id in range(1, self.config.transformer_enc_depth + 1):
+            for layer_id in range(1, self.config.transformer_dec_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
-                if layer_id == self.config.transformer_enc_depth:
+                if layer_id == self.config.transformer_dec_depth:
                     self.is_final_layer = True
                 # Specify ffn dimensions sequence
                 ffn_dims = [self.config.transformer_ffn_hidden_size, self.config.state_size]
