@@ -101,6 +101,7 @@ class ConfigSpecification:
             ('display',               'display parameters'),
             ('translate',             'translate parameters'),
             ('sampling',              'sampling parameters'),
+            ('MRT',                   'MRT parameters'),
         ]
         self._group_descriptions = collections.OrderedDict(description_pairs)
 
@@ -524,7 +525,7 @@ class ConfigSpecification:
         group.append(ParameterSpecification(
             name='loss_function', default='cross-entropy',
             visible_arg_names=['--loss_function'],
-            type=str, choices=['cross-entropy', 'per-token-cross-entropy'],
+            type=str, choices=['cross-entropy', 'per-token-cross-entropy', 'MRT'],
             help='loss function (default: %(default)s)'))
 
         group.append(ParameterSpecification(
@@ -833,6 +834,68 @@ class ConfigSpecification:
             visible_arg_names=['--translation_strategy'],
             type=str, choices=['beam_search', 'sampling'],
             help='translation_strategy, either beam_search or sampling (default: %(default)s)'))
+
+        # Add Add command-line parameters for 'MRT' group.
+
+        group = param_specs['MRT']
+
+        group.append(ParameterSpecification(
+            name='mrt_reference', default=False,
+            visible_arg_names=['--mrt_reference'],
+            action='store_true',
+            help='add reference into MRT candidates sentences'))
+
+        group.append(ParameterSpecification(
+            name='mrt_alpha', default=0.005,
+            visible_arg_names=['--mrt_alpha'],
+            type=float, metavar='FLOAT',
+            help='MRT alpha to control sharpness ofthe distribution of '
+                 'sampled subspace(default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='samplesN', default=100,
+            visible_arg_names=['--samplesN'],
+            type=int, metavar='INT',
+            help='the number of sampled candidates sentences per source sentence (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='mrt_loss', default='SENTENCEBLEU n=4',
+            visible_arg_names=['--mrt_loss'],
+            type=str, metavar='STR',
+            help='evaluation matrics used in MRT (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='mrt_ml_mix', default=0,
+            visible_arg_names=['--mrt_ml_mix'],
+            type=float, metavar='FLOAT',
+            help='mix in MLE objective in MRT training with this scaling factor (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='sample_way', default='beam_search',
+            visible_arg_names=['--sample_way'],
+            type=str, choices=['beam_search', 'randomly_sample'],
+            help='the sampling strategy to generate candidates sentences (default: %(default)s)'))
+
+        group.append(ParameterSpecification(
+            name='max_len_a', default=1.5,
+            visible_arg_names=['--max_len_a'],
+            type=float, metavar='FLOAT',
+            help='generate candidates sentences with maximum length: ax + b, '
+                             'where x is the source length'))
+
+        group.append(ParameterSpecification(
+            name='max_len_b', default=5,
+            visible_arg_names=['--max_len_b'],
+            type=int, metavar='INT',
+            help='generate candidates sentences with maximum length ax + b, '
+                             'where x is the source length'))
+
+        group.append(ParameterSpecification(
+            name='max_sentences_of_sampling', default=0,
+            visible_arg_names=['--max_sentences_of_sampling'],
+            type=int, metavar='INT',
+            help='maximum number of source sentences to generate candidates sentences '
+                 'at one time (limited by device memory capacity) (default: %(default)s)'))
 
         # Add command-line parameters for 'sampling' group.
 

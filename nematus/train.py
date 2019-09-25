@@ -140,6 +140,9 @@ def train(config, sess):
     if config.exponential_smoothing > 0.0:
         smoothing = ExponentialSmoothing(config.exponential_smoothing)
 
+    # record the initial translation_maxlen
+    init_translation_maxlen = config.translation_maxlen
+
     saver, progress = model_loader.init_or_restore_variables(
         config, sess, train=True)
 
@@ -173,12 +176,15 @@ def train(config, sess):
             write_summary_for_this_batch = config.summary_freq and ((progress.uidx % config.summary_freq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (factors, seqLen, batch_size) = x_in.shape
 
-            loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in,
+            loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in, num_to_target, init_translation_maxlen,
                                   write_summary_for_this_batch)
             total_loss += loss
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
             progress.uidx += 1
+
+            # make sure validation is under fixed max translation length
+            config.translation_maxlen = init_translation_maxlen
 
             # Update the smoothed version of the model variables.
             # To reduce the performance overhead, we only do this once every

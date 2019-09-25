@@ -12,6 +12,7 @@ from transformer_layers import \
     get_positional_signal
 from transformer_blocks import AttentionBlock, FFNBlock
 
+import mrt_utils as mru
 from sampling_utils import SamplingUtils
 
 INT_DTYPE = tf.int32
@@ -38,6 +39,8 @@ class Transformer(object):
             self.target_mask = self._convert_inputs(self.inputs)
 
         self.training = self.inputs.training
+        self.scores = self.inputs.scores
+        self.index = self.inputs.index
 
         # Build the common parts of the graph.
         with tf.name_scope('{:s}_loss'.format(self.name)):
@@ -70,8 +73,18 @@ class Transformer(object):
             sent_lens = tf.reduce_sum(self.target_mask, axis=1, keepdims=False)
             self._loss_per_sentence = sentence_loss * sent_lens
             self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
-        
-        self.sampling_utils = SamplingUtils(config)
+
+            # calculate expected risk
+            if self.config.loss_function == 'MRT':
+                # self._loss_per_sentence is negative log probability of the output sentence, each element represents
+                # the loss of each sample pair.
+                if self.config.sample_way == 'beam_search':
+                    self._risk = mru.mrt_cost(self._loss_per_sentence, self.scores, self.config)
+                else:
+                    self._risk = mru.mrt_cost_random(self._loss_per_sentence, self.scores, self.index, self.config)
+
+            self.sampling_utils = SamplingUtils(config)
+
 
     def _build_graph(self):
         """ Defines the model graph. """
@@ -128,6 +141,11 @@ class Transformer(object):
     @property
     def loss(self):
         return self._loss
+
+    @property
+    def risk(self):
+        return self._risk
+
 
     def _convert_inputs(self, inputs):
         # Convert from time-major to batch-major. Note that we take factor 0

@@ -1,7 +1,7 @@
 import math
-
 import numpy
 import tensorflow as tf
+import mrt_utils as mru
 
 
 class ModelUpdater(object):
@@ -42,7 +42,7 @@ class ModelUpdater(object):
         self._graph = _ModelUpdateGraph(config, num_gpus, replicas, optimizer,
                                         global_step)
 
-    def update(self, session, x, x_mask, y, y_mask, write_summary):
+    def update(self, session, x, x_mask, y, y_mask, num_to_target, init_translation_maxlen, write_summary):
         """Updates the model for a single minibatch.
 
         Args:
@@ -50,6 +50,9 @@ class ModelUpdater(object):
             x_mask: Numpy array with shape (seq_len, batch_size)
             y: Numpy array with shape (seq_len, batch_size)
             y_mask: Numpy array with shape (seq_len, batch_size)
+            num_to_target: dictionary used for MRT training
+            init_translation_maxlen: the hyperparameter 'translation_maxlen', which would be
+                                     used for comparision in MRT sampling.
             write_summary: Boolean
 
         Returns:
@@ -66,6 +69,40 @@ class ModelUpdater(object):
         # number of replicas, since each replica has to receive some input (the
         # dummy sub-batches will have a weight of zero).
 
+        if self._config.loss_function == 'MRT':
+            # Generate candidate sentences (sampling) based on source sentences in each minibatch
+            # outputs are 'sampleN' times larger than inputs
+            # replica only use single model since multi-GPU sampling isn't supported in Transformer
+            x, x_mask, y, y_mask, refs, index = \
+                mru.full_sampler(self._replicas[0], session, self._config,
+                                 x, x_mask, y, y_mask, init_translation_maxlen)
+
+            # calculate evaluation metrics score for each sampled candidate sentence
+            score = mru.cal_metrics_score(y, self._config, num_to_target, refs, index)
+            # convert list to numpy list
+            x = numpy.array(x)
+            x_mask = numpy.array(x_mask)
+            y = numpy.array(y)
+            y_mask = numpy.array(y_mask)
+
+            # limitation (could be solved later):
+            # x, x_mask, y, y_mask would be split into sub-batches. However, to make sure the subspace distribution of
+            # each source sentence is normalised properly, the candidate sentences of each source sentence must be
+            # split into same sub-batch. Therefore:
+            # 1. Under beam search sampling strategy, the number of sampled candidates is exact equal to set 'sampleN'.
+            # Only need to make sure the space of sub-batch is an integral multiple of 'sampleN'.
+            # 2. Under randomly sampling strategy, to keep high efficiency, the duplicate candidates are deleted without
+            # filling to full 'sampleN' candidates. Hence, the minibatch cannot be split.
+
+            if self._config.sample_way == 'beam_search':
+                if len(self._replicas) > 1:
+                    assert self._config.max_sentences_per_device >= self._config.samplesN
+                assert self._config.max_sentences_per_device % self._config.samplesN == 0
+            else:
+                assert self._config.max_sentences_per_device == 0
+                assert self._config.gradient_aggregation_steps == 1
+                assert len(self._replicas) == 1
+
         if (self._config.max_sentences_per_device != 0
             or self._config.max_tokens_per_device != 0):
             start_points = self._split_minibatch_for_device_size(
@@ -75,8 +112,12 @@ class ModelUpdater(object):
             n = len(self._replicas) * self._config.gradient_aggregation_steps
             start_points = self._split_minibatch_into_n(x_mask, y_mask, n)
 
-        split_x, split_x_mask, split_y, split_y_mask, weights = \
-            self._split_and_pad_minibatch(x, x_mask, y, y_mask, start_points)
+        if self._config.loss_function == 'MRT':
+            split_x, split_x_mask, split_y, split_y_mask, split_score, weights = \
+                self._split_and_pad_minibatch_mrt(x, x_mask, y, y_mask, score, start_points)
+        else:
+            split_x, split_x_mask, split_y, split_y_mask, weights = \
+                self._split_and_pad_minibatch(x, x_mask, y, y_mask, start_points)
 
         # Normalize the weights so that _ModelUpdateGraph can just sum the
         # weighted gradients from each sub-batch (without needing a
@@ -98,11 +139,17 @@ class ModelUpdater(object):
             feed_dict[self._graph.scaling_factor] = scaling_factor
             for j in range(len(self._replicas)):
                 feed_dict[self._graph.replica_weights[j]] \
-                    = normalized_weights[i+j]
-                feed_dict[self._replicas[j].inputs.x] = split_x[i+j]
-                feed_dict[self._replicas[j].inputs.x_mask] = split_x_mask[i+j]
-                feed_dict[self._replicas[j].inputs.y] = split_y[i+j]
-                feed_dict[self._replicas[j].inputs.y_mask] = split_y_mask[i+j]
+                    = normalized_weights[i + j]
+                feed_dict[self._replicas[j].inputs.x] = split_x[i + j]
+                feed_dict[self._replicas[j].inputs.x_mask] = split_x_mask[i + j]
+                feed_dict[self._replicas[j].inputs.y] = split_y[i + j]
+                feed_dict[self._replicas[j].inputs.y_mask] = split_y_mask[i + j]
+                if self._config.loss_function == 'MRT':
+                    # convert evaluation score of each candidates into tensor for subsequent expected risk calculations
+                    feed_dict[self._replicas[j].inputs.scores] = split_score[i + j]
+                    if self._config.sample_way == 'randomly_sample':
+                        # also convey information of starting point of each source sentences to later calculation
+                        feed_dict[self._replicas[j].inputs.index] = index[i + j] #index[0]
                 feed_dict[self._replicas[j].inputs.training] = True
             session.run([self._graph.accum_ops], feed_dict=feed_dict)
 
@@ -272,8 +319,9 @@ class ModelUpdater(object):
         # source and target tokens. Note that this counts actual tokens
         # (up to and including the <EOS> tokens) not the capacity of the
         # sub-batch.
-        weights = [numpy.sum(s) + numpy.sum(t)
-                      for s, t in zip(split_x_mask, split_y_mask)]
+        # TODO: loss is calculated according to target side, hence here should be weighted by target tokens only.
+        weights = [numpy.sum(t)
+                   for t in split_y_mask]
 
         # Pad the split lists with dummy arrays so that the total number of
         # sub-batches is a multiple of the number of replicas.
@@ -296,6 +344,84 @@ class ModelUpdater(object):
             weights.append(0.0)
 
         return split_x, split_x_mask, split_y, split_y_mask, weights
+
+
+    def _split_and_pad_minibatch_mrt(self, x, x_mask, y, y_mask, score, start_points):
+        """Splits a minibatch according to a list of split points (function basically same as _split_and_pad_minibatch),
+        only difference is that the evaluation score of each sentence would also be split accordingly.
+
+        Args:
+            x: Numpy array with shape (factors, seq_len, batch_size)
+            x_mask: Numpy array with shape (seq_len, batch_size)
+            y: Numpy array with shape (seq_len, batch_size)
+            y_mask: Numpy array with shape (seq_len, batch_size)
+            score: Numpy array with shape (batch_size)
+            start_points: list of zero-based indices
+
+        Returns:
+            Six lists: for each of x, x_mask, y, y_mask and score respectively,
+            a list is returned containing the split version. The sixth list
+            contains the (un-normalized) weights of the sub-batches.
+        """
+
+        # Split the individual arrays.
+
+        # change shape from batch_size to (1, batch_size)
+        score = score[numpy.newaxis, :]
+
+        def split_array(a, start_points):
+            batch_size = a.shape[-1]
+            next_points = start_points[1:] + [batch_size]
+            return [a[..., p:q] for p, q in zip(start_points, next_points)]
+
+        split_x = split_array(x, start_points)
+        split_x_mask = split_array(x_mask, start_points)
+        split_y = split_array(y, start_points)
+        split_y_mask = split_array(y_mask, start_points)
+        split_score = split_array(score, start_points)
+
+
+        # Trim arrays so that the seq_len dimension is equal to the longest
+        # source / target sentence in the sub-batch (rather than the whole
+        # minibatch).
+
+        def trim_arrays(arrays, new_seq_lens):
+            return [a[..., 0:l, :] for a, l in zip(arrays, new_seq_lens)]
+
+        max_lens = [int(numpy.max(numpy.sum(m, axis=0))) for m in split_x_mask]
+        split_x = trim_arrays(split_x, max_lens)
+        split_x_mask = trim_arrays(split_x_mask, max_lens)
+
+        max_lens = [int(numpy.max(numpy.sum(m, axis=0))) for m in split_y_mask]
+        split_y = trim_arrays(split_y, max_lens)
+        split_y_mask = trim_arrays(split_y_mask, max_lens)
+
+        # number of real sentences(before sampling candidates) of each sub-batch.
+        weights = [(t.shape[1]/self._config.samplesN)
+                      for t in split_y_mask]
+
+        # Pad the split lists with dummy arrays so that the total number of
+        # sub-batches is a multiple of the number of replicas.
+
+        remainder = len(start_points) % len(self._replicas)
+        padding_size = 0 if remainder == 0 else len(self._replicas) - remainder
+
+        def pad(split_a, padding_size):
+            assert len(split_a) > 0
+            dummy_array = split_a[0][..., -1:]
+            for i in range(padding_size):
+                split_a.append(dummy_array)
+
+        pad(split_x, padding_size)
+        pad(split_x_mask, padding_size)
+        pad(split_y, padding_size)
+        pad(split_y_mask, padding_size)
+
+        for i in range(padding_size):
+            weights.append(0.0)
+            split_score.append(0.0)
+
+        return split_x, split_x_mask, split_y, split_y_mask, split_score, weights
 
 
 class _ModelUpdateGraph(object):
@@ -419,6 +545,10 @@ class _ModelUpdateGraph(object):
                         num_tokens = tf.reduce_sum(
                             self._replicas[i].inputs.y_mask)
                         loss = ce_total / tf.cast(num_tokens, tf.float32)
+                    elif self._config.loss_function == "MRT":
+                        # here the expected risk is the expected risk per real sentences(before sampling)
+                        # over a sub-batch
+                        loss = self._replicas[i].risk
                     else:
                         assert False
                     loss = self._regularize(loss, self._config.decay_c,
