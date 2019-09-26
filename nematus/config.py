@@ -708,6 +708,14 @@ class ConfigSpecification:
             help='maximum number of updates (minibatches) (default: '
                  '%(default)s)'))
 
+        group.append(ParameterSpecification(
+            name='print_per_token_pro', default=False,
+            visible_arg_names=['--print_per_token_pro'],
+            type=str,
+            help='PATH to store the probability of each target token given source sentences '
+                 'over the training dataset (default: %(default)s). Please get rid of the 1.0s at the end '
+                 'of each list which is the probability of padding.'))
+
         # Add command-line parameters for 'validation' group.
 
         group = param_specs['validation']

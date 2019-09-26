@@ -162,6 +162,9 @@ def train(config, sess):
     n_sents, n_words = 0, 0
     last_time = time.time()
     logging.info("Initial uidx={}".format(progress.uidx))
+    # set epoch = 1 if print per-token-probability
+    if config.print_per_token_pro:
+        config.max_epochs = progress.eidx+1
     for progress.eidx in range(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
         for source_sents, target_sents in text_iterator:
@@ -176,9 +179,18 @@ def train(config, sess):
             write_summary_for_this_batch = config.summary_freq and ((progress.uidx % config.summary_freq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (factors, seqLen, batch_size) = x_in.shape
 
-            loss = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in, num_to_target, init_translation_maxlen,
+            output = updater.update(sess, x_in, x_mask_in, y_in, y_mask_in, num_to_target, init_translation_maxlen,
                                   write_summary_for_this_batch)
-            total_loss += loss
+            if config.print_per_token_pro == False:
+                total_loss += output
+            else:
+                # write per-token probability into the file
+                f = open(config.print_per_token_pro, 'a')
+                for pro in output:
+                    pro = str(pro) + '\n'
+                    f.write(pro)
+                f.close()
+
             n_sents += batch_size
             n_words += int(numpy.sum(y_mask_in))
             progress.uidx += 1

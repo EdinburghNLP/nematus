@@ -134,6 +134,8 @@ class ModelUpdater(object):
             scaling_factor = (x_mask.shape[0] * x_mask.shape[1]) / self._config.token_batch_size
 
         # Accumulate gradients.
+        # the list to store the per-token-probability if required
+        print_pro = []
         for i in range(0, len(split_x), len(self._replicas)):
             feed_dict = {}
             feed_dict[self._graph.scaling_factor] = scaling_factor
@@ -151,24 +153,33 @@ class ModelUpdater(object):
                         # also convey information of starting point of each source sentences to later calculation
                         feed_dict[self._replicas[j].inputs.index] = index[i + j] #index[0]
                 feed_dict[self._replicas[j].inputs.training] = True
-            session.run([self._graph.accum_ops], feed_dict=feed_dict)
 
-        # Apply the gradients (and optionally write the summary).
-        if not write_summary:
-            fetches = self._graph.apply_ops
-            global_step, apply_grads, mean_loss_per_sent = session.run(fetches)
+            if self._config.print_per_token_pro == False:
+                session.run([self._graph.accum_ops], feed_dict=feed_dict)
+            else:
+                tmp = session.run([self._graph.accum_ops], feed_dict=feed_dict)
+                for i in range(len(tmp[0])):
+                    print_pro.append(tmp[0][i].tolist())
+
+        if self._config.print_per_token_pro == False:
+            # Apply the gradients (and optionally write the summary).
+            if not write_summary:
+                fetches = self._graph.apply_ops
+                global_step, apply_grads, mean_loss_per_sent = session.run(fetches)
+            else:
+                assert self._summary_writer is not None
+                fetches = self._graph.apply_ops + self._graph.summary_ops
+                global_step, apply_grads, mean_loss_per_sent, merged_summary = \
+                    session.run(fetches)
+                self._summary_writer.add_summary(merged_summary, global_step)
+
+            # Reset accumulated values to zero ready for the next call.
+            session.run(self._graph.reset_ops)
+
+            # Return the sum of the individual sentence losses.
+            return mean_loss_per_sent * x.shape[-1]
         else:
-            assert self._summary_writer is not None
-            fetches = self._graph.apply_ops + self._graph.summary_ops
-            global_step, apply_grads, mean_loss_per_sent, merged_summary = \
-                session.run(fetches)
-            self._summary_writer.add_summary(merged_summary, global_step)
-
-        # Reset accumulated values to zero ready for the next call.
-        session.run(self._graph.reset_ops)
-
-        # Return the sum of the individual sentence losses.
-        return mean_loss_per_sent * x.shape[-1]
+            return print_pro
 
     def _split_minibatch_into_n(self, x_mask, y_mask, n):
         """Determines how to split a minibatch into n equal-sized sub-batches.
@@ -536,7 +547,9 @@ class _ModelUpdateGraph(object):
                                         device_index=i)
             with tf.device(device_spec):
                 with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
-                    if self._config.loss_function == "cross-entropy":
+                    if self._config.print_per_token_pro:
+                        print_pro = self._replicas[i].print_pro
+                    elif self._config.loss_function == "cross-entropy": # 正常的loss/n,n是sample数
                         loss = self._replicas[i].loss
                     elif self._config.loss_function == \
                             "per-token-cross-entropy":
@@ -551,23 +564,27 @@ class _ModelUpdateGraph(object):
                         loss = self._replicas[i].risk
                     else:
                         assert False
-                    loss = self._regularize(loss, self._config.decay_c,
-                                            self._config.map_decay_c)
-                    grad_vars = self._optimizer.compute_gradients(loss)
-                    all_grad_vars.append(grad_vars)
-                    weight = self._replica_weights[i]
-                    weighted_losses.append(loss*weight)
+                    if self._config.print_per_token_pro == False:
+                        loss = self._regularize(loss, self._config.decay_c,
+                                                self._config.map_decay_c)
+                        grad_vars = self._optimizer.compute_gradients(loss)
+                        all_grad_vars.append(grad_vars)
+                        weight = self._replica_weights[i]
+                        weighted_losses.append(loss*weight)
 
-        summed_loss = sum(weighted_losses)
+        if self._config.print_per_token_pro == False:
+            summed_loss = sum(weighted_losses)
 
-        summed_grad_vars = self._sum_gradients(all_grad_vars,
+            summed_grad_vars = self._sum_gradients(all_grad_vars,
                                                self._replica_weights)
 
-        self._accum_ops = [tf.assign_add(self._accumulated_loss, summed_loss)]
+            self._accum_ops = [tf.assign_add(self._accumulated_loss, summed_loss)]
 
-        self._accum_ops += [tf.assign_add(self._accumulated_gradients[v.name],
+            self._accum_ops += [tf.assign_add(self._accumulated_gradients[v.name],
                                           g * self._scaling_factor)
                             for g, v in summed_grad_vars]
+        else:
+            self._accum_ops = print_pro
 
     def _define_apply_ops(self):
         """Defines the graph nodes for applying the accumulated gradients."""
