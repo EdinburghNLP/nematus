@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import subprocess, threading
-from scorer import Scorer
-from reference import Reference
+from metrics.scorer import Scorer
+from metrics.reference import Reference
 
 class BeerError(Exception):
     def __init__(self, value):

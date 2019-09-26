@@ -2,7 +2,7 @@
 
 import unittest
 
-from chrf import CharacterFScorer
+from metrics.chrf import CharacterFScorer
 
 class TestCharacterFScoreReference(unittest.TestCase):
     """

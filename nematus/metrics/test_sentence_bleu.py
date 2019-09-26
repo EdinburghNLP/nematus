@@ -2,7 +2,7 @@
 
 import unittest
 
-from sentence_bleu import SentenceBleuScorer
+from metrics.sentence_bleu import SentenceBleuScorer
 
 class TestSentenceBleuReference(unittest.TestCase):
     """

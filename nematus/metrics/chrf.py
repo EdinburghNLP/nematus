@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from scorer import Scorer
-from reference import Reference
+from metrics.scorer import Scorer
+from metrics.reference import Reference
 
 class CharacterFScorer(Scorer):
     """

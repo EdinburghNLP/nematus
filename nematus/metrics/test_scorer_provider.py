@@ -2,8 +2,8 @@
 
 import unittest
 
-from scorer_provider import ScorerProvider
-from sentence_bleu import SentenceBleuScorer
+from metrics.scorer_provider import ScorerProvider
+from metrics.sentence_bleu import SentenceBleuScorer
 
 class TestScorerProvider(unittest.TestCase):
     """
