@@ -4,8 +4,8 @@ from math import exp
 from operator import mul
 from collections import defaultdict
 
-from scorer import Scorer
-from reference import Reference
+from metrics.scorer import Scorer
+from metrics.reference import Reference
 from functools import reduce
 
 class SentenceBleuScorer(Scorer):

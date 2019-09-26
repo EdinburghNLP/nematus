@@ -172,7 +172,7 @@ An updated version of these scripts that uses the Transformer model can be found
 #### training parameters
 | parameter | description |
 |---        |---          |
-| --loss_function {cross-entropy,per-token-cross-entropy} | loss function (default: cross-entropy) |
+| --loss_function {cross-entropy,per-token-cross-entropy, MRT} | loss function. MRT: Minimum Risk Training https://www.aclweb.org/anthology/P/P16/P16-1159.pdf) (default: cross-entropy) |
 | --decay_c FLOAT | L2 regularization penalty (default: 0.0) |
 | --map_decay_c FLOAT | MAP-L2 regularization penalty towards original weights (default: 0.0) |
 | --prior_model PATH | Prior model for MAP-L2 regularization. Unless using " --reload", this will also be used for initialization. |
@@ -200,6 +200,20 @@ An updated version of these scripts that uses the Transformer model can be found
 | --max_epochs INT | maximum number of epochs (default: 5000) |
 | --finish_after INT | maximum number of updates (minibatches) (default: 10000000) |
 
+#### minimum risk training parameters (MRT)
+
+| parameter | description |
+|---        |---          |
+| --mrt_reference | add reference into MRT candidates sentences (default: False) |
+| --mrt_alpha | MRT alpha to control the sharpness of the distribution of sampled subspace (default: 0.005) |
+| --samplesN | the number of sampled candidates sentences per source sentence (default: 100) |
+| --mrt_loss | evaluation metrics used to compute loss between the candidate translation and reference translation (default: SENTENCEBLEU n=4) |
+| --mrt_ml_mix | mix in MLE objective in MRT training with this scaling factor (default: 0) |
+| --sample_way {beam_search, randomly_sample} | the sampling strategy to generate candidates sentences (default: beam_search) |
+| --max_len_a | generate candidates sentences with maximum length: ax + b, where x is the length of the source sentence (default: 1.5) |
+| --max_len_b | generate candidates sentences with maximum length: ax + b, where x is the length of the source sentence (default: 5) |
+| --max_sentences_of_sampling | maximum number of source sentences to generate candidates sentences at one time (limited by device memory capacity) (default: 0) |
+
 #### validation parameters
 | parameter | description |
 |---        |---          |
@@ -209,6 +223,7 @@ An updated version of these scripts that uses the Transformer model can be found
 | --valid_token_batch_size INT | validation minibatch size (expressed in number of source or target tokens). Sentence-level minibatch size will be dynamic. If this is enabled, valid_batch_size only affects sorting by length. (default: 0) |
 | --valid_freq INT | validation frequency (default: 10000) |
 | --valid_script PATH | path to script for external validation (default: None). The script will be passed an argument specifying the path of a file that contains translations of the source validation corpus. It must write a single score to standard output. |
+| --valid_bleu_source_dataset | source validation corpus for external validation (default: None). If set to None, the dataset for calculating validation loss (valid_source_dataset) will be used |
 | --patience INT | early stopping patience (default: 10) |
 
 #### display parameters

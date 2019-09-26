@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import scorer_interpolator as si
+from metrics import scorer_interpolator as si
 
-from sentence_bleu import SentenceBleuScorer
-from meteor import MeteorScorer
-from beer import BeerScorer
-from chrf import CharacterFScorer
+from metrics.sentence_bleu import SentenceBleuScorer
+from metrics.meteor import MeteorScorer
+from metrics.beer import BeerScorer
+from metrics.chrf import CharacterFScorer
 
 class ScorerProvider:
     """

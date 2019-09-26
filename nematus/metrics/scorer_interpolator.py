@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from scorer import Scorer
-import scorer_provider as sp
+from metrics.scorer import Scorer
+from metrics import scorer_provider as sp
 
 class ScorerInterpolator(Scorer):
     """
