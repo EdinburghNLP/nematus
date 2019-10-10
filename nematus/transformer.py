@@ -69,6 +69,9 @@ class Transformer(object):
             # Calculate loss
             masked_loss, sentence_loss, batch_loss = \
                 loss_layer.forward(logits, self.target_ids_out, self.target_mask, self.training)
+            if self.config.print_per_token_pro:
+                # e**(-(-log(probability))) =  probability
+                self._print_pro = tf.math.exp(-masked_loss)
 
             sent_lens = tf.reduce_sum(self.target_mask, axis=1, keepdims=False)
             self._loss_per_sentence = sentence_loss * sent_lens
@@ -146,6 +149,9 @@ class Transformer(object):
     def risk(self):
         return self._risk
 
+    @property
+    def print_pro(self):
+        return self._print_pro
 
     def _convert_inputs(self, inputs):
         # Convert from time-major to batch-major. Note that we take factor 0

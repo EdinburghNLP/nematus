@@ -149,9 +149,9 @@ def read_all_lines(config, sentences, batch_size):
         line = []
         for w in sent.strip().split():
             if config.factors == 1:
-                w = [source_to_num[0][w] if w in source_to_num[0] else 1]
+                w = [source_to_num[0][w] if w in source_to_num[0] else 2]
             else:
-                w = [source_to_num[i][f] if f in source_to_num[i] else 1
+                w = [source_to_num[i][f] if f in source_to_num[i] else 2
                                          for (i,f) in enumerate(w.split('|'))]
                 if len(w) != config.factors:
                     raise exception.Error(
