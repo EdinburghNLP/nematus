@@ -345,11 +345,8 @@ class TransformerDecoder(object):
 
         def _decode_all(target_embeddings):
             """ Decodes the encoder-generated representations into target-side logits in parallel. """
-            # Apply input dropout
-            dec_input = \
-                tf.layers.dropout(target_embeddings, rate=self.config.transformer_dropout_embeddings, training=self.training)
             # Propagate inputs through the encoder stack
-            dec_output = dec_input
+            dec_output = target_embeddings
             for layer_id in range(1, self.config.transformer_dec_depth + 1):
                 dec_output, _ = self.decoder_stack[layer_id]['self_attn'].forward(dec_output, None, self_attn_mask)
                 dec_output, _ = \
