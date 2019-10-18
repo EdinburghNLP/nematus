@@ -81,6 +81,15 @@ def main(settings):
         assert settings.translation_strategy == 'sampling'
         sampler = RandomSampler(models, configs, settings.beam_size)
 
+    # Warn about the change from neg log probs to log probs for the RNN.
+    if settings.n_best:
+        model_types = [config.model_type for config in configs]
+        if 'rnn' in model_types:
+            logging.warn('n-best scores for RNN models have changed from '
+                         'positive to negative (as of commit 95793196...). '
+                         'If you are using the scores for reranking etc, then '
+                         'you may need to update your scripts.')
+
     # Translate the source file.
     translate_utils.translate_file(
         input_file=settings.input,
