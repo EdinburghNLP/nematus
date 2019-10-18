@@ -92,6 +92,7 @@ class FeedForwardLayer(object):
 class EmbeddingLayer(object):
     def __init__(self, vocabulary_sizes, dim_per_factor):
         assert len(vocabulary_sizes) == len(dim_per_factor)
+        self._dim_per_factor = dim_per_factor
         self.embedding_matrices = []
         for i in range(len(vocabulary_sizes)):
             vocab_size, dim = vocabulary_sizes[i], dim_per_factor[i]
@@ -109,6 +110,19 @@ class EmbeddingLayer(object):
         else:
             matrix = self.embedding_matrices[factor]
             return tf.nn.embedding_lookup(matrix, x)
+
+    def zero(self, x, factor=None):
+        if factor == None:
+            emb_size = sum(self._dim_per_factor)
+            out_shape = tf.concat(
+                [tf.shape(x)[1:], tf.constant([emb_size], dtype=tf.int32)],
+                axis=0)
+        else:
+            emb_size = self._dim_per_factor[factor]
+            out_shape = tf.concat(
+                [tf.shape(x), tf.constant([emb_size], dtype=tf.int32)],
+                axis=0)
+        return tf.zeros(out_shape, dtype=tf.float32)
 
     def get_embeddings(self, factor=None):
         if factor == None:

@@ -1,15 +1,17 @@
 # Untilities for Minimum Risk Training
 
+import itertools
+import math
+
 import tensorflow as tf
 import numpy as np
-import inference
-import itertools
-import util
-import math
+
 from metrics.scorer_provider import ScorerProvider
+import translate_utils
+import util
 
 
-def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_maxlen):
+def full_sampler(replica, sampler, sess, config, x, x_mask, y, y_mask):
 	"""generate candidate sentences used for Minimum Risk Training
 
 	Args:
@@ -18,7 +20,6 @@ def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_m
 		x_mask: (len, batch_size)
 		y: (len, batch_size)
 		y_mask: (len, batch_size)
-		init_translation_maxlen: pre-set maximum translation length
 	Returns:
 		x, x_mask, y, y_mask are four lists containing the corresponding content of
 		source-candidate sentence pairs, with shape:
@@ -36,17 +37,11 @@ def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_m
 	x_new = np.repeat(x, sampleN, axis=2)
 	x_mask_new = np.repeat(x_mask, sampleN, axis=1)
 
+ 	# set maximum number of tokens of sampled candidates
+	dynamic_max_len = int(config.max_len_a * x_mask.shape[0] + config.max_len_b)
+	max_translation_len = min(config.translation_maxlen, dynamic_max_len)
+
 	if config.sample_way == 'beam_search':
-
-		# set inference model
-		model_set = inference.InferenceModelSet([replica], [config])
-
-		# set maximum number of tokens of sampled candidates
-		trans_maxlen = int(config.max_len_a * x_mask.shape[0] + config.max_len_b)
-		if trans_maxlen < init_translation_maxlen:
-			config.translation_maxlen = trans_maxlen
-		else:
-			config.translation_maxlen = init_translation_maxlen
 
 		# split the minibatch into multiple sub-batches, and execute samplings for each sub-batch separately
 		if config.max_sentences_of_sampling > 0:
@@ -58,13 +53,10 @@ def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_m
 			sample_and_score = []
 			# feed sub-batch into model to generate samples
 			for i in range(len(split_x)):
-				sample_and_score += model_set.beam_search(sess, split_x[i], split_x_mask[i],
-										beam_size=config.samplesN,
-										normalization_alpha=config.normalization_alpha)
+				sample_and_score += translate_utils.translate_batch(sess, sampler, split_x[i], split_x_mask[i], max_translation_len, config.normalization_alpha)
 		else:
-			sample_and_score = model_set.beam_search(sess, x, x_mask,
-											beam_size=config.samplesN,
-											normalization_alpha=config.normalization_alpha)
+			sample_and_score = translate_utils.translate_batch( sess, sampler, x, x_mask, max_translation_len, config.normalization_alpha)
+
 		# sample_and_score: outer: batch_size, inner: sampleN elements(each represents a sample)
 
 		# fetch samplings
@@ -81,14 +73,6 @@ def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_m
 
 	elif config.sample_way == 'randomly_sample':
 
-		model_set = inference.InferenceModelSet([replica], [config])
-
-		trans_maxlen = int(config.max_len_a*x_mask.shape[0]+config.max_len_b)
-		if trans_maxlen < init_translation_maxlen:
-			config.translation_maxlen = trans_maxlen
-		else:
-			config.translation_maxlen = init_translation_maxlen
-
 		samples = []
 		for i in range(x_mask.shape[1]):
 			samples.append([])
@@ -99,15 +83,18 @@ def full_sampler(replica, sess, config, x, x_mask, y, y_mask, init_translation_m
 			num_split = math.ceil(x_mask_new.shape[1] / config.max_sentences_of_sampling)
 			split_x = np.array_split(x_new, num_split, 2)
 			split_x_mask = np.array_split(x_mask_new, num_split, 1)
-			sample = model_set.sample(sess, split_x[0], split_x_mask[0])
+      # TODO Use config.normalization_alpha instead of 0.0?
+			sample = translate_utils.translate_batch(
+          sess, sampler, split_x[0], split_x_mask[0], max_translation_len, 0.0)
 			for i in range(1, len(split_x)):
-				sample = np.concatenate((sample, model_set.sample(sess, split_x[i], split_x_mask[i])))
+				tmp = translate_utils.translate_batch(sess, sampler, split_x[i], split_x_mask[i], max_translation_len, 0.0)
+				sample = np.concatenate((sample, tmp))
 		else:
-			sample = model_set.sample(sess, x_new, x_mask_new)
+			sample = translate_utils.translate_batch(sess, sampler, x_new, x_mask_new, max_translation_len, 0.0)
 		# sample: a list of NumPy arrays (each numpy array contains a sampling a source sentence in x_new).
 		for i in range(len(sample)):
 			for ss in sample[i*sampleN:(i+1)*sampleN]:
-				samples[i].append(ss.tolist())
+				samples[i].append(ss[0][0].tolist())
 			# samples: list with shape (batch_size, sampleN, len), uneven
 
 		# remove duplicate samples

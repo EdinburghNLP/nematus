@@ -12,13 +12,13 @@ from queue import Empty
 
 import numpy
 
+from beam_search_sampler import BeamSearchSampler
 from config import load_config_from_json_file
 import exception
-import inference
 import model_loader
 import rnn_model
 from transformer import Transformer as TransformerModel
-from settings import TranslationSettings
+import translate_utils
 import util
 
 
@@ -140,7 +140,18 @@ class Translator(object):
         tf_config.allow_soft_placement = True
         sess = tf.Session(config=tf_config)
         models = self._load_models(process_id, sess)
-        ensemble = inference.InferenceModelSet(models, self._options)
+
+        samplers = {}
+
+        def get_sampler(beam_size):
+            # FIXME In practice, the beam size is probably the same for all
+            # input items, but if it gets changed a lot, then constructing a
+            # new beam search graph for each combination isn't great. Can it
+            # be turned into a placeholder?
+            if beam_size not in samplers:
+                samplers[beam_size] = BeamSearchSampler(models, self._options,
+                                                        beam_size)
+            return samplers[beam_size]
 
         # listen to queue in while loop, translate items
         while True:
@@ -151,13 +162,13 @@ class Translator(object):
             idx = input_item.idx
             request_id = input_item.request_id
 
-            output_item = self._translate(process_id, input_item, ensemble,
+            output_item = self._translate(process_id, input_item, get_sampler,
                                           sess)
             self._output_queue.put((request_id, idx, output_item))
 
         return
 
-    def _translate(self, process_id, input_item, ensemble, sess):
+    def _translate(self, process_id, input_item, get_sampler, sess):
         """
         Actual translation (model sampling).
         """
@@ -165,6 +176,7 @@ class Translator(object):
         # unpack input item attributes
         k = input_item.k
         x = input_item.batch
+        alpha = input_item.normalization_alpha
         #max_ratio = input_item.max_ratio
 
         y_dummy = numpy.zeros(shape=(len(x),1))
@@ -172,7 +184,13 @@ class Translator(object):
                                             self._options[0].factors,
                                             maxlen=None)
 
-        sample = ensemble.beam_search(sess, x, x_mask, k)
+        sample = translate_utils.translate_batch(
+            session=sess,
+            sampler=get_sampler(k),
+            x=x,
+            x_mask=x_mask,
+            max_translation_len=self._options[0].translation_maxlen,
+            normalization_alpha=alpha)
 
         return sample
 
@@ -260,10 +278,6 @@ class Translator(object):
 
         translations = []
         for i, beam in enumerate(outputs):
-            if translation_settings.normalization_alpha:
-                beam = [(sent_cost[0], sent_cost[1]/len(sent_cost[0])** translation_settings.normalization_alpha) for sent_cost in beam]
-            beam = sorted(beam, key=lambda sent_cost1: sent_cost1[1])
-
             if translation_settings.n_best is True:
                 n_best_list = []
                 for j, (sent, cost) in enumerate(beam):

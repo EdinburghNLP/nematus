@@ -16,13 +16,15 @@ import argparse
 
 import tensorflow as tf
 
+from beam_search_sampler import BeamSearchSampler
 from config import load_config_from_json_file
 from exponential_smoothing import ExponentialSmoothing
-import inference
 import model_loader
+from random_sampler import RandomSampler
 import rnn_model
 from sampling_utils import SamplingUtils
 from transformer import Transformer as TransformerModel
+import translate_utils
 
 
 def main(settings):
@@ -69,20 +71,28 @@ def main(settings):
     if configs[0].exponential_smoothing > 0.0:
         session.run(fetches=smoothing.swap_ops)
 
-    # TODO Ensembling is currently only supported for RNNs, so if
-    # TODO len(models) > 1 then check models are all rnn
+    # FIXME Should be an option in settings
+    max_translation_len = configs[0].translation_maxlen
+
+    # Create a BeamSearchSampler / RandomSampler.
+    if settings.translation_strategy == 'beam_search':
+        sampler = BeamSearchSampler(models, configs, settings.beam_size)
+    else:
+        assert settings.translation_strategy == 'sampling'
+        sampler = RandomSampler(models, configs, settings.beam_size)
 
     # Translate the source file.
-    inference.translate_file(input_file=settings.input,
-                             output_file=settings.output,
-                             session=session,
-                             models=models,
-                             configs=configs,
-                             beam_size=settings.beam_size,
-                             nbest=settings.n_best,
-                             minibatch_size=settings.minibatch_size,
-                             maxibatch_size=settings.maxibatch_size,
-                             normalization_alpha=settings.normalization_alpha)
+    translate_utils.translate_file(
+        input_file=settings.input,
+        output_file=settings.output,
+        session=session,
+        sampler=sampler,
+        config=configs[0],
+        max_translation_len=max_translation_len,
+        normalization_alpha=settings.normalization_alpha,
+        nbest=settings.n_best,
+        minibatch_size=settings.minibatch_size,
+        maxibatch_size=settings.maxibatch_size)
 
 
 if __name__ == "__main__":

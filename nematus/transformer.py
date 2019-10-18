@@ -296,15 +296,6 @@ class TransformerDecoder(object):
         """ Embeds target-side indices to obtain the corresponding dense tensor representations. """
         return self.embedding_layer.embed(index_sequence)
 
-    def _get_initial_memories(self, batch_size, beam_size):
-        """ Initializes decoder memories used for accelerated inference. """
-        initial_memories = dict()
-        for layer_id in range(1, self.config.transformer_dec_depth + 1):
-            initial_memories['layer_{:d}'.format(layer_id)] = \
-                {'keys': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1]),
-                 'values': tf.tile(tf.zeros([batch_size, 0, self.config.state_size]), [beam_size, 1, 1])}
-        return initial_memories
-
     def _build_graph(self):
         """ Defines the model graph. """
         # Initialize layers

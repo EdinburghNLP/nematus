@@ -1,7 +1,11 @@
 import math
+
 import numpy
 import tensorflow as tf
+
+from beam_search_sampler import BeamSearchSampler
 import mrt_utils as mru
+from random_sampler import RandomSampler
 
 
 class ModelUpdater(object):
@@ -42,7 +46,24 @@ class ModelUpdater(object):
         self._graph = _ModelUpdateGraph(config, num_gpus, replicas, optimizer,
                                         global_step)
 
-    def update(self, session, x, x_mask, y, y_mask, num_to_target, init_translation_maxlen, write_summary):
+        if config.loss_function == 'MRT':
+            if config.sample_way == 'beam_search':
+                self._mrt_sampler = BeamSearchSampler(
+                    models=[replicas[0]],
+                    configs=[config],
+                    beam_size=config.samplesN)
+            else:
+                assert config.sample_way == 'randomly_sample'
+                # TODO Set beam_size to config.samplesN instead of using
+                #      np.repeat to expand input in full_sampler()?
+                self._mrt_sampler = RandomSampler(
+                    models=[replicas[0]],
+                    configs=[config],
+                    beam_size=1)
+
+
+    def update(self, session, x, x_mask, y, y_mask, num_to_target,
+               write_summary):
         """Updates the model for a single minibatch.
 
         Args:
@@ -51,8 +72,6 @@ class ModelUpdater(object):
             y: Numpy array with shape (seq_len, batch_size)
             y_mask: Numpy array with shape (seq_len, batch_size)
             num_to_target: dictionary used for MRT training
-            init_translation_maxlen: the hyperparameter 'translation_maxlen', which would be
-                                     used for comparision in MRT sampling.
             write_summary: Boolean
 
         Returns:
@@ -74,8 +93,8 @@ class ModelUpdater(object):
             # outputs are 'sampleN' times larger than inputs
             # replica only use single model since multi-GPU sampling isn't supported in Transformer
             x, x_mask, y, y_mask, refs, index = \
-                mru.full_sampler(self._replicas[0], session, self._config,
-                                 x, x_mask, y, y_mask, init_translation_maxlen)
+                mru.full_sampler(self._replicas[0], self._mrt_sampler, session,
+                                 self._config, x, x_mask, y, y_mask)
 
             # calculate evaluation metrics score for each sampled candidate sentence
             score = mru.cal_metrics_score(y, self._config, num_to_target, refs, index)

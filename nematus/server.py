@@ -13,6 +13,7 @@ from bottle_log import LoggingPlugin
 
 from server.response import TranslationResponse
 from server.api.provider import request_provider, response_provider
+
 from settings import ServerSettings
 from server_translator import Translator
 
