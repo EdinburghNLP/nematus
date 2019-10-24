@@ -70,6 +70,8 @@ def full_sampler(replica, sampler, sess, config, x, x_mask, y, y_mask):
 
 		# samples number of each batch (useless in beam sampling mode)
 		index = [[0]]
+		for i in range((len(samples))):
+			index[0].append(index[0][i] + sampleN)
 
 	elif config.sample_way == 'randomly_sample':
 
@@ -77,24 +79,22 @@ def full_sampler(replica, sampler, sess, config, x, x_mask, y, y_mask):
 		for i in range(x_mask.shape[1]):
 			samples.append([])
 
-		# at the moment, it is not necessary to set this value when doing randomly sampling
-		# but the codes could be used after optimisation
 		if config.max_sentences_of_sampling > 0:
-			num_split = math.ceil(x_mask_new.shape[1] / config.max_sentences_of_sampling)
-			split_x = np.array_split(x_new, num_split, 2)
-			split_x_mask = np.array_split(x_mask_new, num_split, 1)
-      # TODO Use config.normalization_alpha instead of 0.0?
+			num_split = math.ceil(x_mask.shape[1] / config.max_sentences_of_sampling)
+			split_x = np.array_split(x, num_split, 2)
+			split_x_mask = np.array_split(x_mask, num_split, 1)
+    		# set normalization_alpha to 0 for randomly sampling (no effect on sampled sentences)
 			sample = translate_utils.translate_batch(
           sess, sampler, split_x[0], split_x_mask[0], max_translation_len, 0.0)
 			for i in range(1, len(split_x)):
 				tmp = translate_utils.translate_batch(sess, sampler, split_x[i], split_x_mask[i], max_translation_len, 0.0)
 				sample = np.concatenate((sample, tmp))
 		else:
-			sample = translate_utils.translate_batch(sess, sampler, x_new, x_mask_new, max_translation_len, 0.0)
-		# sample: a list of NumPy arrays (each numpy array contains a sampling a source sentence in x_new).
-		for i in range(len(sample)):
-			for ss in sample[i*sampleN:(i+1)*sampleN]:
-				samples[i].append(ss[0][0].tolist())
+			sample = translate_utils.translate_batch(sess, sampler, x, x_mask, max_translation_len, 0.0)
+		# sample: list: (batch_size, sampleN), each element is a tuple of (numpy array of a sampled sentence, its score)
+		for i in range(len(samples)):
+			for ss in sample[i]:
+				samples[i].append(ss[0].tolist())
 			# samples: list with shape (batch_size, sampleN, len), uneven
 
 		# remove duplicate samples
@@ -214,7 +214,7 @@ def cal_metrics_score(samples, config, num_to_target, refs, index):
 	return scores
 
 
-def mrt_cost(cost, score, config):
+def mrt_cost(cost, score, index, config):
 	"""Calculate expected risk according to evaluation scores and model's translation probability over
 	a subset of candidate sentences
 	Args:
@@ -226,52 +226,9 @@ def mrt_cost(cost, score, config):
 
 	samplesN = config.samplesN
 	total_sample = tf.shape(cost)[0]
-	batch_size = tf.div(total_sample, samplesN)
-
-	# cancelling the negative of the cost (P**alpha = e**(-alpha*(-logP))
-	alpha = tf.constant([-config.mrt_alpha], dtype=tf.float32)
-	cost = tf.multiply(cost, alpha)
-
-	# normalise costs
-	i = tf.constant(0)
-
-	def while_condition(i, _):
-		return tf.less(i, batch_size)
-	def body(i, cost):
-		# increment i
-		normalised_cost = tf.nn.softmax(cost[i * samplesN:(i + 1) * samplesN])
-		# assign value of sub-tensor to a tensor iteratively
-		if i == 0:
-			val = normalised_cost
-			part2 = cost[(i + 1) * samplesN:]
-			cost = tf.concat([val, part2], axis=0)
-		else:
-			part1 = cost[:i * samplesN]
-			val = normalised_cost
-			part2 = cost[(i + 1) * samplesN:]
-			cost = tf.concat([part1, val, part2], axis=0)
-
-		return tf.add(i, 1), cost
-	# do the loop:
-	i, cost = tf.while_loop(while_condition, body, [i, cost])
-
-	# compute expected risk by dot product normalised cost and score
-	cost = tf.reshape(cost, [1, total_sample])
-	score = tf.reshape(score, [total_sample, 1])
-	# calculate the risk per real sentence (before sampling)
-	MRTloss = tf.divide(tf.matmul(cost, score)[0][0], tf.cast(batch_size, tf.float32))
-
-	return MRTloss
-
-
-def mrt_cost_random(cost, score, index, config):
-	# basically same as mrt_cost, just need to use index to distinguish different subspaces
-
-	samplesN = config.samplesN
-	total_sample = tf.shape(cost)[0]
 	batch_size = tf.shape(index)[0] - tf.constant(1)
 
-	# cancelling the negative of the cost
+	# cancelling the negative of the cost (P**alpha = e**(-alpha*(-logP))
 	alpha = tf.constant([-config.mrt_alpha], dtype=tf.float32)
 	cost = tf.multiply(cost, alpha)
 

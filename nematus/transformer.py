@@ -81,10 +81,7 @@ class Transformer(object):
             if self.config.loss_function == 'MRT':
                 # self._loss_per_sentence is negative log probability of the output sentence, each element represents
                 # the loss of each sample pair.
-                if self.config.sample_way == 'beam_search':
-                    self._risk = mru.mrt_cost(self._loss_per_sentence, self.scores, self.config)
-                else:
-                    self._risk = mru.mrt_cost_random(self._loss_per_sentence, self.scores, self.index, self.config)
+                self._risk = mru.mrt_cost(self._loss_per_sentence, self.scores, self.index, self.config)
 
             self.sampling_utils = SamplingUtils(config)
 

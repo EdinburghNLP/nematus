@@ -2,3 +2,5 @@
 build
 dist
 nmt.egg-info
+.idea
+.DS_Store
