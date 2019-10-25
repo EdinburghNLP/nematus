@@ -86,6 +86,19 @@ def train(config, sess):
     num_gpus = len(util.get_available_gpus())
     num_replicas = max(1, num_gpus)
 
+    if config.loss_function == 'MRT':
+        assert config.gradient_aggregation_steps == 1
+        assert config.max_sentences_per_device == 0, "MRT mode does not support sentence-based split"
+        if config.max_tokens_per_device != 0:
+            assert (config.samplesN * config.maxlen <= config.max_tokens_per_device), "need to make sure candidates of a sentence could be " \
+                                                                                      "feed into the model"
+        else:
+            assert num_replicas == 1, "MRT mode does not support sentence-based split"
+            assert (config.samplesN * config.maxlen <= config.token_batch_size), "need to make sure candidates of a sentence could be " \
+                                                                                      "feed into the model"
+
+
+
     logging.info('Building model...')
     replicas = []
     for i in range(num_replicas):
