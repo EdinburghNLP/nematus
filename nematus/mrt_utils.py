@@ -33,9 +33,6 @@ def full_sampler(replica, sampler, sess, config, x, x_mask, y, y_mask):
 	"""
 
 	sampleN = config.samplesN
-	# expand input for parallel multiple samplings
-	x_new = np.repeat(x, sampleN, axis=2)
-	x_mask_new = np.repeat(x_mask, sampleN, axis=1)
 
  	# set maximum number of tokens of sampled candidates
 	dynamic_max_len = int(config.max_len_a * x_mask.shape[0] + config.max_len_b)
