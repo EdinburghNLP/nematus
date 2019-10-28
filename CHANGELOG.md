@@ -1,6 +1,23 @@
 CHANGELOG
 ---------
 
+development version
+-----------
+
+ - main new features:
+   - minimum risk training (MRT)
+   - new inference code with ensemble decoding support for Transformer/RNN mix
+
+ - other new features
+   - lexical model for RNNs
+   - gradient accumulation support
+   - exponential smoothing
+   - warmup-plateau-decay learning schedule
+   - sampling translation strategy
+
+ - fixes
+   - fix regressions with deep RNN decoders
+
 v0.4 (17/12/2018)
 ----------
 

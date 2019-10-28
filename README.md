@@ -21,6 +21,7 @@ Notable features include:
      - label smoothing
      - early stopping with user-defined stopping criterion
      - resume training (optionally with MAP-L2 regularization towards original model)
+     - minimum risk training (MRT)
 
  - scoring and decoding features:
      - batch decoding
