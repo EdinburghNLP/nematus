@@ -61,7 +61,8 @@ class TextIterator:
         elif shuffle_each_epoch:
             self.source_orig = source
             self.target_orig = target
-            self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
+            self.source, self.target = shuffle.jointly_shuffle_files(
+                [self.source_orig, self.target_orig], temporary=True)
         else:
             self.source = fopen(source, 'r')
             self.target = fopen(target, 'r')
