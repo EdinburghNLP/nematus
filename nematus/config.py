@@ -240,6 +240,15 @@ class ConfigSpecification:
             help='Save summaries after INT updates, if 0 do not save '
                  'summaries (default: %(default)s)'))
 
+        group.append(ParameterSpecification(
+            name='preprocess_script', default=None,
+            visible_arg_names=['--preprocess_script'],
+            type=str, metavar='PATH',
+            help='path to script for external preprocessing (default: '
+                 '%(default)s). The script will be called at the start of training, and before each epoch. '
+                 'Useful for dynamic preprocessing, such as BPE dropout. Ideally, this script should write the files '
+                 'given in --source_dataset and --target_dataset, which will be reloaded after calling the script.'))
+
         # Add command-line parameters for 'network' group.
 
         group = param_specs['network']

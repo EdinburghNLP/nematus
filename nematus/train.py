@@ -53,7 +53,8 @@ def load_data(config):
                         use_factor=(config.factors > 1),
                         maxibatch_size=config.maxibatch_size,
                         token_batch_size=config.token_batch_size,
-                        keep_data_in_memory=config.keep_train_set_in_memory)
+                        keep_data_in_memory=config.keep_train_set_in_memory,
+                        preprocess_script=config.preprocess_script)
 
     if config.valid_freq and config.valid_source_dataset and config.valid_target_dataset:
         valid_text_iterator = TextIterator(
