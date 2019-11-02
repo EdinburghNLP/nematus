@@ -128,7 +128,8 @@ class TextIterator:
                 self.source.shuffle_lines(r)
                 self.target.shuffle_lines(r)
             else:
-                self.source, self.target = shuffle.main([self.source_orig, self.target_orig], temporary=True)
+                self.source, self.target = shuffle.jointly_shuffle_files(
+                    [self.source_orig, self.target_orig], temporary=True)
         else:
             self.source.seek(0)
             self.target.seek(0)
