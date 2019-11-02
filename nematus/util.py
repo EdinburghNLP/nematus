@@ -1,6 +1,4 @@
-'''
-Utility functions
-'''
+"""Utility functions."""
 
 import pickle as pkl
 import exception
@@ -8,17 +6,6 @@ import json
 import logging
 import numpy
 import sys
-
-# Source:
-# https://stackoverflow.com/questions/38559755/how-to-get-current-available-gpus-in-tensorflow
-def get_available_gpus():
-    """
-        Returns a list of the identifiers of all visible GPUs.
-    """
-    from tensorflow.python.client import device_lib
-    local_device_protos = device_lib.list_local_devices()
-    return [x.name for x in local_device_protos if x.device_type == 'GPU']
-
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):

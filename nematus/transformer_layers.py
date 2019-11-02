@@ -8,11 +8,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
+import tf_utils
+
 
 def matmul_nd(nd_tensor, matrix):
     """ Performs matrix multiplication for n-dimensional inputs. """
-    tensor_shape = get_shape_list(nd_tensor)
-    matrix_shape = get_shape_list(matrix)
+    tensor_shape = tf_utils.get_shape_list(nd_tensor)
+    matrix_shape = tf_utils.get_shape_list(matrix)
 
     initial_tensor_dims = tensor_shape[:-1]
     flat_first_dim = tf.reduce_prod(initial_tensor_dims)
@@ -21,25 +23,6 @@ def matmul_nd(nd_tensor, matrix):
     result_2d = tf.matmul(tensor_2d, matrix)
     result_3d = tf.reshape(result_2d, initial_tensor_dims + [matrix_shape[-1]])
     return result_3d
-
-
-def get_shape_list(inputs):
-    """ Returns a list of input dimensions, statically where possible; adopted from the tensor2tensor library. """
-    inputs = tf.convert_to_tensor(inputs)
-    # If inputs rank is unknown, return dynamic shape
-    if inputs.get_shape().dims is None:
-        dims_list = tf.shape(inputs)
-    else:
-        static_dims = inputs.get_shape().as_list()
-        shape = tf.shape(inputs)
-        # Filter out non-specified dimensions and replace them with static shape definitions
-        dims_list = list()
-        for i in range(len(static_dims)):
-            dim = static_dims[i]
-            if dim is None:
-                dim = shape[i]
-            dims_list.append(dim)
-    return dims_list
 
 
 def get_right_context_mask(time_steps):

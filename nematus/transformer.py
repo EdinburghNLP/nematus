@@ -4,16 +4,15 @@ import tensorflow as tf
 import numpy
 
 import model_inputs
+import mrt_utils as mru
+from sampling_utils import SamplingUtils
+import tf_utils
+from transformer_blocks import AttentionBlock, FFNBlock
 from transformer_layers import \
     EmbeddingLayer, \
     MaskedCrossEntropy, \
-    get_shape_list, \
     get_right_context_mask, \
     get_positional_signal
-from transformer_blocks import AttentionBlock, FFNBlock
-
-import mrt_utils as mru
-from sampling_utils import SamplingUtils
 
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
@@ -231,7 +230,7 @@ class TransformerEncoder(object):
             # Embed
             source_embeddings = self._embed(source_ids)
             # Obtain length and depth of the input tensors
-            _, time_steps, depth = get_shape_list(source_embeddings)
+            _, time_steps, depth = tf_utils.get_shape_list(source_embeddings)
             # Transform input mask into attention mask
             inverse_mask = tf.cast(tf.equal(source_mask, 0.0), dtype=FLOAT_DTYPE)
             attn_mask = inverse_mask * -1e9

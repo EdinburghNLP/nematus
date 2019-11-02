@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-from transformer_layers import get_shape_list
 import tf_utils
 
 class ModelAdapter:
@@ -147,7 +146,7 @@ class ModelAdapter:
             high_depth = 0 if d.high_gru_stack is None \
                            else len(d.high_gru_stack.grus)
 
-            num_dims = len(get_shape_list(memories['base_states']))
+            num_dims = len(tf_utils.get_shape_list(memories['base_states']))
             # TODO Specify shape in full?
             partial_shape = tf.TensorShape([None] * num_dims)
 

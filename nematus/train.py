@@ -29,6 +29,7 @@ import model_loader
 from model_updater import ModelUpdater
 from random_sampler import RandomSampler
 import rnn_model
+import tf_utils
 from transformer import Transformer as TransformerModel
 import translate_utils
 import util
@@ -83,7 +84,7 @@ def train(config, sess):
 
     # Construct the graph, with one model replica per GPU
 
-    num_gpus = len(util.get_available_gpus())
+    num_gpus = len(tf_utils.get_available_gpus())
     num_replicas = max(1, num_gpus)
 
     if config.loss_function == 'MRT':

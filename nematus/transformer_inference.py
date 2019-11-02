@@ -4,7 +4,7 @@ import tensorflow as tf
 
 import tf_utils
 from transformer import INT_DTYPE, FLOAT_DTYPE
-from transformer_layers import get_shape_list, get_positional_signal
+from transformer_layers import get_positional_signal
 
 
 class EncoderOutput:
@@ -138,7 +138,7 @@ class ModelAdapter:
                 layer_mems = memories[layer_id]
                 invariants[layer_id] = {
                     key: tf.TensorShape(
-                        [None]*len(get_shape_list(layer_mems[key])))
+                        [None]*len(tf_utils.get_shape_list(layer_mems[key])))
                     for key in layer_mems.keys()
                 }
             return invariants
@@ -165,7 +165,7 @@ class ModelAdapter:
                 # TODO Specify second and third?
                 shapes = { attn: ('batch_size', None, None) }
                 tf_utils.assert_shapes(shapes)
-                attn_dims = get_shape_list(attn)
+                attn_dims = tf_utils.get_shape_list(attn)
                 new_shape = [beam_size, batch_size_x] + attn_dims[1:]
                 tmp = tf.reshape(attn, new_shape)
                 flat_tensor = tf.transpose(tmp, [1, 0, 2, 3])
