@@ -85,6 +85,8 @@ class ModelAdapter:
                         target_embeddings,
                         rate=self.config.transformer_dropout_embeddings,
                         training=decoder.training)
+                if self.config.transformer_spherical_normalization:
+                    target_embeddings = self.embedding_spherical_norm(target_embeddings) 
                 # Propagate values through the decoder stack.
                 # NOTE: No self-attention mask is applied at decoding, as
                 #       future information is unavailable.

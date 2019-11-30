@@ -527,6 +527,12 @@ class ConfigSpecification:
             help='dropout applied to attention weights (default: '
                  '%(default)s)'))
 
+        group.append(ParameterSpecification(
+            name='transformer_spherical_normalization', default=False,
+            visible_arg_names=['--transformer_spherical_normalization'],
+            action='store_true',
+            help='spherically normalized transformer model'))
+
         # Add command-line parameters for 'training' group.
 
         group = param_specs['training']

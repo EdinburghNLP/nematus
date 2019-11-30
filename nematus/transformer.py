@@ -12,7 +12,8 @@ from transformer_layers import \
     EmbeddingLayer, \
     MaskedCrossEntropy, \
     get_right_context_mask, \
-    get_positional_signal
+    get_positional_signal, \
+    SphericalNormLayer
 
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
@@ -101,13 +102,17 @@ class Transformer(object):
                                                      self.config.embedding_size,
                                                      self.config.state_size,
                                                      FLOAT_DTYPE,
-                                                     name='encoder_embedding_layer')
+                                                     name='encoder_embedding_layer',
+                                                     l2_normalize_on_project=self.config.transformer_spherical_normalization,
+                                                     l2_normalize_trainable_scale=True)
             if not self.config.tie_encoder_decoder_embeddings:
                 decoder_embedding_layer = EmbeddingLayer(dec_vocab_size,
                                                          self.config.embedding_size,
                                                          self.config.state_size,
                                                          FLOAT_DTYPE,
-                                                         name='decoder_embedding_layer')
+                                                         name='decoder_embedding_layer',
+                                                         l2_normalize_on_project=self.config.transformer_spherical_normalization,
+                                                         l2_normalize_trainable_scale=True)
             else:
                 decoder_embedding_layer = encoder_embedding_layer
 
@@ -116,7 +121,9 @@ class Transformer(object):
                                                           self.config.embedding_size,
                                                           self.config.state_size,
                                                           FLOAT_DTYPE,
-                                                          name='softmax_projection_layer')
+                                                          name='softmax_projection_layer',
+                                                          l2_normalize_on_project=self.config.transformer_spherical_normalization,
+                                                          l2_normalize_trainable_scale=True)
             else:
                 softmax_projection_layer = decoder_embedding_layer
 
@@ -198,6 +205,9 @@ class TransformerEncoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
+            if self.config.transformer_spherical_normalization:
+                with tf.variable_scope('embedding'):
+                    self.embedding_spherical_norm = SphericalNormLayer(self.config.state_size, traniable_scale=False)
             for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
@@ -246,6 +256,8 @@ class TransformerEncoder(object):
             if self.config.transformer_dropout_embeddings > 0:
                 source_embeddings = tf.layers.dropout(source_embeddings,
                                                       rate=self.config.transformer_dropout_embeddings, training=self.training)
+            if self.config.transformer_spherical_normalization:
+                source_embeddings = self.embedding_spherical_norm(source_embeddings)
             return source_embeddings, self_attn_mask, cross_attn_mask
 
         with tf.variable_scope(self.name):
@@ -296,6 +308,9 @@ class TransformerDecoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.variable_scope(self.name):
+            if self.config.transformer_spherical_normalization:
+                with tf.variable_scope('embedding'):
+                    self.embedding_spherical_norm = SphericalNormLayer(self.config.state_size, traniable_scale=False)
             for layer_id in range(1, self.config.transformer_dec_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
@@ -350,6 +365,8 @@ class TransformerDecoder(object):
             if self.config.transformer_dropout_embeddings > 0:
                 target_embeddings = tf.layers.dropout(target_embeddings,
                                                       rate=self.config.transformer_dropout_embeddings, training=self.training)
+            if self.config.transformer_spherical_normalization:
+                target_embeddings = self.embedding_spherical_norm(target_embeddings) 
             return target_embeddings
 
         def _decoding_function():

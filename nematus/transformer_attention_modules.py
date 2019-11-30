@@ -20,7 +20,8 @@ class MultiHeadAttentionLayer(object):
                  float_dtype,
                  dropout_attn,
                  training,
-                 name=None):
+                 name=None,
+                 spherical_mode=False):
 
         # Set attributes
         self.reference_dims = reference_dims
@@ -33,6 +34,7 @@ class MultiHeadAttentionLayer(object):
         self.dropout_attn = dropout_attn
         self.training = training
         self.name = name
+        self.spherical_mode=spherical_mode
 
         # Check if the specified hyper-parameters are consistent
         if total_key_dims % num_heads != 0:
@@ -83,6 +85,8 @@ class MultiHeadAttentionLayer(object):
                                                        use_layer_norm=False,
                                                        training=self.training,
                                                        name='context_projection')
+
+            
 
     def _compute_attn_inputs(self, query_context, memory_context):
         """ Computes query, key, and value tensors used by the attention function for the calculation of the

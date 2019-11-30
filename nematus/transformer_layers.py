@@ -67,12 +67,15 @@ class EmbeddingLayer(object):
     """ Looks up embeddings for the specified token sequence in the learned embedding table; allows for easy weight
     scaling and tying. """
 
-    def __init__(self, vocabulary_size, embedding_size, hidden_size, float_dtype, name):
+    def __init__(self, vocabulary_size, embedding_size, hidden_size, float_dtype, name, l2_normalize_on_project=False, l2_normalize_eps=1e-5, l2_normalize_trainable_scale=False):
         # Set arguments
         self.vocabulary_size = vocabulary_size
         self.hidden_size = hidden_size
         self.float_dtype = float_dtype
         self.name = name
+        self.l2_normalize_on_project=l2_normalize_on_project
+        self.l2_normalize_eps=l2_normalize_eps
+        self.l2_normalize_trainable_scale=l2_normalize_trainable_scale
 
         # Create embedding matrix and its transposes
         with tf.variable_scope(self.name):
@@ -82,6 +85,17 @@ class EmbeddingLayer(object):
                                                 initializer=glorot_uniform_initializer(),
                                                 trainable=True)
             self.projection_matrix = tf.transpose(self.embedding_table, name='vocab_projection_matrix')
+            if self.l2_normalize_on_project:
+                if self.l2_normalize_trainable_scale:
+                    self.l2_normalize_scale = tf.get_variable(name='l2_normalize_scale',
+                                             shape=[],
+                                             dtype=tf.float32,
+                                             initializer=tf.constant(tf.sqrt(embedding_size * 1.0)))
+                else:
+                    self.l2_normalize_scale = tf.constant(tf.sqrt(embedding_size * 1.0))
+                projection_matrix_norms = tf.norm(self.projection_matrix, axis=0, keep_dims=True)
+                scaling_factor = self.l2_normalize_scale / tf.maximum(projection_matrix_norms, self.l2_normalize_eps)
+                self.projection_matrix = tf.multiply(self.projection_matrix, scaling_factor, name='vocab_projection_matrix_normalized')
 
     def embed(self, one_hot_inputs):
         """ Embeds one-hot-vectors corresponding to input tokens. """
@@ -138,21 +152,60 @@ class LayerNormLayer(object):
 
         return normalized
 
+class SphericalNormLayer(object):
+    """ Performs l2-normalization on the last axis of the input tensor. Similar to LayerNormLayer, except that it does not subtract 
+    the mean and the scale parameter is a scalar specifiying the norm rather than the standard deviation.
+    If initial_scale is None then it is set to sqrt(dims_out)"""
+
+    def __init__(self, dims_out, name=None, eps=1e-5, traniable_scale=False, initial_scale=None):
+        if name is None:
+            name = 'spherical_norm'
+        else:
+            name = '{:s}_spherical_norm'.format(name)
+
+        if init_scale == None:
+            init_scale = tf.sqrt(dims_out * 1.0)
+        with tf.variable_scope(name, values=[dims_out]):
+            if traniable_scale:
+                self.scale = tf.get_variable(name='scale',
+                                             shape=[],
+                                             dtype=tf.float32,
+                                             initializer=tf.constant(init_scale))
+            else:
+                self.scale = tf.constant(init_scale)
+            self.eps = tf.constant(eps)
+
+    def forward(self, inputs):
+        layer_norm = tf.norm(inputs, axis=-1, keep_dims=True)
+        scaling_factor = self.scale / tf.maximum(layer_norm, self.eps)
+        normalized = inputs * scaling_factor
+
+        return normalized
+
 
 class ProcessingLayer(object):
     """ Optionally applies residual connections, layer normalization, or dropout. """
 
-    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name):
+    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name, use_spherical_norm=False, use_spherical_residual_mixing=False):
         # Set attributes
         self.use_layer_norm = use_layer_norm
         self.dropout_rate = dropout_rate
         self.training = training
         self.name = name
+        self.use_spherical_norm=use_spherical_norm
+        self.use_spherical_residual_mixing=use_spherical_residual_mixing
 
-        # Initialize layer normalization, if specified
+        # Initialize layer or spherical normalization and spherical residual mixing, if specified
         with tf.variable_scope(self.name):
             if use_layer_norm:
                 self.layer_norm = LayerNormLayer(out_size)
+            if self.use_spherical_norm:
+                self.spherical_norm = SphericalNormLayer(self.config.state_size, traniable_scale=False)
+            if self.use_spherical_residual_mixing:
+                self.mixing_angle = tf.get_variable(name='mixing_angle',
+                                                    shape=[],
+                                                    dtype=tf.float32,
+                                                    initializer=tf.constant(0.0))
 
     def forward(self, inputs, residual_inputs=None):
         with tf.variable_scope(self.name, values=[inputs, residual_inputs], reuse=True):
@@ -160,9 +213,15 @@ class ProcessingLayer(object):
             # Apply dropout
             if self.dropout_rate > 0.0:
                 outputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+            # Apply spherical normalization
+            if self.use_spherical_norm:
+                outputs = self.spherical_norm(outputs)
             # Apply residual connections
             if residual_inputs is not None:
-                outputs = outputs + residual_inputs
+                if self.use_spherical_residual_mixing:
+                    outputs = tf.sin(self.mixing_angle) * outputs + tf.cos(self.mixing_angle) * residual_inputs
+                else:
+                    outputs = outputs + residual_inputs
             # Apply layer normalization
             if self.use_layer_norm:
                 outputs = self.layer_norm.forward(outputs)
