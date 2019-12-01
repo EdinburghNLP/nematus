@@ -85,8 +85,11 @@ class MultiHeadAttentionLayer(object):
                                                        use_layer_norm=False,
                                                        training=self.training,
                                                        name='context_projection')
+            if self.spherical_mode:
+                self.q_spherical_norm = SphericalNormLayer(self.total_key_dims / num_heads, traniable_scale=True, name='q_spherical_norm')
+                self.k_spherical_norm = SphericalNormLayer(self.total_key_dims / num_heads, traniable_scale=False, name='k_spherical_norm')
+                self.v_spherical_norm = SphericalNormLayer(self.total_value_dims / num_heads, traniable_scale=False, name='v_spherical_norm')
 
-            
 
     def _compute_attn_inputs(self, query_context, memory_context):
         """ Computes query, key, and value tensors used by the attention function for the calculation of the
@@ -124,6 +127,10 @@ class MultiHeadAttentionLayer(object):
     def _dot_product_attn(self, queries, keys, values, attn_mask, scaling_on):
         """ Defines the dot-product attention function; see Vasvani et al.(2017), Eq.(1). """
         # query/ key/ value have shape = [batch_size, time_steps, num_heads, num_features]
+        if self.spherical_mode:
+            query = self.q_spherical_norm(query)
+            key = self.k_spherical_norm(key)
+            value = self.v_spherical_norm(value)
         # Tile keys and values tensors to match the number of decoding beams; ignored if already done by fusion module
         num_beams = get_shape_list(queries)[0] // get_shape_list(keys)[0]
         keys = tf.cond(tf.greater(num_beams, 1), lambda: tf.tile(keys, [num_beams, 1, 1, 1]), lambda: keys)
@@ -154,6 +161,12 @@ class MultiHeadAttentionLayer(object):
         # Optionally apply dropout:
         if self.dropout_attn > 0.0:
             attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            if self.spherical_mode:
+                # Renormalize attention weights
+                attn_weights = attn_weights / tf.maximum(tf.reduce_sum(attn_weights, axis=-1, keep_dims=True), 1e-9)
+        if self.spherical_mode:
+            # Sqrt attention weights to preserve the l2-norm of the weighted combination of values
+            attn_weights = tf.sqrt(attn_weights)
         # Weigh attention values
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories

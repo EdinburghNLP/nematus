@@ -39,7 +39,7 @@ class AttentionBlock(object):
 
         # Build layers
         self.pre_attn = ProcessingLayer(config.state_size,
-                                        use_layer_norm=True if not self.config.transformer_spherical_normalization else False,
+                                        use_layer_norm=True if not config.transformer_spherical_normalization else False,
                                         dropout_rate=0.,
                                         training=training,
                                         name='pre_{:s}_sublayer'.format(attn_name))
@@ -53,12 +53,13 @@ class AttentionBlock(object):
                                             float_dtype,
                                             dropout_attn=config.transformer_dropout_attn,
                                             training=training,
-                                            name='{:s}_sublayer'.format(attn_name))
+                                            name='{:s}_sublayer'.format(attn_name),
+                                            spherical_mode=config.transformer_spherical_normalization)
 
         self.post_attn = ProcessingLayer(config.state_size,
                                          use_layer_norm=False,
-                                         use_spherical_norm=self.config.transformer_spherical_normalization, # Need this because dropout can alter the norm
-                                         use_spherical_residual_mixing=self.config.transformer_spherical_normalization,
+                                         use_spherical_norm=config.transformer_spherical_normalization,
+                                         use_spherical_residual_mixing=config.transformer_spherical_normalization,
                                          dropout_rate=config.transformer_dropout_residual,
                                          training=training,
                                          name='post_{:s}_sublayer'.format(attn_name))
@@ -89,7 +90,7 @@ class FFNBlock(object):
 
         # Build layers
         self.pre_ffn = ProcessingLayer(config.state_size,
-                                       use_layer_norm=not self.config.transformer_spherical_normalization,
+                                       use_layer_norm=not config.transformer_spherical_normalization,
                                        dropout_rate=0.,
                                        training=training,
                                        name='pre_ffn_sublayer')
@@ -103,15 +104,15 @@ class FFNBlock(object):
                                       name='ffn_sublayer')
         self.post_ffn = ProcessingLayer(config.state_size,
                                         use_layer_norm=False,
-                                        use_spherical_norm=self.config.transformer_spherical_normalization,
-                                        use_spherical_residual_mixing=self.config.transformer_spherical_normalization,
+                                        use_spherical_norm=config.transformer_spherical_normalization,
+                                        use_spherical_residual_mixing=config.transformer_spherical_normalization,
                                         dropout_rate=config.transformer_dropout_residual,
                                         training=training,
                                         name='post_ffn_sublayer')
         if is_final:
             self.pre_final = ProcessingLayer(config.state_size,
-                                             use_layer_norm=not self.config.transformer_spherical_normalization,
-                                             use_spherical_norm=self.config.transformer_spherical_normalization,
+                                             use_layer_norm=not config.transformer_spherical_normalization,
+                                             use_spherical_norm=config.transformer_spherical_normalization,
                                              dropout_rate=0.,
                                              training=training,
                                              name='final_transform')
