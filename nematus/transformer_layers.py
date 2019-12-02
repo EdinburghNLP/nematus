@@ -144,7 +144,7 @@ class LayerNormLayer(object):
             self.eps = tf.constant(eps)
 
     def forward(self, inputs):
-        layer_mean, layer_var = tf.nn.moments(inputs, axes=-1, keepdims=True)
+        layer_mean, layer_var = tf.nn.moments(inputs, axes=-1, keep_dims=True)
         normalized = tf.add(
             tf.multiply(self.scale, tf.math.divide(tf.subtract(inputs, layer_mean),
                                            tf.sqrt(tf.add(layer_var, self.eps)))),
