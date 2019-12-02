@@ -90,10 +90,10 @@ class EmbeddingLayer(object):
                     self.l2_normalize_scale = tf.get_variable(name='l2_normalize_scale',
                                              shape=[],
                                              dtype=tf.float32,
-                                             initializer=tf.constant(tf.sqrt(embedding_size * 1.0)))
+                                             initializer=tf.constant_initializer(np.sqrt(embedding_size), dtype=tf.float32))
                 else:
-                    self.l2_normalize_scale = tf.constant(tf.sqrt(embedding_size * 1.0))
-                projection_matrix_norms = tf.norm(self.projection_matrix, axis=0, keep_dims=True)
+                    self.l2_normalize_scale = tf.constant(np.sqrt(embedding_size), dtype=tf.float32)
+                projection_matrix_norms = tf.norm(self.projection_matrix, axis=0, keepdims=True)
                 scaling_factor = self.l2_normalize_scale / tf.maximum(projection_matrix_norms, self.l2_normalize_eps)
                 self.projection_matrix = tf.multiply(self.projection_matrix, scaling_factor, name='vocab_projection_matrix_normalized')
 
@@ -144,7 +144,7 @@ class LayerNormLayer(object):
             self.eps = tf.constant(eps)
 
     def forward(self, inputs):
-        layer_mean, layer_var = tf.nn.moments(inputs, axes=-1, keep_dims=True)
+        layer_mean, layer_var = tf.nn.moments(inputs, axes=-1, keepdims=True)
         normalized = tf.add(
             tf.multiply(self.scale, tf.math.divide(tf.subtract(inputs, layer_mean),
                                            tf.sqrt(tf.add(layer_var, self.eps)))),
@@ -163,20 +163,20 @@ class SphericalNormLayer(object):
         else:
             name = '{:s}_spherical_norm'.format(name)
 
-        if init_scale == None:
-            init_scale = tf.sqrt(dims_out * 1.0)
+        if initial_scale == None:
+            initial_scale = np.sqrt(dims_out)
         with tf.variable_scope(name, values=[dims_out]):
             if traniable_scale:
                 self.scale = tf.get_variable(name='scale',
                                              shape=[],
                                              dtype=tf.float32,
-                                             initializer=tf.constant(init_scale))
+                                             initializer=tf.constant_initializer(initial_scale, dtype=tf.float32))
             else:
-                self.scale = tf.constant(init_scale)
+                self.scale = tf.constant(initial_scale, dtype=tf.float32)
             self.eps = tf.constant(eps)
 
     def forward(self, inputs):
-        layer_norm = tf.norm(inputs, axis=-1, keep_dims=True)
+        layer_norm = tf.norm(inputs, axis=-1, keepdims=True)
         scaling_factor = self.scale / tf.maximum(layer_norm, self.eps)
         normalized = inputs * scaling_factor
 
@@ -200,12 +200,12 @@ class ProcessingLayer(object):
             if use_layer_norm:
                 self.layer_norm = LayerNormLayer(out_size)
             if self.use_spherical_norm:
-                self.spherical_norm = SphericalNormLayer(self.config.state_size, traniable_scale=False)
+                self.spherical_norm = SphericalNormLayer(out_size, traniable_scale=False)
             if self.use_spherical_residual_mixing:
                 self.mixing_angle = tf.get_variable(name='mixing_angle',
                                                     shape=[],
                                                     dtype=tf.float32,
-                                                    initializer=tf.constant(0.0))
+                                                    initializer=tf.constant_initializer(0.0))
 
     def forward(self, inputs, residual_inputs=None):
         with tf.variable_scope(self.name, values=[inputs, residual_inputs], reuse=True):
@@ -215,7 +215,7 @@ class ProcessingLayer(object):
                 outputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
             # Apply spherical normalization
             if self.use_spherical_norm:
-                outputs = self.spherical_norm(outputs)
+                outputs = self.spherical_norm.forward(outputs)
             # Apply residual connections
             if residual_inputs is not None:
                 if self.use_spherical_residual_mixing:

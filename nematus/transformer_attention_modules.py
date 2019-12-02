@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
 from tf_utils import get_shape_list
-from transformer_layers import FeedForwardLayer, matmul_nd
+from transformer_layers import FeedForwardLayer, matmul_nd, SphericalNormLayer
 
 class MultiHeadAttentionLayer(object):
     """ Defines the multi-head, multiplicative attention mechanism;
@@ -128,9 +128,9 @@ class MultiHeadAttentionLayer(object):
         """ Defines the dot-product attention function; see Vasvani et al.(2017), Eq.(1). """
         # query/ key/ value have shape = [batch_size, time_steps, num_heads, num_features]
         if self.spherical_mode:
-            query = self.q_spherical_norm(query)
-            key = self.k_spherical_norm(key)
-            value = self.v_spherical_norm(value)
+            queries = self.q_spherical_norm.forward(queries)
+            keys = self.k_spherical_norm.forward(keys)
+            values = self.v_spherical_norm.forward(values)
         # Tile keys and values tensors to match the number of decoding beams; ignored if already done by fusion module
         num_beams = get_shape_list(queries)[0] // get_shape_list(keys)[0]
         keys = tf.cond(tf.greater(num_beams, 1), lambda: tf.tile(keys, [num_beams, 1, 1, 1]), lambda: keys)
@@ -163,7 +163,7 @@ class MultiHeadAttentionLayer(object):
             attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
             if self.spherical_mode:
                 # Renormalize attention weights
-                attn_weights = attn_weights / tf.maximum(tf.reduce_sum(attn_weights, axis=-1, keep_dims=True), 1e-9)
+                attn_weights = attn_weights / tf.maximum(tf.reduce_sum(attn_weights, axis=-1, keepdims=True), 1e-9)
         if self.spherical_mode:
             # Sqrt attention weights to preserve the l2-norm of the weighted combination of values
             attn_weights = tf.sqrt(attn_weights)

@@ -257,7 +257,7 @@ class TransformerEncoder(object):
                 source_embeddings = tf.layers.dropout(source_embeddings,
                                                       rate=self.config.transformer_dropout_embeddings, training=self.training)
             if self.config.transformer_spherical_normalization:
-                source_embeddings = self.embedding_spherical_norm(source_embeddings)
+                source_embeddings = self.embedding_spherical_norm.forward(source_embeddings)
             return source_embeddings, self_attn_mask, cross_attn_mask
 
         with tf.variable_scope(self.name):
@@ -366,7 +366,7 @@ class TransformerDecoder(object):
                 target_embeddings = tf.layers.dropout(target_embeddings,
                                                       rate=self.config.transformer_dropout_embeddings, training=self.training)
             if self.config.transformer_spherical_normalization:
-                target_embeddings = self.embedding_spherical_norm(target_embeddings) 
+                target_embeddings = self.embedding_spherical_norm.forward(target_embeddings) 
             return target_embeddings
 
         def _decoding_function():
