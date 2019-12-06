@@ -54,7 +54,8 @@ class AttentionBlock(object):
                                             dropout_attn=config.transformer_dropout_attn,
                                             training=training,
                                             name='{:s}_sublayer'.format(attn_name),
-                                            spherical_mode=config.transformer_spherical_normalization)
+                                            spherical_mode=config.transformer_spherical_normalization,
+                                            spherical_normalization_on_keys_and_queries=config.transformer_spherical_normalization_on_keys_and_queries)
 
         self.post_attn = ProcessingLayer(config.state_size,
                                          use_layer_norm=False,
@@ -101,6 +102,7 @@ class FFNBlock(object):
                                       use_layer_norm=False,
                                       dropout_rate=config.transformer_dropout_relu,
                                       training=training,
+                                      use_sign_dropout=config.transformer_sign_dropout,
                                       name='ffn_sublayer')
         self.post_ffn = ProcessingLayer(config.state_size,
                                         use_layer_norm=False,
@@ -108,6 +110,7 @@ class FFNBlock(object):
                                         use_spherical_residual_mixing=config.transformer_spherical_normalization,
                                         dropout_rate=config.transformer_dropout_residual,
                                         training=training,
+                                        use_sign_dropout=config.transformer_sign_dropout,
                                         name='post_ffn_sublayer')
         if is_final:
             self.pre_final = ProcessingLayer(config.state_size,

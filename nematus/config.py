@@ -533,6 +533,24 @@ class ConfigSpecification:
             action='store_true',
             help='spherically normalized transformer model'))
 
+        group.append(ParameterSpecification(
+            name='transformer_spherical_normalization_on_keys_and_queries', default=False,
+            visible_arg_names=['--transformer_spherical_normalization_on_keys_and_queries'],
+            action='store_true',
+            help='apply spherical normalization on keys and queries in transformer attention heads (by default applied only on values for efficiency reasons)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_softmax_embeddings_normalization', default=False,
+            visible_arg_names=['--transformer_softmax_embeddings_normalization'],
+            action='store_true',
+            help='normalize the final softmax projection embeddings in the transformer model'))
+
+        group.append(ParameterSpecification(
+            name='transformer_sign_dropout', default=False,
+            visible_arg_names=['--transformer_sign_dropout'],
+            action='store_true',
+            help='enable sign dropout (random sign flip) on embeddings and residual connections in the transformer (preserves l2-norm)'))
+
         # Add command-line parameters for 'training' group.
 
         group = param_specs['training']

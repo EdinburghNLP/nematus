@@ -48,3 +48,16 @@ def get_shape_list(inputs):
                 dim = dynamic_shape[i]
             dims_list.append(dim)
     return dims_list
+
+def sqrt_softmax(logits, axis=None):
+    """Square root of softmax
+       Equivalent to tf.sqrt(tf.nn.softmax(logits, axis)) but with stable gradients
+    """
+
+    if axis == None:
+        axis = -1
+    max_logit = tf.reduce_max(logits, axis=axis, keepdims=True)
+    raw_values = tf.exp(0.5 * (logits - max_logit))
+    normalizer_values = tf.exp(logits - max_logit)
+    normalizer = tf.sqrt(tf.reduce_sum(normalizer_values, axis=axis, keepdims=True))
+    return raw_values / normalizer

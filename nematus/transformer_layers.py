@@ -62,6 +62,23 @@ def get_positional_signal(time_steps, depth, float_dtype, min_timescale=1, max_t
     positional_signal = tf.reshape(positional_signal, [1, time_steps, depth])
     return positional_signal
 
+def sign_dropout(inputs, rate=0.1, noise_shape=None, training=False, seed=None):
+    """ Apply sign dropout: flip the sign of the input elements with probability 'rate'
+        Preserves the l2 norm of the inputs. """
+
+    if rate == 0.:
+        return inputs
+#    def training_func():
+#        shape = noise_shape
+#        if shape == None:
+#            shape = inputs.shape
+#        noise = tf.random.uniform(shape, seed=seed)
+#        noised_inputs = tf.where(noise < rate, -inputs, inputs)
+#        return noised_inputs
+#    return tf.cond(training, training_func, lambda: inputs)
+
+    dropout_mask = tf.layers.dropout(tf.ones_like(inputs), rate=rate, noise_shape=noise_shape, training=training, seed=seed)
+    return tf.where(dropout_mask > 0, inputs, -inputs)
 
 class EmbeddingLayer(object):
     """ Looks up embeddings for the specified token sequence in the learned embedding table; allows for easy weight
@@ -165,6 +182,7 @@ class SphericalNormLayer(object):
 
         if initial_scale == None:
             initial_scale = np.sqrt(dims_out)
+        #traniable_scale=False # Debug
         with tf.variable_scope(name, values=[dims_out]):
             if traniable_scale:
                 self.scale = tf.get_variable(name='scale',
@@ -181,12 +199,13 @@ class SphericalNormLayer(object):
         normalized = inputs * scaling_factor
 
         return normalized
+        #return inputs # Debug
 
 
 class ProcessingLayer(object):
     """ Optionally applies residual connections, layer normalization, or dropout. """
 
-    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name, use_spherical_norm=False, use_spherical_residual_mixing=False):
+    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name, use_spherical_norm=False, use_spherical_residual_mixing=False, use_sign_dropout=False):
         # Set attributes
         self.use_layer_norm = use_layer_norm
         self.dropout_rate = dropout_rate
@@ -194,6 +213,7 @@ class ProcessingLayer(object):
         self.name = name
         self.use_spherical_norm=use_spherical_norm
         self.use_spherical_residual_mixing=use_spherical_residual_mixing
+        self.use_sign_dropout=use_sign_dropout
 
         # Initialize layer or spherical normalization and spherical residual mixing, if specified
         with tf.variable_scope(self.name):
@@ -212,7 +232,8 @@ class ProcessingLayer(object):
             outputs = inputs
             # Apply dropout
             if self.dropout_rate > 0.0:
-                outputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+                dropout_func = sign_dropout if self.use_sign_dropout else tf.layers.dropout
+                outputs = dropout_func(inputs, rate=self.dropout_rate, training=self.training)
             # Apply spherical normalization
             if self.use_spherical_norm:
                 outputs = self.spherical_norm.forward(outputs)
@@ -240,7 +261,8 @@ class FeedForwardLayer(object):
                  use_bias,
                  use_layer_norm,
                  training,
-                 name):
+                 name,
+                 use_sign_dropout=False):
         # Set attributes
         self.in_size = in_size
         self.out_size = out_size
@@ -249,6 +271,7 @@ class FeedForwardLayer(object):
         self.use_bias = use_bias
         self.training = training
         self.name = name
+        self.use_sign_dropout=use_sign_dropout
 
         with tf.variable_scope(self.name):
             # Set up layer normalization
@@ -276,7 +299,8 @@ class FeedForwardLayer(object):
         with tf.variable_scope(self.name, values=[inputs]):
             # Optionally apply dropout
             if self.dropout_rate > 0.0:
-                inputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+                dropout_func = sign_dropout if self.use_sign_dropout else tf.layers.dropout
+                inputs = dropout_func(inputs, rate=self.dropout_rate, training=self.training)
             # Feed through a dense layer
             outputs = matmul_nd(inputs, self.weights)
             if self.use_bias:
@@ -300,7 +324,8 @@ class FeedForwardNetwork(object):
                  use_layer_norm,
                  dropout_rate,
                  training,
-                 name=None):
+                 name=None,
+                 use_sign_dropout=False):
         # Set attributes
         self.layer_dims = layer_dims
         self.float_dtype = float_dtype
@@ -310,6 +335,7 @@ class FeedForwardNetwork(object):
         self.dropout_rate = dropout_rate
         self.training = training
         self.name = name
+        self.use_sign_dropout=use_sign_dropout
         # Container for network layers
         self.layers = list()
         self._initialize_layers()
@@ -338,6 +364,7 @@ class FeedForwardNetwork(object):
                                                 use_bias=self.use_bias,
                                                 use_layer_norm=self.use_layer_norm,
                                                 training=self.training,
+                                                use_sign_dropout=self.use_sign_dropout,
                                                 name='ff_layer_{:d}'.format(layer_id + 1)))
 
     def forward(self, inputs):

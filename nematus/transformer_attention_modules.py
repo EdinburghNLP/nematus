@@ -3,7 +3,7 @@
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
-from tf_utils import get_shape_list
+from tf_utils import get_shape_list, sqrt_softmax
 from transformer_layers import FeedForwardLayer, matmul_nd, SphericalNormLayer
 
 class MultiHeadAttentionLayer(object):
@@ -21,7 +21,8 @@ class MultiHeadAttentionLayer(object):
                  dropout_attn,
                  training,
                  name=None,
-                 spherical_mode=False):
+                 spherical_mode=False,
+                 spherical_normalization_on_keys_and_queries=False):
 
         # Set attributes
         self.reference_dims = reference_dims
@@ -35,6 +36,7 @@ class MultiHeadAttentionLayer(object):
         self.training = training
         self.name = name
         self.spherical_mode=spherical_mode
+        self.spherical_normalization_on_keys_and_queries=spherical_normalization_on_keys_and_queries
 
         # Check if the specified hyper-parameters are consistent
         if total_key_dims % num_heads != 0:
@@ -85,9 +87,10 @@ class MultiHeadAttentionLayer(object):
                                                        use_layer_norm=False,
                                                        training=self.training,
                                                        name='context_projection')
-            if self.spherical_mode:
+            if self.spherical_normalization_on_keys_and_queries:
                 self.q_spherical_norm = SphericalNormLayer(self.total_key_dims / num_heads, traniable_scale=True, name='q_spherical_norm')
                 self.k_spherical_norm = SphericalNormLayer(self.total_key_dims / num_heads, traniable_scale=False, name='k_spherical_norm')
+            if self.spherical_mode:
                 self.v_spherical_norm = SphericalNormLayer(self.total_value_dims / num_heads, traniable_scale=False, name='v_spherical_norm')
 
 
@@ -127,9 +130,10 @@ class MultiHeadAttentionLayer(object):
     def _dot_product_attn(self, queries, keys, values, attn_mask, scaling_on):
         """ Defines the dot-product attention function; see Vasvani et al.(2017), Eq.(1). """
         # query/ key/ value have shape = [batch_size, time_steps, num_heads, num_features]
-        if self.spherical_mode:
+        if self.spherical_normalization_on_keys_and_queries:
             queries = self.q_spherical_norm.forward(queries)
             keys = self.k_spherical_norm.forward(keys)
+        if self.spherical_mode:
             values = self.v_spherical_norm.forward(values)
         # Tile keys and values tensors to match the number of decoding beams; ignored if already done by fusion module
         num_beams = get_shape_list(queries)[0] // get_shape_list(keys)[0]
@@ -157,16 +161,17 @@ class MultiHeadAttentionLayer(object):
             attn_logits += attn_mask
 
         # Calculate attention weights
-        attn_weights = tf.nn.softmax(attn_logits)
-        # Optionally apply dropout:
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
-            if self.spherical_mode:
-                # Renormalize attention weights
-                attn_weights = attn_weights / tf.maximum(tf.reduce_sum(attn_weights, axis=-1, keepdims=True), 1e-9)
         if self.spherical_mode:
-            # Sqrt attention weights to preserve the l2-norm of the weighted combination of values
-            attn_weights = tf.sqrt(attn_weights)
+            # Optionally apply dropout on the logits
+            if self.dropout_attn > 0.0:
+                logit_dropout_mask =  tf.layers.dropout(tf.ones_like(attn_logits), rate=self.dropout_attn, training=self.training)
+                attn_logits = tf.where(logit_dropout_mask > 0., attn_logits, tf.ones_like(attn_logits) * -1e10)
+            attn_weights = sqrt_softmax(attn_logits)
+        else:
+            attn_weights = tf.nn.softmax(attn_logits)
+        # Optionally apply dropout:
+        if (self.dropout_attn > 0.0) and not self.spherical_mode:
+            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
         # Weigh attention values
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories

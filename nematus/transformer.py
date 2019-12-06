@@ -122,7 +122,7 @@ class Transformer(object):
                                                           self.config.state_size,
                                                           FLOAT_DTYPE,
                                                           name='softmax_projection_layer',
-                                                          l2_normalize_on_project=self.config.transformer_spherical_normalization,
+                                                          l2_normalize_on_project=self.transformer_softmax_embeddings_normalization,
                                                           l2_normalize_trainable_scale=True)
             else:
                 softmax_projection_layer = decoder_embedding_layer
