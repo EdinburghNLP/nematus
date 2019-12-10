@@ -4,7 +4,10 @@ Layer definitions
 
 import tensorflow as tf
 
-import initializers
+try:
+    from . import initializers
+except (ModuleNotFoundError, ImportError) as e:
+    import initializers
 
 """Controls bias and layer normalization handling in GRUs."""
 class LegacyBiasType:

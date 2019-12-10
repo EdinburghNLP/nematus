@@ -3,10 +3,14 @@ import logging
 
 import gzip
 
-import shuffle
 import subprocess
-from util import load_dict
 
+try:
+    from .util import load_dict
+    from . import shuffle
+except (ModuleNotFoundError, ImportError) as e:
+    from util import load_dict
+    import shuffle
 
 def fopen(filename, mode='r'):
     if filename.endswith('.gz'):

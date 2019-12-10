@@ -20,13 +20,23 @@ import tempfile
 
 import tensorflow as tf
 
-from config import load_config_from_json_file
-from data_iterator import TextIterator
-from exponential_smoothing import ExponentialSmoothing
-import model_loader
-import rnn_model
-import train
-import transformer
+try:
+    from .config import load_config_from_json_file
+    from .data_iterator import TextIterator
+    from .exponential_smoothing import ExponentialSmoothing
+    from . import model_loader
+    from . import rnn_model
+    from . import train
+    from . import transformer
+except (ModuleNotFoundError, ImportError) as e:
+    from config import load_config_from_json_file
+    from data_iterator import TextIterator
+    from exponential_smoothing import ExponentialSmoothing
+    import model_loader
+    import rnn_model
+    import train
+    import transformer
+
 
 
 # FIXME pass in paths not file objects, since we need to know the paths anyway

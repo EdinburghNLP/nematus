@@ -8,8 +8,12 @@ import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
-from exponential_smoothing import ExponentialSmoothing
-import training_progress
+try:
+    from .exponential_smoothing import ExponentialSmoothing
+    from . import training_progress
+except (ModuleNotFoundError, ImportError) as e:
+    from exponential_smoothing import ExponentialSmoothing
+    import training_progress
 
 def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
     """Initializes all variables or restores variables from a checkpoint.

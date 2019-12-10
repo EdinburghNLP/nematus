@@ -1,9 +1,14 @@
 import tensorflow as tf
 
-import layers
-import model_inputs
 
-from sampling_utils import SamplingUtils
+try:
+    from . import layers
+    from . import model_inputs
+    from .sampling_utils import SamplingUtils
+except (ModuleNotFoundError, ImportError) as e:
+    import layers
+    import model_inputs
+    from sampling_utils import SamplingUtils
 
 
 """Builds a GRU-based attentional encoder-decoder model.

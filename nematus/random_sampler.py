@@ -1,9 +1,15 @@
 import tensorflow as tf
 
-import rnn_inference
-import sampler_inputs
-from transformer import INT_DTYPE, FLOAT_DTYPE
-import transformer_inference
+try:
+    from . import rnn_inference
+    from . import sampler_inputs
+    from .transformer import INT_DTYPE, FLOAT_DTYPE
+    from . import transformer_inference
+except:
+    import rnn_inference
+    import sampler_inputs
+    from transformer import INT_DTYPE, FLOAT_DTYPE
+    import transformer_inference
 
 
 class RandomSampler:

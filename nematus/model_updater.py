@@ -3,9 +3,14 @@ import math
 import numpy
 import tensorflow as tf
 
-from beam_search_sampler import BeamSearchSampler
-import mrt_utils as mru
-from random_sampler import RandomSampler
+try:
+    from .beam_search_sampler import BeamSearchSampler
+    from . import mrt_utils as mru
+    from .random_sampler import RandomSampler
+except:
+    from beam_search_sampler import BeamSearchSampler
+    import mrt_utils as mru
+    from random_sampler import RandomSampler
 
 
 class ModelUpdater(object):

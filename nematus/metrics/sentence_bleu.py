@@ -3,10 +3,14 @@
 from math import exp
 from operator import mul
 from collections import defaultdict
-
-from metrics.scorer import Scorer
-from metrics.reference import Reference
 from functools import reduce
+
+try:
+    from .scorer import Scorer
+    from .reference import Reference
+except (ModuleNotFoundError, ImportError) as e:
+    from metrics.scorer import Scorer
+    from metrics.reference import Reference
 
 class SentenceBleuScorer(Scorer):
     """

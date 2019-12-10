@@ -20,19 +20,35 @@ logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 import numpy
 import tensorflow as tf
 
-from beam_search_sampler import BeamSearchSampler
-from config import read_config_from_cmdline, write_config_to_json_file
-from data_iterator import TextIterator
-from exponential_smoothing import ExponentialSmoothing
-import learning_schedule
-import model_loader
-from model_updater import ModelUpdater
-from random_sampler import RandomSampler
-import rnn_model
-import tf_utils
-from transformer import Transformer as TransformerModel
-import translate_utils
-import util
+try:
+    from .beam_search_sampler import BeamSearchSampler
+    from .config import read_config_from_cmdline, write_config_to_json_file
+    from .data_iterator import TextIterator
+    from .exponential_smoothing import ExponentialSmoothing
+    from . import learning_schedule
+    from . import model_loader
+    from .model_updater import ModelUpdater
+    from .random_sampler import RandomSampler
+    from . import rnn_model
+    from . import tf_utils
+    from .transformer import Transformer as TransformerModel
+    from . import translate_utils
+    from . import util
+except (ModuleNotFoundError, ImportError) as e:
+    from beam_search_sampler import BeamSearchSampler
+    from config import read_config_from_cmdline, write_config_to_json_file
+    from data_iterator import TextIterator
+    from exponential_smoothing import ExponentialSmoothing
+    import learning_schedule
+    import model_loader
+    from model_updater import ModelUpdater
+    from random_sampler import RandomSampler
+    import rnn_model
+    import tf_utils
+    from transformer import Transformer as TransformerModel
+    import translate_utils
+    import util
+
 
 
 def load_data(config):

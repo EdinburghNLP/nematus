@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-from metrics.scorer import Scorer
-from metrics.reference import Reference
+try:
+    from .scorer import Scorer
+    from .reference import Reference
+except (ModuleNotFoundError, ImportError) as e:
+    from metrics.scorer import Scorer
+    from metrics.reference import Reference
 
 class CharacterFScorer(Scorer):
     """

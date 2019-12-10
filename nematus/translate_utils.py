@@ -5,8 +5,12 @@ import time
 import numpy
 import tensorflow as tf
 
-import exception
-import util
+try:
+    from . import exception
+    from . import util
+except (ModuleNotFoundError, ImportError) as e:
+    import exception
+    import util
 
 
 def translate_batch(session, sampler, x, x_mask, max_translation_len,

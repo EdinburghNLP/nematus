@@ -3,16 +3,28 @@
 import tensorflow as tf
 import numpy
 
-import model_inputs
-import mrt_utils as mru
-from sampling_utils import SamplingUtils
-import tf_utils
-from transformer_blocks import AttentionBlock, FFNBlock
-from transformer_layers import \
-    EmbeddingLayer, \
-    MaskedCrossEntropy, \
-    get_right_context_mask, \
-    get_positional_signal
+try:
+    from . import model_inputs
+    from . import mrt_utils as mru
+    from .sampling_utils import SamplingUtils
+    from . import tf_utils
+    from .transformer_blocks import AttentionBlock, FFNBlock
+    from .transformer_layers import \
+        EmbeddingLayer, \
+        MaskedCrossEntropy, \
+        get_right_context_mask, \
+        get_positional_signal
+except (ModuleNotFoundError, ImportError) as e:
+    import model_inputs
+    import mrt_utils as mru
+    from sampling_utils import SamplingUtils
+    import tf_utils
+    from transformer_blocks import AttentionBlock, FFNBlock
+    from transformer_layers import \
+        EmbeddingLayer, \
+        MaskedCrossEntropy, \
+        get_right_context_mask, \
+        get_positional_signal
 
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32

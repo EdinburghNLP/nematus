@@ -1,6 +1,9 @@
 import tensorflow as tf
 
-import tf_utils
+try:
+    from . import tf_utils
+except (ModuleNotFoundError, ImportError) as e:
+    import tf_utils
 
 class ModelAdapter:
     """Implements model-specific functionality needed by the *Sampler classes.

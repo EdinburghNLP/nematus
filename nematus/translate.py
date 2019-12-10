@@ -16,15 +16,26 @@ import argparse
 
 import tensorflow as tf
 
-from beam_search_sampler import BeamSearchSampler
-from config import load_config_from_json_file
-from exponential_smoothing import ExponentialSmoothing
-import model_loader
-from random_sampler import RandomSampler
-import rnn_model
-from sampling_utils import SamplingUtils
-from transformer import Transformer as TransformerModel
-import translate_utils
+try:
+    from .beam_search_sampler import BeamSearchSampler
+    from .config import load_config_from_json_file
+    from .exponential_smoothing import ExponentialSmoothing
+    from . import model_loader
+    from .random_sampler import RandomSampler
+    from . import rnn_model
+    from .sampling_utils import SamplingUtils
+    from .transformer import Transformer as TransformerModel
+    from . import translate_utils
+except (ModuleNotFoundError, ImportError) as e:
+    from beam_search_sampler import BeamSearchSampler
+    from config import load_config_from_json_file
+    from exponential_smoothing import ExponentialSmoothing
+    import model_loader
+    from random_sampler import RandomSampler
+    import rnn_model
+    from sampling_utils import SamplingUtils
+    from transformer import Transformer as TransformerModel
+    import translate_utils
 
 
 def main(settings):

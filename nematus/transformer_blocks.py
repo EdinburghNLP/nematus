@@ -2,12 +2,17 @@
 
 import tensorflow as tf
 
-from transformer_layers import \
-    ProcessingLayer, \
-    FeedForwardNetwork
+try:
+    from .transformer_attention_modules import MultiHeadAttentionLayer
+    from .transformer_layers import \
+        ProcessingLayer, \
+        FeedForwardNetwork
 
-from transformer_attention_modules import MultiHeadAttentionLayer
-
+except (ModuleNotFoundError, ImportError) as e:
+    from transformer_attention_modules import MultiHeadAttentionLayer
+    from transformer_layers import \
+        ProcessingLayer, \
+        FeedForwardNetwork
 
 # from attention_modules import SingleHeadAttentionLayer, FineGrainedAttentionLayer
 

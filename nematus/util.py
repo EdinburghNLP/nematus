@@ -1,11 +1,15 @@
 """Utility functions."""
 
 import pickle as pkl
-import exception
 import json
 import logging
 import numpy
 import sys
+
+try:
+    from . import exception
+except (ModuleNotFoundError, ImportError) as e:
+    import exception
 
 # batch preparation
 def prepare_data(seqs_x, seqs_y, n_factors, maxlen=None):

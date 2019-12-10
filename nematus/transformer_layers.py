@@ -8,8 +8,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
-import tf_utils
-
+try:
+    from . import tf_utils
+except (ModuleNotFoundError, ImportError) as e:
+    import tf_utils
 
 def matmul_nd(nd_tensor, matrix):
     """ Performs matrix multiplication for n-dimensional inputs. """

@@ -15,8 +15,13 @@ if __name__ == '__main__':
 
 from tempfile import NamedTemporaryFile
 
-from config import load_config_from_json_file
-from score import calc_scores
+try:
+    from .config import load_config_from_json_file
+    from .score import calc_scores
+except (ModuleNotFoundError, ImportError) as e:
+    from config import load_config_from_json_file
+    from score import calc_scores
+
 
 
 def rescore(source_file, nbest_file, output_file, rescorer_settings, options):

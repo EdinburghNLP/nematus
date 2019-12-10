@@ -6,9 +6,15 @@ import math
 import tensorflow as tf
 import numpy as np
 
-from metrics.scorer_provider import ScorerProvider
-import translate_utils
-import util
+try:
+    from .metrics.scorer_provider import ScorerProvider
+    from . import translate_utils
+    from . import util
+except:
+    from metrics.scorer_provider import ScorerProvider
+    import translate_utils
+    import util
+
 
 
 def full_sampler(replica, sampler, sess, config, x, x_mask, y, y_mask):

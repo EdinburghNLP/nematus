@@ -5,8 +5,10 @@ import logging
 import pickle
 import sys
 
-import util
-
+try:
+    from . import util
+except (ModuleNotFoundError, ImportError) as e:
+    import util
 
 class ParameterSpecification:
     """Describes a Nematus configuration parameter.

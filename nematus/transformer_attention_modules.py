@@ -3,8 +3,12 @@
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
-from tf_utils import get_shape_list
-from transformer_layers import FeedForwardLayer, matmul_nd
+try:
+    from .tf_utils import get_shape_list
+    from .transformer_layers import FeedForwardLayer, matmul_nd
+except (ModuleNotFoundError, ImportError) as e:
+    from tf_utils import get_shape_list
+    from transformer_layers import FeedForwardLayer, matmul_nd
 
 class MultiHeadAttentionLayer(object):
     """ Defines the multi-head, multiplicative attention mechanism;

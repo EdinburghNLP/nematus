@@ -2,9 +2,14 @@
 
 import tensorflow as tf
 
-import tf_utils
-from transformer import INT_DTYPE, FLOAT_DTYPE
-from transformer_layers import get_positional_signal
+try:
+    from . import tf_utils
+    from .transformer import INT_DTYPE, FLOAT_DTYPE
+    from .transformer_layers import get_positional_signal
+except (ModuleNotFoundError, ImportError) as e:
+    import tf_utils
+    from transformer import INT_DTYPE, FLOAT_DTYPE
+    from transformer_layers import get_positional_signal
 
 
 class EncoderOutput:

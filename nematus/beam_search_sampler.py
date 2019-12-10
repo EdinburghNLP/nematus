@@ -2,11 +2,18 @@
 
 import tensorflow as tf
 
-import exception
-import rnn_inference
-import sampler_inputs
-from transformer import INT_DTYPE, FLOAT_DTYPE
-import transformer_inference
+try:
+    from . import exception
+    from . import rnn_inference
+    from . import sampler_inputs
+    from .transformer import INT_DTYPE, FLOAT_DTYPE
+    from . import transformer_inference
+except (ModuleNotFoundError, ImportError) as e:
+    import exception
+    import rnn_inference
+    import sampler_inputs
+    from transformer import INT_DTYPE, FLOAT_DTYPE
+    import transformer_inference
 
 
 class BeamSearchSampler:

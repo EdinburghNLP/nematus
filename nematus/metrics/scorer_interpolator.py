@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-from metrics.scorer import Scorer
-from metrics import scorer_provider as sp
+try:
+    from .scorer import Scorer
+    from . import scorer_provider as sp
+except (ModuleNotFoundError, ImportError) as e:
+    from metrics.scorer import Scorer
+    from metrics import scorer_provider as sp
 
 class ScorerInterpolator(Scorer):
     """
