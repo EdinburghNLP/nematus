@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.0-cudnn7-devel
+FROM nvidia/cuda:10.0-cudnn7-devel
 MAINTAINER Tom Kocmi <kocmi@ufal.mff.cuni.cz>
 
 # Install git, wget, python-dev, pip and other dependencies
