@@ -1,10 +1,15 @@
 # Untilities for Minimum Risk Training
 
+import sys
 import itertools
 import math
 
 import tensorflow as tf
 import numpy as np
+
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
 
 try:
     from .metrics.scorer_provider import ScorerProvider

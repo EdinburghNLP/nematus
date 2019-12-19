@@ -1,7 +1,12 @@
 """Adapted from Nematode: https://github.com/demelin/nematode """
 
+import sys
 import tensorflow as tf
 import numpy
+
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
 
 try:
     from . import model_inputs

@@ -1,9 +1,14 @@
+import sys
 import numpy
 import logging
 
 import gzip
 
 import subprocess
+
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
 
 try:
     from .util import load_dict

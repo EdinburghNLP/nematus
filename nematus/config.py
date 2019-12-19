@@ -5,6 +5,10 @@ import logging
 import pickle
 import sys
 
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
+
 try:
     from . import util
 except (ModuleNotFoundError, ImportError) as e:

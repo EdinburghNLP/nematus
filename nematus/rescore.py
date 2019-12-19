@@ -15,6 +15,10 @@ if __name__ == '__main__':
 
 from tempfile import NamedTemporaryFile
 
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
+
 try:
     from .config import load_config_from_json_file
     from .score import calc_scores

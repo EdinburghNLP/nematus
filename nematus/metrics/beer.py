@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
+import sys
 import subprocess, threading
+
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
 
 try:
     from .scorer import Scorer

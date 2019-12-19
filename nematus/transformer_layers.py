@@ -4,9 +4,14 @@
 
 """ Layer implementations. """
 
+import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
+
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
 
 try:
     from . import tf_utils

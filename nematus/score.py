@@ -20,6 +20,10 @@ import tempfile
 
 import tensorflow as tf
 
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
+
 try:
     from .config import load_config_from_json_file
     from .data_iterator import TextIterator

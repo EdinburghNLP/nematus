@@ -20,6 +20,10 @@ logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 import numpy
 import tensorflow as tf
 
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
+
 try:
     from .beam_search_sampler import BeamSearchSampler
     from .config import read_config_from_cmdline, write_config_to_json_file

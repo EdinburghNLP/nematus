@@ -8,6 +8,10 @@ import numpy
 import tensorflow as tf
 import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
+# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+if sys.version_info < (3, 6):
+    ModuleNotFoundError = SystemError
+
 try:
     from .exponential_smoothing import ExponentialSmoothing
     from . import training_progress
