@@ -3,6 +3,7 @@
 Rescoring an n-best list of translations using a translation model.
 '''
 
+import sys
 import logging
 if __name__ == '__main__':
     # Parse console arguments.

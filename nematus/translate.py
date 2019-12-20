@@ -2,6 +2,7 @@
 
 """Translates a source file using a translation model (or ensemble)."""
 
+import sys
 import logging
 if __name__ == '__main__':
     # Parse console arguments.
