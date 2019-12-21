@@ -13,7 +13,7 @@ setuptools.setup(
     license='BSD 3-clause',
     url='http://github.com/EdinburghNLP/nematus',
     install_requires=['numpy',
-                      'tensorflow'],
+                      'tensorflow-gpu==1.14'],
     classifiers=['Development Status :: 3 - Alpha',
                  'Intended Audience :: Science/Research',
                  'License :: OSI Approved :: BSD License',

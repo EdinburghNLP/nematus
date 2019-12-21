@@ -1,8 +1,17 @@
 FROM nvidia/cuda:10.0-cudnn7-devel
 MAINTAINER Tom Kocmi <kocmi@ufal.mff.cuni.cz>
 
+# Set locale to en_US.UTF-8 to set UTF-8 as default encoding.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y locales \
+    && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && dpkg-reconfigure --frontend=noninteractive locales \
+    && update-locale LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LC_ALL en_US.UTF-8
+
 # Install git, wget, python-dev, pip and other dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get install -y \
   git \
   wget \
   cmake \
@@ -20,7 +29,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip3 install --upgrade pip
 RUN pip3 install -U setuptools
-RUN pip3 install tensorflow==1.15
+RUN pip3 install tensorflow-gpu==1.14
 
 # Set CUDA_ROOT
 ENV CUDA_ROOT /usr/local/cuda/bin
