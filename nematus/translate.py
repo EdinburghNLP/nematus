@@ -6,7 +6,7 @@ import sys
 import logging
 if __name__ == '__main__':
     # Parse console arguments.
-    from settings import TranslationSettings
+    from .settings import TranslationSettings
     settings = TranslationSettings(from_console_arguments=True)
     # Set the logging level. This needs to be done before the tensorflow
     # module is imported.
