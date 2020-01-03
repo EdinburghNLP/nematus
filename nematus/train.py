@@ -180,7 +180,7 @@ def train(config, sess):
     saver, progress = model_loader.init_or_restore_variables(
         config, sess, train=True)
 
-    global_step.load(progress.uidx, sess)
+    global_step.assign(progress.uidx, sess)
 
     if config.sample_freq:
         random_sampler = RandomSampler(

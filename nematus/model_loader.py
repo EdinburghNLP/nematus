@@ -6,7 +6,8 @@ import sys
 
 import numpy
 import tensorflow as tf
-import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
+from tensorflow.python.framework import ops
+#import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -55,7 +56,8 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
             return True
         return False
 
-    variables = slim.get_variables_to_restore()
+    variables = ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)
+    print(variables)
 
     # Construct a mapping between saved variable names and names in the current
     # scope. There are two reasons why names might be different:

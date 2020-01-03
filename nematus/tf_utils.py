@@ -12,7 +12,7 @@ def assert_shapes(shapes):
         assertion_op = tf.debugging.assert_shapes(shapes)
         with tf.control_dependencies([assertion_op]):
             pass
-    except AttributeError:
+    except (AttributeError, TypeError) as e:
         pass
 
 
