@@ -129,7 +129,7 @@ class LayerNormLayer(object):
             self.offset = tf.compat.v1.get_variable(name='offset',
                                           shape=[dims_out],
                                           dtype=tf.float32,
-                                          initializer=tf.compat.v1.zeros_initializer())
+                                          initializer=tf.zeros_initializer())
             self.scale = tf.compat.v1.get_variable(name='scale',
                                          shape=[dims_out],
                                          dtype=tf.float32,
@@ -217,7 +217,7 @@ class FeedForwardLayer(object):
                 self.biases = tf.compat.v1.get_variable(name='dense_layer_biases',
                                               shape=biases_shape,
                                               dtype=float_dtype,
-                                              initializer=tf.compat.v1.zeros_initializer(),
+                                              initializer=tf.zeros_initializer(),
                                               trainable=True)
 
     def forward(self, inputs):

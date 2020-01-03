@@ -134,7 +134,7 @@ def train(config, sess):
                     model = rnn_model.RNNModel(config)
                 replicas.append(model)
 
-    init = tf.compat.v1.zeros_initializer(dtype=tf.int32)
+    init = tf.zeros_initializer()
     global_step = tf.compat.v1.get_variable('time', [], initializer=init, trainable=False)
 
     if config.learning_schedule == "constant":

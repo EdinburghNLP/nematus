@@ -539,7 +539,7 @@ class _ModelUpdateGraph(object):
         self._accumulated_loss = tf.compat.v1.get_variable(
             name='accumulated_loss',
             shape=[],
-            initializer=tf.compat.v1.zeros_initializer(dtype=tf.float32),
+            initializer=tf.zeros_initializer(),
             trainable=False)
 
         self._trainables, self._accumulated_gradients = {}, {}

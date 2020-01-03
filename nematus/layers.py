@@ -72,7 +72,7 @@ class FeedForwardLayer(object):
             W = tf.compat.v1.get_variable('W', initializer=init)
         self.W = W
         self.b = tf.compat.v1.get_variable('b', [out_size],
-                                 initializer=tf.compat.v1.zeros_initializer)
+                                 initializer=tf.zeros_initializer)
         self.non_linearity = non_linearity
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
@@ -159,7 +159,7 @@ class LayerNormLayer(object):
                  eps=1e-5):
         #TODO: If nematus_compat is true, then eps must be 1e-5!
         self.new_mean = tf.compat.v1.get_variable('new_mean', [layer_size],
-                                        initializer=tf.compat.v1.zeros_initializer)
+                                        initializer=tf.zeros_initializer)
         self.new_std = tf.compat.v1.get_variable('new_std', [layer_size],
                                        initializer=tf.compat.v1.constant_initializer(1))
         self.eps = eps
@@ -196,7 +196,7 @@ class GRUStep(object):
             self.gates_bias = None
         else:
             self.gates_bias = tf.compat.v1.get_variable('gates_bias', [2*state_size],
-                                          initializer=tf.compat.v1.zeros_initializer)
+                                          initializer=tf.zeros_initializer)
 
         init = initializers.ortho_weight(state_size)
         self.state_to_proposal = tf.compat.v1.get_variable('state_to_proposal',
@@ -210,7 +210,7 @@ class GRUStep(object):
             self.proposal_bias = None
         else:
             self.proposal_bias = tf.compat.v1.get_variable('proposal_bias', [state_size],
-                                             initializer=tf.compat.v1.zeros_initializer)
+                                             initializer=tf.zeros_initializer)
 
         self.legacy_bias_type = legacy_bias_type
         self.use_layer_norm = use_layer_norm
@@ -536,7 +536,7 @@ class AttentionStep(object):
         self.context_to_hidden = tf.compat.v1.get_variable('context_to_hidden',
                                                  initializer=init)
         self.hidden_bias = tf.compat.v1.get_variable('hidden_bias', [hidden_size],
-                                           initializer=tf.compat.v1.zeros_initializer)
+                                           initializer=tf.zeros_initializer)
         init = initializers.norm_weight(hidden_size, 1)
         self.hidden_to_score = tf.compat.v1.get_variable('hidden_to_score',
                                                initializer=init)

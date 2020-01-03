@@ -57,7 +57,6 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
         return False
 
     variables = ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)
-    print(variables)
 
     # Construct a mapping between saved variable names and names in the current
     # scope. There are two reasons why names might be different:

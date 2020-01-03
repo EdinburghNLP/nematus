@@ -154,7 +154,7 @@ def theano_to_tensorflow_model(in_path, out_path):
     with tf.compat.v1.Session() as sess:
         logging.info('Building model...')
         model = rnn_model.RNNModel(config)
-        init = tf.compat.v1.zeros_initializer(dtype=tf.int32)
+        init = tf.zeros_initializer(dtype=tf.int32)
         global_step = tf.compat.v1.get_variable('time', [], initializer=init, trainable=False)
         saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
