@@ -60,7 +60,7 @@ class BeamSearchSampler:
         self._configs = configs
         self._beam_size = beam_size
 
-        with tf.name_scope('beam_search'):
+        with tf.compat.v1.name_scope('beam_search'):
 
             # Define placeholders.
             self.inputs = sampler_inputs.SamplerInputs()
@@ -69,7 +69,7 @@ class BeamSearchSampler:
             # Transformer and RNN models.
             model_adapters = []
             for i, (model, config) in enumerate(zip(models, configs)):
-                with tf.name_scope('model_adapter_{}'.format(i)) as scope:
+                with tf.compat.v1.name_scope('model_adapter_{}'.format(i)) as scope:
                     if config.model_type == 'transformer':
                         adapter = transformer_inference.ModelAdapter(
                             model, config, scope)
@@ -196,10 +196,10 @@ def _beam_search(model_adapters, beam_size, batch_size_x, max_translation_len,
     _, alive_sequences, alive_scores, finished_sequences, finished_scores, \
         finished_eos_flags, _ = \
             tf.while_loop(
-                loop_cond,
-                loop_body,
-                loop_vars,
-                shape_invariants,
+                cond=loop_cond,
+                body=loop_body,
+                loop_vars=loop_vars,
+                shape_invariants=shape_invariants,
                 parallel_iterations=10,
                 swap_memory=False,
                 back_prop=False)
@@ -210,10 +210,10 @@ def _beam_search(model_adapters, beam_size, batch_size_x, max_translation_len,
     # Account for the case in which no translations terminate in <EOS> for a
     # particular input sentence. In that case, copy the contents of the alive
     # beam for that sentence into the finished beam (sequence + score).
-    finished_sequences = tf.where(tf.reduce_any(finished_eos_flags, 1),
+    finished_sequences = tf.compat.v1.where(tf.reduce_any(input_tensor=finished_eos_flags, axis=1),
                                   finished_sequences, alive_sequences)
     # Attention: alive_scores are not length normalized!
-    finished_scores = tf.where(tf.reduce_any(finished_eos_flags, 1),
+    finished_scores = tf.compat.v1.where(tf.reduce_any(input_tensor=finished_eos_flags, axis=1),
                                finished_scores, alive_scores)
 
     # Truncate finished sequences to remove initial <GO>.
@@ -221,15 +221,15 @@ def _beam_search(model_adapters, beam_size, batch_size_x, max_translation_len,
 
     # Normalize scores. Note that we include the <EOS> token when calculating
     # sequence length.
-    seq_len = tf.shape(finished_sequences)[2]
+    seq_len = tf.shape(input=finished_sequences)[2]
     indices = tf.range(seq_len, dtype=tf.int32)
     indices = tf.reshape(indices, [1, 1, seq_len])
     indices = tf.tile(indices, [batch_size_x, beam_size, 1])
     seq_lens = tf.reshape(seq_len, [1, 1, 1])
     seq_lens = tf.tile(seq_lens, [batch_size_x, beam_size, seq_len])
-    eos_indices = tf.where(tf.equal(finished_sequences, eos_id),
+    eos_indices = tf.compat.v1.where(tf.equal(finished_sequences, eos_id),
                            indices, seq_lens)
-    lengths = tf.reduce_min(eos_indices+1, axis=2)
+    lengths = tf.reduce_min(input_tensor=eos_indices+1, axis=2)
     float_lengths = tf.cast(lengths, dtype=tf.float32)
     length_penalties = float_lengths ** normalization_alpha
     finished_scores = finished_scores / length_penalties
@@ -300,14 +300,14 @@ def _generate_while_loop_cond_func(max_translation_len):
 
         # Calculate the score of the least likely sequence currently finished.
         lowest_finished_score = tf.reduce_min(
-            finished_scores * tf.cast(finished_eos_flags, FLOAT_DTYPE), axis=1)
+            input_tensor=finished_scores * tf.cast(finished_eos_flags, FLOAT_DTYPE), axis=1)
 
         # Account for the case in which none of the sequences in 'finished'
         # have terminated so far; In that case, each of the unfinished
         # sequences is assigned a high negative probability, so that the
         # termination condition is not met.
-        tmp = tf.reduce_any(finished_eos_flags, 1)
-        mask_unfinished = (1. - tf.to_float(tmp)) * (-1. * 1e7)
+        tmp = tf.reduce_any(input_tensor=finished_eos_flags, axis=1)
+        mask_unfinished = (1. - tf.cast(tmp, dtype=tf.float32)) * (-1. * 1e7)
         lowest_finished_score += mask_unfinished
 
         # Check is the current highest alive score is lower than the current
@@ -315,7 +315,7 @@ def _generate_while_loop_cond_func(max_translation_len):
         likelihood_criterion = \
             tf.logical_not(
                 tf.reduce_all(
-                  tf.greater(lowest_finished_score, highest_alive_score)))
+                  input_tensor=tf.greater(lowest_finished_score, highest_alive_score)))
 
         # Decide whether to continue the decoding process.
         return tf.logical_and(length_criterion, likelihood_criterion)
@@ -341,7 +341,7 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
 
         # Get the vocab IDs for this timestep in the order of the model inputs.
         next_ids = alive_sequences[:, :, -1]      # [batch_size_x, beam_size]
-        next_ids = tf.transpose(next_ids, [1, 0]) # [beam_size, batch_size_x]
+        next_ids = tf.transpose(a=next_ids, perm=[1, 0]) # [beam_size, batch_size_x]
         next_ids = tf.reshape(next_ids, [-1])     # [beam_size * batch_size_x]
 
         # Run the vocab IDs through the decoders and get the log probs for all
@@ -368,23 +368,23 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
         # care what gets added beyond the EOS, only that the resulting sequence
         # gets a very low score. We give every possible extension the lowest
         # possible probability.
-        sum_log_probs = tf.where(tf.equal(next_ids, eos_id),
+        sum_log_probs = tf.compat.v1.where(tf.equal(next_ids, eos_id),
                                  eos_log_probs,
                                  sum_log_probs)
 
         # Reshape / transpose to match alive_sequences, alive_scores, etc.
         sum_log_probs = tf.reshape(sum_log_probs,
                                    [beam_size, batch_size_x, vocab_size])
-        sum_log_probs = tf.transpose(sum_log_probs, [1, 0, 2])
+        sum_log_probs = tf.transpose(a=sum_log_probs, perm=[1, 0, 2])
 
         # Add log probs for this timestep to the full sequence log probs.
         curr_scores = sum_log_probs + tf.expand_dims(alive_scores, axis=2)
 
         # At first time step, all beams are identical - pick first.
         # At other time steps, flatten all beams.
-        flat_curr_scores = tf.cond(tf.equal(current_time_step, 1),
-                      lambda: curr_scores[:,0],
-                      lambda: tf.reshape(curr_scores, [batch_size_x, -1]))
+        flat_curr_scores = tf.cond(pred=tf.equal(current_time_step, 1),
+                      true_fn=lambda: curr_scores[:,0],
+                      false_fn=lambda: tf.reshape(curr_scores, [batch_size_x, -1]))
 
         # Select top-k highest scores.
         top_scores, top_ids = tf.nn.top_k(flat_curr_scores, k=beam_size)
@@ -423,7 +423,7 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
 
         # Exclude completed sequences from the alive beam by setting their
         # scores to a large negative value.
-        selection_scores = top_scores + tf.to_float(top_eos_flags) * (-1.*1e7)
+        selection_scores = top_scores + tf.cast(top_eos_flags, dtype=tf.float32) * (-1.*1e7)
 
         # Update the alive beam.
         updated_alive_sequences, updated_alive_scores, \
@@ -456,7 +456,7 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
         # Exclude incomplete sequences from the finished beam by setting their
         # scores to a large negative value
         selection_scores = top_scores \
-                           + (1. - tf.to_float(top_eos_flags)) * (-1.*1e7)
+                           + (1. - tf.cast(top_eos_flags, dtype=tf.float32)) * (-1.*1e7)
 
         # Combine sequences finished at previous time steps with the top
         # sequences from current time step, as well as their scores and

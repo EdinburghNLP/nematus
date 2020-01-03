@@ -43,23 +43,23 @@ class ExponentialSmoothing(object):
             # Create variables to hold the smoothed versions of all trainable
             # variables.
             smooth_vars = {}
-            for v in tf.trainable_variables():
+            for v in tf.compat.v1.trainable_variables():
                 assert v.name[-2:] == ":0"
                 name = v.name[:-2] + "_smooth"
-                s = tf.get_variable(name=name,
+                s = tf.compat.v1.get_variable(name=name,
                                     initializer=tf.zeros_like(v),
                                     trainable=False)
                 smooth_vars[v.name] = s
             # Define the ops to update the smoothed variables.
             self._update_ops = []
-            for v in tf.trainable_variables():
+            for v in tf.compat.v1.trainable_variables():
                 s = smooth_vars[v.name]
                 updated_s = (1 - adjusted_smoothing_factor) * s \
                             + adjusted_smoothing_factor * v
-                self._update_ops += [tf.assign(s, updated_s)]
+                self._update_ops += [tf.compat.v1.assign(s, updated_s)]
             # Define the ops to swap the raw and smoothed variables.
             self._swap_ops = []
-            for v in tf.trainable_variables():
+            for v in tf.compat.v1.trainable_variables():
                 s = smooth_vars[v.name]
                 v_value = v.read_value()
                 s_value = s.read_value()

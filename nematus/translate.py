@@ -49,9 +49,9 @@ def main(settings):
     (or STDOUT).
     """
     # Create the TensorFlow session.
-    tf_config = tf.ConfigProto()
+    tf_config = tf.compat.v1.ConfigProto()
     tf_config.allow_soft_placement = True
-    session = tf.Session(config=tf_config)
+    session = tf.compat.v1.Session(config=tf_config)
 
     # Load config file for each model.
     configs = []
@@ -64,7 +64,7 @@ def main(settings):
     logging.debug("Loading models\n")
     models = []
     for i, config in enumerate(configs):
-        with tf.variable_scope("model%d" % i) as scope:
+        with tf.compat.v1.variable_scope("model%d" % i) as scope:
             if config.model_type == "transformer":
                 model = TransformerModel(config)
             else:
@@ -79,7 +79,7 @@ def main(settings):
 
     # Restore the model variables.
     for i, config in enumerate(configs):
-        with tf.variable_scope("model%d" % i) as scope:
+        with tf.compat.v1.variable_scope("model%d" % i) as scope:
             _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
 

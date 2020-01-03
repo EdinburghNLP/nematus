@@ -52,7 +52,7 @@ class MultiHeadAttentionLayer(object):
                              'attention heads {:d}'.format(total_value_dims, num_heads))
 
         # Instantiate parameters
-        with tf.variable_scope(self.name):
+        with tf.compat.v1.variable_scope(self.name):
             self.queries_projection = FeedForwardLayer(self.hypothesis_dims,
                                                        self.total_key_dims,
                                                        float_dtype,
@@ -118,7 +118,7 @@ class MultiHeadAttentionLayer(object):
     def _merge_from_heads(self, split_inputs):
         """ Inverts the _split_among_heads operation. """
         # Transpose split_inputs to perform the merge along the last two dimensions of the split input
-        split_inputs = tf.transpose(split_inputs, [0, 2, 1, 3])
+        split_inputs = tf.transpose(a=split_inputs, perm=[0, 2, 1, 3])
         # Retrieve the depth of the tensor to be merged
         split_inputs_dims = get_shape_list(split_inputs)
         split_inputs_depth = split_inputs_dims[-1]
@@ -131,13 +131,13 @@ class MultiHeadAttentionLayer(object):
         # query/ key/ value have shape = [batch_size, time_steps, num_heads, num_features]
         # Tile keys and values tensors to match the number of decoding beams; ignored if already done by fusion module
         num_beams = get_shape_list(queries)[0] // get_shape_list(keys)[0]
-        keys = tf.cond(tf.greater(num_beams, 1), lambda: tf.tile(keys, [num_beams, 1, 1, 1]), lambda: keys)
-        values = tf.cond(tf.greater(num_beams, 1), lambda: tf.tile(values, [num_beams, 1, 1, 1]), lambda: values)
+        keys = tf.cond(pred=tf.greater(num_beams, 1), true_fn=lambda: tf.tile(keys, [num_beams, 1, 1, 1]), false_fn=lambda: keys)
+        values = tf.cond(pred=tf.greater(num_beams, 1), true_fn=lambda: tf.tile(values, [num_beams, 1, 1, 1]), false_fn=lambda: values)
 
         # Transpose split inputs
-        queries = tf.transpose(queries, [0, 2, 1, 3])
-        values = tf.transpose(values, [0, 2, 1, 3])
-        attn_logits = tf.matmul(queries, tf.transpose(keys, [0, 2, 3, 1]))
+        queries = tf.transpose(a=queries, perm=[0, 2, 1, 3])
+        values = tf.transpose(a=values, perm=[0, 2, 1, 3])
+        attn_logits = tf.matmul(queries, tf.transpose(a=keys, perm=[0, 2, 3, 1]))
 
         # Scale attention_logits by key dimensions to prevent softmax saturation, if specified
         if scaling_on:
@@ -149,16 +149,16 @@ class MultiHeadAttentionLayer(object):
         # attention mask should have shape=[batch, num_heads, query_length, key_length]
         # attn_logits has shape=[batch, num_heads, query_length, key_length]
         if attn_mask is not None:
-            attn_mask = tf.cond(tf.greater(num_beams, 1),
-                                lambda: tf.tile(attn_mask, [num_beams, 1, 1, 1]),
-                                lambda: attn_mask)
+            attn_mask = tf.cond(pred=tf.greater(num_beams, 1),
+                                true_fn=lambda: tf.tile(attn_mask, [num_beams, 1, 1, 1]),
+                                false_fn=lambda: attn_mask)
             attn_logits += attn_mask
 
         # Calculate attention weights
         attn_weights = tf.nn.softmax(attn_logits)
         # Optionally apply dropout:
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
         # Weigh attention values
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -219,7 +219,7 @@ class SingleHeadAttentionLayer(object):
         assert attn_type in ['additive', 'multiplicative'], 'Attention type {:s} is not supported.'.format(attn_type)
 
         # Instantiate parameters
-        with tf.variable_scope(self.name):
+        with tf.compat.v1.variable_scope(self.name):
             self.queries_projection = None
             self.attn_weight = None
             if attn_type == 'additive':
@@ -233,7 +233,7 @@ class SingleHeadAttentionLayer(object):
                                                            training=self.training,
                                                            name='queries_projection')
 
-                self.attn_weight = tf.get_variable(name='attention_weight',
+                self.attn_weight = tf.compat.v1.get_variable(name='attention_weight',
                                                    shape=self.hidden_dims,
                                                    dtype=float_dtype,
                                                    initializer=glorot_uniform_initializer(),
@@ -269,12 +269,12 @@ class SingleHeadAttentionLayer(object):
         def _logits_fn(query):
             """ Computes time-step-wise attention scores. """
             query = tf.expand_dims(query, 1)
-            return tf.reduce_sum(self.attn_weight * tf.nn.tanh(keys + query), axis=-1)
+            return tf.reduce_sum(input_tensor=self.attn_weight * tf.nn.tanh(keys + query), axis=-1)
 
         # Obtain attention scores
-        transposed_queries = tf.transpose(queries, [1, 0, 2])  # time-major
+        transposed_queries = tf.transpose(a=queries, perm=[1, 0, 2])  # time-major
         attn_logits = tf.map_fn(_logits_fn, transposed_queries)
-        attn_logits = tf.transpose(attn_logits, [1, 0, 2])
+        attn_logits = tf.transpose(a=attn_logits, perm=[1, 0, 2])
 
         if attn_mask is not None:
             # Transpose and tile the mask
@@ -285,7 +285,7 @@ class SingleHeadAttentionLayer(object):
         attn_weights = tf.nn.softmax(attn_logits, axis=-1, name='attn_weights')
         # Optionally apply dropout
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
         # Obtain context vectors
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -298,7 +298,7 @@ class SingleHeadAttentionLayer(object):
         values = tf.tile(values, [num_beams, 1, 1])
 
         # Use multiplicative attention
-        transposed_keys = tf.transpose(keys, [0, 2, 1])
+        transposed_keys = tf.transpose(a=keys, perm=[0, 2, 1])
         attn_logits = tf.matmul(queries, transposed_keys)
         if attn_mask is not None:
             # Transpose and tile the mask
@@ -309,7 +309,7 @@ class SingleHeadAttentionLayer(object):
         attn_weights = tf.nn.softmax(attn_logits, axis=-1, name='attn_weights')
         # Optionally apply dropout
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
         # Obtain context vectors
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -366,26 +366,26 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
             return self.attn_weight * tf.nn.tanh(keys + query)
 
         # Obtain attention scores
-        transposed_queries = tf.transpose(queries, [1, 0, 2])  # time-major
+        transposed_queries = tf.transpose(a=queries, perm=[1, 0, 2])  # time-major
         # attn_logits has shape=[time_steps_q, batch_size, time_steps_k, num_features]
         attn_logits = tf.map_fn(_logits_fn, transposed_queries)
 
         if attn_mask is not None:
             transposed_mask = \
-                tf.transpose(tf.tile(attn_mask, [get_shape_list(queries)[0] // get_shape_list(attn_mask)[0], 1, 1, 1]),
-                             [2, 0, 3, 1])
+                tf.transpose(a=tf.tile(attn_mask, [get_shape_list(queries)[0] // get_shape_list(attn_mask)[0], 1, 1, 1]),
+                             perm=[2, 0, 3, 1])
             attn_logits += transposed_mask
 
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-2, name='attn_weights')
         # Optionally apply dropout
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
 
         # Obtain context vectors
         expanded_values = tf.expand_dims(values, axis=1)
         weighted_memories = \
-            tf.reduce_sum(tf.multiply(tf.transpose(attn_weights, [1, 0, 2, 3]), expanded_values), axis=2)
+            tf.reduce_sum(input_tensor=tf.multiply(tf.transpose(a=attn_weights, perm=[1, 0, 2, 3]), expanded_values), axis=2)
         return weighted_memories
 
     def _multiplicative_attn(self, queries, keys, values, attn_mask):
@@ -401,33 +401,33 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
             return tf.multiply(keys, query)
 
         # Obtain attention scores
-        transposed_queries = tf.transpose(queries, [1, 0, 2])  # time-major
+        transposed_queries = tf.transpose(a=queries, perm=[1, 0, 2])  # time-major
         # attn_logits has shape=[time_steps_q, batch_size, time_steps_k, num_features]
         attn_logits = tf.map_fn(_logits_fn, transposed_queries)
 
         if attn_mask is not None:
             transposed_mask = \
-                tf.transpose(tf.tile(attn_mask, [get_shape_list(queries)[0] // get_shape_list(attn_mask)[0], 1, 1, 1]),
-                             [2, 0, 3, 1])
+                tf.transpose(a=tf.tile(attn_mask, [get_shape_list(queries)[0] // get_shape_list(attn_mask)[0], 1, 1, 1]),
+                             perm=[2, 0, 3, 1])
             attn_logits += transposed_mask
 
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-2, name='attn_weights')
         # Optionally apply dropout
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
 
         # Obtain context vectors
         expanded_values = tf.expand_dims(values, axis=1)
         weighted_memories = \
-            tf.reduce_sum(tf.multiply(tf.transpose(attn_weights, [1, 0, 2, 3]), expanded_values), axis=2)
+            tf.reduce_sum(input_tensor=tf.multiply(tf.transpose(a=attn_weights, perm=[1, 0, 2, 3]), expanded_values), axis=2)
         return weighted_memories
 
     def _attn(self, queries, keys, values, attn_mask):
         """ For each encoder layer, weighs and combines time-step-wise hidden representation into a single layer
         context state.  -- DEPRECATED, SINCE IT'S SLOW AND PROBABLY NOT ENTIRELY CORRECT """
         # Account for beam-search
-        num_beams = tf.shape(queries)[0] // tf.shape(keys)[0]
+        num_beams = tf.shape(input=queries)[0] // tf.shape(input=keys)[0]
         keys = tf.tile(keys, [num_beams, 1, 1])
         values = tf.tile(values, [num_beams, 1, 1])
 
@@ -440,16 +440,16 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
         def _weighting_fn(step_weights):
             """ Computes position-wise context vectors. """
             # step_weights = tf.expand_dims(step_weights, 2)
-            return tf.reduce_sum(tf.multiply(step_weights, values), axis=1)
+            return tf.reduce_sum(input_tensor=tf.multiply(step_weights, values), axis=1)
 
         # Obtain attention scores
-        transposed_queries = tf.transpose(queries, [1, 0, 2])
+        transposed_queries = tf.transpose(a=queries, perm=[1, 0, 2])
         attn_logits = tf.map_fn(_logits_fn, transposed_queries)  # multiple queries per step are possible
         if attn_mask is not None:
             # attn_logits has shape=[batch, query_lengh, key_length, attn_features]
             transposed_mask = \
-                tf.transpose(tf.tile(attn_mask, [tf.shape(queries)[0] // tf.shape(attn_mask)[0], 1, 1, 1]),
-                             [2, 0, 3, 1])
+                tf.transpose(a=tf.tile(attn_mask, [tf.shape(input=queries)[0] // tf.shape(input=attn_mask)[0], 1, 1, 1]),
+                             perm=[2, 0, 3, 1])
             attn_logits += transposed_mask
 
         # Compute the attention weights
@@ -457,9 +457,9 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
 
         # Optionally apply dropout
         if self.dropout_attn > 0.0:
-            attn_weights = tf.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
 
         # Obtain context vectors
         weighted_memories = tf.map_fn(_weighting_fn, attn_weights)
-        weighted_memories = tf.transpose(weighted_memories, [1, 0, 2])
+        weighted_memories = tf.transpose(a=weighted_memories, perm=[1, 0, 2])
         return weighted_memories

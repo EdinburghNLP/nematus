@@ -65,9 +65,9 @@ def calc_scores(source_file, target_file, scorer_settings, configs):
     for config in configs:
         g = tf.Graph()
         with g.as_default():
-            tf_config = tf.ConfigProto()
+            tf_config = tf.compat.v1.ConfigProto()
             tf_config.allow_soft_placement = True
-            with tf.Session(config=tf_config) as sess:
+            with tf.compat.v1.Session(config=tf_config) as sess:
 
                 logging.info('Building model...')
 

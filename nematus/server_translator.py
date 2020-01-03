@@ -116,7 +116,7 @@ class Translator(object):
         import tensorflow as tf
         models = []
         for i, options in enumerate(self._options):
-            with tf.variable_scope("model%d" % i) as scope:
+            with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 if options.model_type == "transformer":
                     model = TransformerModel(options)
                 else:
@@ -136,9 +136,9 @@ class Translator(object):
 
         # load TF functionality
         import tensorflow as tf
-        tf_config = tf.ConfigProto()
+        tf_config = tf.compat.v1.ConfigProto()
         tf_config.allow_soft_placement = True
-        sess = tf.Session(config=tf_config)
+        sess = tf.compat.v1.Session(config=tf_config)
         models = self._load_models(process_id, sess)
 
         samplers = {}
