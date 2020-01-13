@@ -22,7 +22,8 @@ class MultiHeadAttentionLayer(object):
                  training,
                  name=None,
                  spherical_mode=False,
-                 spherical_normalization_on_keys_and_queries=False):
+                 spherical_normalization_on_keys_and_queries=False,
+                 sqrt_softmax_attention=False):
 
         # Set attributes
         self.reference_dims = reference_dims
@@ -37,6 +38,7 @@ class MultiHeadAttentionLayer(object):
         self.name = name
         self.spherical_mode=spherical_mode
         self.spherical_normalization_on_keys_and_queries=spherical_normalization_on_keys_and_queries
+        self.sqrt_softmax_attention=sqrt_softmax_attention
 
         # Check if the specified hyper-parameters are consistent
         if total_key_dims % num_heads != 0:
@@ -161,7 +163,7 @@ class MultiHeadAttentionLayer(object):
             attn_logits += attn_mask
 
         # Calculate attention weights
-        if self.spherical_mode:
+        if self.sqrt_softmax_attention:
             # Optionally apply dropout on the logits
             if self.dropout_attn > 0.0:
                 logit_dropout_mask =  tf.layers.dropout(tf.ones_like(attn_logits), rate=self.dropout_attn, training=self.training)

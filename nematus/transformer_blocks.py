@@ -55,12 +55,14 @@ class AttentionBlock(object):
                                             training=training,
                                             name='{:s}_sublayer'.format(attn_name),
                                             spherical_mode=config.transformer_spherical_normalization,
-                                            spherical_normalization_on_keys_and_queries=config.transformer_spherical_normalization_on_keys_and_queries)
+                                            spherical_normalization_on_keys_and_queries=config.transformer_spherical_normalization_on_keys_and_queries,
+                                            sqrt_softmax_attention=(not config.transformer_no_sqrt_softmax_attention) and config.transformer_spherical_normalization)
 
         self.post_attn = ProcessingLayer(config.state_size,
                                          use_layer_norm=False,
                                          use_spherical_norm=config.transformer_spherical_normalization,
                                          use_spherical_residual_mixing=config.transformer_spherical_normalization,
+                                         use_spherical_residual_orthogonalization=config.transformer_spherical_normalization_orthogonalize_residuals,
                                          dropout_rate=config.transformer_dropout_residual,
                                          training=training,
                                          name='post_{:s}_sublayer'.format(attn_name))
@@ -108,6 +110,7 @@ class FFNBlock(object):
                                         use_layer_norm=False,
                                         use_spherical_norm=config.transformer_spherical_normalization,
                                         use_spherical_residual_mixing=config.transformer_spherical_normalization,
+                                        use_spherical_residual_orthogonalization=config.transformer_spherical_normalization_orthogonalize_residuals,
                                         dropout_rate=config.transformer_dropout_residual,
                                         training=training,
                                         use_sign_dropout=config.transformer_sign_dropout,

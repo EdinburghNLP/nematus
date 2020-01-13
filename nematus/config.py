@@ -540,6 +540,18 @@ class ConfigSpecification:
             help='apply spherical normalization on keys and queries in transformer attention heads (by default applied only on values for efficiency reasons)'))
 
         group.append(ParameterSpecification(
+            name='transformer_spherical_normalization_orthogonalize_residuals', default=False,
+            visible_arg_names=['--transformer_spherical_normalization_orthogonalize_residuals'],
+            action='store_true',
+            help='when doing spherical normalization, project the output of residual blocks to be orthogonal to the skip-connection vector before mixing (preserves l2-norm)'))
+
+        group.append(ParameterSpecification(
+            name='transformer_no_sqrt_softmax_attention', default=False,
+            visible_arg_names=['--transformer_no_sqrt_softmax_attention'],
+            action='store_true',
+            help='disable computation of attention weights whose squares sum to one over the attention domain (used only with spherical normalization)'))
+
+        group.append(ParameterSpecification(
             name='transformer_softmax_embeddings_normalization', default=False,
             visible_arg_names=['--transformer_softmax_embeddings_normalization'],
             action='store_true',

@@ -205,8 +205,9 @@ class SphericalNormLayer(object):
 class ProcessingLayer(object):
     """ Optionally applies residual connections, layer normalization, or dropout. """
 
-    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name, use_spherical_norm=False, use_spherical_residual_mixing=False, use_sign_dropout=False):
+    def __init__(self, out_size, use_layer_norm, dropout_rate, training, name, use_spherical_norm=False, use_spherical_residual_mixing=False, use_sign_dropout=False, use_spherical_residual_orthogonalization=False):
         # Set attributes
+        self.out_size=out_size
         self.use_layer_norm = use_layer_norm
         self.dropout_rate = dropout_rate
         self.training = training
@@ -214,6 +215,7 @@ class ProcessingLayer(object):
         self.use_spherical_norm=use_spherical_norm
         self.use_spherical_residual_mixing=use_spherical_residual_mixing
         self.use_sign_dropout=use_sign_dropout
+        self.use_spherical_residual_orthogonalization=use_spherical_residual_orthogonalization
 
         # Initialize layer or spherical normalization and spherical residual mixing, if specified
         with tf.variable_scope(self.name):
@@ -234,6 +236,9 @@ class ProcessingLayer(object):
             if self.dropout_rate > 0.0:
                 dropout_func = sign_dropout if self.use_sign_dropout else tf.layers.dropout
                 outputs = dropout_func(inputs, rate=self.dropout_rate, training=self.training)
+            # Apply orthogonalization (we assume that residual_inputs is already normalized to l2-norm equal to sqrt(out_size))
+            if self.use_spherical_residual_orthogonalization and self.use_spherical_residual_mixing and (residual_inputs is not None):
+                outputs = outputs - residual_inputs * tf.reduce_sum((outputs * residual_inputs), axis=-1, keepdims=True) / self.out_size
             # Apply spherical normalization
             if self.use_spherical_norm:
                 outputs = self.spherical_norm.forward(outputs)
