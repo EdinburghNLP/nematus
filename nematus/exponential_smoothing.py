@@ -48,7 +48,8 @@ class ExponentialSmoothing(object):
                 name = v.name[:-2] + "_smooth"
                 s = tf.get_variable(name=name,
                                     initializer=tf.zeros_like(v),
-                                    trainable=False)
+                                    trainable=False,
+                                    use_resource=True)
                 smooth_vars[v.name] = s
             # Define the ops to update the smoothed variables.
             self._update_ops = []
