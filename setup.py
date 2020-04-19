@@ -6,7 +6,7 @@ import setuptools
 
 setuptools.setup(
     name='nematus',
-    version='0.4',
+    version='0.5',
     description='Neural machine translation tools on top of Tensorflow',
     long_description=io.open(os.path.join(os.path.dirname(
         os.path.abspath(__file__)), 'README.md'),encoding='UTF-8').read(),
