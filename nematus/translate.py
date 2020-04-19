@@ -49,75 +49,77 @@ def main(settings):
     (or STDOUT).
     """
     # Create the TensorFlow session.
-    tf_config = tf.ConfigProto()
-    tf_config.allow_soft_placement = True
-    session = tf.Session(config=tf_config)
+    g = tf.Graph()
+    with g.as_default():
+        tf_config = tf.compat.v1.ConfigProto()
+        tf_config.allow_soft_placement = True
+        session = tf.compat.v1.Session(config=tf_config)
 
-    # Load config file for each model.
-    configs = []
-    for model in settings.models:
-        config = load_config_from_json_file(model)
-        setattr(config, 'reload', model)
-        configs.append(config)
+        # Load config file for each model.
+        configs = []
+        for model in settings.models:
+            config = load_config_from_json_file(model)
+            setattr(config, 'reload', model)
+            configs.append(config)
 
-    # Create the model graphs.
-    logging.debug("Loading models\n")
-    models = []
-    for i, config in enumerate(configs):
-        with tf.variable_scope("model%d" % i) as scope:
-            if config.model_type == "transformer":
-                model = TransformerModel(config)
-            else:
-                model = rnn_model.RNNModel(config)
-            model.sampling_utils = SamplingUtils(settings)
-            models.append(model)
+        # Create the model graphs.
+        logging.debug("Loading models\n")
+        models = []
+        for i, config in enumerate(configs):
+            with tf.compat.v1.variable_scope("model%d" % i) as scope:
+                if config.model_type == "transformer":
+                    model = TransformerModel(config)
+                else:
+                    model = rnn_model.RNNModel(config)
+                model.sampling_utils = SamplingUtils(settings)
+                models.append(model)
 
-    # Add smoothing variables (if the models were trained with smoothing).
-    #FIXME Assumes either all models were trained with smoothing or none were.
-    if configs[0].exponential_smoothing > 0.0:
-        smoothing = ExponentialSmoothing(configs[0].exponential_smoothing)
+        # Add smoothing variables (if the models were trained with smoothing).
+        #FIXME Assumes either all models were trained with smoothing or none were.
+        if configs[0].exponential_smoothing > 0.0:
+            smoothing = ExponentialSmoothing(configs[0].exponential_smoothing)
 
-    # Restore the model variables.
-    for i, config in enumerate(configs):
-        with tf.variable_scope("model%d" % i) as scope:
-            _ = model_loader.init_or_restore_variables(config, session,
+        # Restore the model variables.
+        for i, config in enumerate(configs):
+            with tf.compat.v1.variable_scope("model%d" % i) as scope:
+                _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
 
-    # Swap-in the smoothed versions of the variables.
-    if configs[0].exponential_smoothing > 0.0:
-        session.run(fetches=smoothing.swap_ops)
+        # Swap-in the smoothed versions of the variables.
+        if configs[0].exponential_smoothing > 0.0:
+            session.run(fetches=smoothing.swap_ops)
 
-    # FIXME Should be an option in settings
-    max_translation_len = configs[0].translation_maxlen
+        # FIXME Should be an option in settings
+        max_translation_len = configs[0].translation_maxlen
 
-    # Create a BeamSearchSampler / RandomSampler.
-    if settings.translation_strategy == 'beam_search':
-        sampler = BeamSearchSampler(models, configs, settings.beam_size)
-    else:
-        assert settings.translation_strategy == 'sampling'
-        sampler = RandomSampler(models, configs, settings.beam_size)
+        # Create a BeamSearchSampler / RandomSampler.
+        if settings.translation_strategy == 'beam_search':
+            sampler = BeamSearchSampler(models, configs, settings.beam_size)
+        else:
+            assert settings.translation_strategy == 'sampling'
+            sampler = RandomSampler(models, configs, settings.beam_size)
 
-    # Warn about the change from neg log probs to log probs for the RNN.
-    if settings.n_best:
-        model_types = [config.model_type for config in configs]
-        if 'rnn' in model_types:
-            logging.warn('n-best scores for RNN models have changed from '
-                         'positive to negative (as of commit 95793196...). '
-                         'If you are using the scores for reranking etc, then '
-                         'you may need to update your scripts.')
+        # Warn about the change from neg log probs to log probs for the RNN.
+        if settings.n_best:
+            model_types = [config.model_type for config in configs]
+            if 'rnn' in model_types:
+                logging.warn('n-best scores for RNN models have changed from '
+                             'positive to negative (as of commit 95793196...). '
+                             'If you are using the scores for reranking etc, then '
+                             'you may need to update your scripts.')
 
-    # Translate the source file.
-    translate_utils.translate_file(
-        input_file=settings.input,
-        output_file=settings.output,
-        session=session,
-        sampler=sampler,
-        config=configs[0],
-        max_translation_len=max_translation_len,
-        normalization_alpha=settings.normalization_alpha,
-        nbest=settings.n_best,
-        minibatch_size=settings.minibatch_size,
-        maxibatch_size=settings.maxibatch_size)
+        # Translate the source file.
+        translate_utils.translate_file(
+            input_file=settings.input,
+            output_file=settings.output,
+            session=session,
+            sampler=sampler,
+            config=configs[0],
+            max_translation_len=max_translation_len,
+            normalization_alpha=settings.normalization_alpha,
+            nbest=settings.n_best,
+            minibatch_size=settings.minibatch_size,
+            maxibatch_size=settings.maxibatch_size)
 
 
 if __name__ == "__main__":

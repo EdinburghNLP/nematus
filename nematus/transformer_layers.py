@@ -24,7 +24,7 @@ def matmul_nd(nd_tensor, matrix):
     matrix_shape = tf_utils.get_shape_list(matrix)
 
     initial_tensor_dims = tensor_shape[:-1]
-    flat_first_dim = tf.reduce_prod(initial_tensor_dims)
+    flat_first_dim = tf.reduce_prod(input_tensor=initial_tensor_dims)
 
     tensor_2d = tf.reshape(nd_tensor, [flat_first_dim, tensor_shape[-1]])
     result_2d = tf.matmul(tensor_2d, matrix)
@@ -35,7 +35,7 @@ def matmul_nd(nd_tensor, matrix):
 def get_right_context_mask(time_steps):
     """ Generates the mask preventing the decoder from attending to unseen positions. """
     # Generate mask that limits decoder self-attention up to and including the current position
-    attn_mask = tf.matrix_band_part(tf.ones([time_steps, time_steps]), -1, 0)
+    attn_mask = tf.linalg.band_part(tf.ones([time_steps, time_steps]), -1, 0)
     # Expand mask to 4d. so as to be compatible with attention weights
     attn_mask = tf.expand_dims(tf.expand_dims(attn_mask, 0), 0)
     # Illegal connections will be set to -inf when fed into the softmax function
@@ -52,7 +52,7 @@ def get_positional_signal(time_steps, depth, float_dtype, min_timescale=1, max_t
     max_timescale = tf.cast(max_timescale, float_dtype)
     # Obtain timing signal via sinusoids
     num_timescales = tf.cast(depth // 2, float_dtype)
-    log_timescale_increment = tf.log(max_timescale / min_timescale) / (num_timescales - tf.cast(1.0, float_dtype))
+    log_timescale_increment = tf.math.log(max_timescale / min_timescale) / (num_timescales - tf.cast(1.0, float_dtype))
     # Introduce an offset between individual timescales to obtain different frequencies
     incremented_timescales = \
         min_timescale * tf.exp(tf.range(num_timescales, dtype=float_dtype) * -log_timescale_increment)
@@ -64,7 +64,7 @@ def get_positional_signal(time_steps, depth, float_dtype, min_timescale=1, max_t
     # Pad the signal tensor, if needed
     pad_size = depth % 2
     if pad_size != 0:
-        tf.pad(positional_signal, [[0, 0], [0, pad_size]])
+        tf.pad(tensor=positional_signal, paddings=[[0, 0], [0, pad_size]])
     # Reshape the signal to make it compatible with the target tensor
     positional_signal = tf.reshape(positional_signal, [1, time_steps, depth])
     return positional_signal
@@ -82,17 +82,17 @@ class EmbeddingLayer(object):
         self.name = name
 
         # Create embedding matrix and its transposes
-        with tf.variable_scope(self.name):
-            self.embedding_table = tf.get_variable(name='embedding_table',
+        with tf.compat.v1.variable_scope(self.name):
+            self.embedding_table = tf.compat.v1.get_variable(name='embedding_table',
                                                 shape=[vocabulary_size, embedding_size],
                                                 dtype=float_dtype,
                                                 initializer=glorot_uniform_initializer(),
                                                 trainable=True)
-            self.projection_matrix = tf.transpose(self.embedding_table, name='vocab_projection_matrix')
+            self.projection_matrix = tf.transpose(a=self.embedding_table, name='vocab_projection_matrix')
 
     def embed(self, one_hot_inputs):
         """ Embeds one-hot-vectors corresponding to input tokens. """
-        embeddings = tf.nn.embedding_lookup(self.embedding_table, one_hot_inputs)
+        embeddings = tf.nn.embedding_lookup(params=self.embedding_table, ids=one_hot_inputs)
         # Apply transformer-specific scaling
         embeddings *= tf.sqrt(tf.cast(self.hidden_size, self.float_dtype))
         return embeddings
@@ -125,19 +125,19 @@ class LayerNormLayer(object):
         else:
             name = '{:s}_layer_norm'.format(name)
 
-        with tf.variable_scope(name, values=[dims_out]):
-            self.offset = tf.get_variable(name='offset',
+        with tf.compat.v1.variable_scope(name, values=[dims_out]):
+            self.offset = tf.compat.v1.get_variable(name='offset',
                                           shape=[dims_out],
                                           dtype=tf.float32,
                                           initializer=tf.zeros_initializer())
-            self.scale = tf.get_variable(name='scale',
+            self.scale = tf.compat.v1.get_variable(name='scale',
                                          shape=[dims_out],
                                          dtype=tf.float32,
-                                         initializer=tf.ones_initializer())
+                                         initializer=tf.compat.v1.ones_initializer())
             self.eps = tf.constant(eps)
 
     def forward(self, inputs):
-        layer_mean, layer_var = tf.nn.moments(inputs, axes=-1, keep_dims=True)
+        layer_mean, layer_var = tf.nn.moments(x=inputs, axes=-1, keepdims=True)
         normalized = tf.add(
             tf.multiply(self.scale, tf.math.divide(tf.subtract(inputs, layer_mean),
                                            tf.sqrt(tf.add(layer_var, self.eps)))),
@@ -157,16 +157,16 @@ class ProcessingLayer(object):
         self.name = name
 
         # Initialize layer normalization, if specified
-        with tf.variable_scope(self.name):
+        with tf.compat.v1.variable_scope(self.name):
             if use_layer_norm:
                 self.layer_norm = LayerNormLayer(out_size)
 
     def forward(self, inputs, residual_inputs=None):
-        with tf.variable_scope(self.name, values=[inputs, residual_inputs], reuse=True):
+        with tf.compat.v1.variable_scope(self.name, values=[inputs, residual_inputs], reuse=True):
             outputs = inputs
             # Apply dropout
             if self.dropout_rate > 0.0:
-                outputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+                outputs = tf.compat.v1.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
             # Apply residual connections
             if residual_inputs is not None:
                 outputs = outputs + residual_inputs
@@ -198,7 +198,7 @@ class FeedForwardLayer(object):
         self.training = training
         self.name = name
 
-        with tf.variable_scope(self.name):
+        with tf.compat.v1.variable_scope(self.name):
             # Set up layer normalization
             if use_layer_norm:
                 self.layer_norm_layer = LayerNormLayer(out_size)
@@ -207,24 +207,24 @@ class FeedForwardLayer(object):
 
             # Define parameters
             weights_shape = [in_size, out_size] if out_size is not None else [in_size]
-            self.weights = tf.get_variable(name='dense_layer_weights',
+            self.weights = tf.compat.v1.get_variable(name='dense_layer_weights',
                                            shape=weights_shape,
                                            dtype=float_dtype,
                                            initializer=glorot_uniform_initializer(),
                                            trainable=True)
             if use_bias:
                 biases_shape = [out_size] if out_size is not None else [in_size]
-                self.biases = tf.get_variable(name='dense_layer_biases',
+                self.biases = tf.compat.v1.get_variable(name='dense_layer_biases',
                                               shape=biases_shape,
                                               dtype=float_dtype,
                                               initializer=tf.zeros_initializer(),
                                               trainable=True)
 
     def forward(self, inputs):
-        with tf.variable_scope(self.name, values=[inputs]):
+        with tf.compat.v1.variable_scope(self.name, values=[inputs]):
             # Optionally apply dropout
             if self.dropout_rate > 0.0:
-                inputs = tf.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+                inputs = tf.compat.v1.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
             # Feed through a dense layer
             outputs = matmul_nd(inputs, self.weights)
             if self.use_bias:
@@ -290,7 +290,7 @@ class FeedForwardNetwork(object):
 
     def forward(self, inputs):
         """ Propagates input data through the specified layers. """
-        with tf.variable_scope(self.name, values=[inputs]):
+        with tf.compat.v1.variable_scope(self.name, values=[inputs]):
             for layer in self.layers:
                 inputs = layer.forward(inputs)
             return inputs
@@ -303,7 +303,7 @@ class PReLU(object):
                  in_size,
                  initial_slope=1.0,
                  name=None):
-        with tf.variable_scope(name, default_name='PReLu'):
+        with tf.compat.v1.variable_scope(name, default_name='PReLu'):
             self.slope = tf.Variable(initial_slope * np.ones((in_size,)).astype('float32'), name='slope')
 
     def forward(self, inputs):
@@ -333,22 +333,22 @@ class MaskedCrossEntropy(object):
         high_confidence = 1.0 - self.label_smoothing_discount
         # Normalizing constant for better readability, which is the best cross-entropy value with soft targets
         # Has no impact on training
-        normalizing_factor = -(1.0 * high_confidence * tf.log(high_confidence)
-                               + one_out_vocab * low_confidence * tf.log(low_confidence + 1e-20))
+        normalizing_factor = -(1.0 * high_confidence * tf.math.log(high_confidence)
+                               + one_out_vocab * low_confidence * tf.math.log(low_confidence + 1e-20))
         return high_confidence, low_confidence, normalizing_factor
 
     def forward(self, logits, targets, target_mask, training):
-        with tf.name_scope(self.name, values=[logits, targets, target_mask]):
+        with tf.compat.v1.name_scope(self.name, values=[logits, targets, target_mask]):
             # Get smoothing parameters (no smoothing/ normalization at test time)
             high_confidence, low_confidence, normalizing_factor = \
-                tf.cond(tf.logical_and(training, tf.greater(self.label_smoothing_discount, 0.0)),
-                        self._get_smoothing_parameters,
-                        lambda: (1.0, 0.0, 0.0))
+                tf.cond(pred=tf.logical_and(training, tf.greater(self.label_smoothing_discount, 0.0)),
+                        true_fn=self._get_smoothing_parameters,
+                        false_fn=lambda: (1.0, 0.0, 0.0))
 
             # If necessary, pad the label and the label-mask to match the length of decoder output
             # Not sure if that's a sensible thing to do
-            targets_shape = tf.shape(targets)
-            logits_shape = tf.shape(logits)
+            targets_shape = tf.shape(input=targets)
+            logits_shape = tf.shape(input=logits)
             targets_length = targets_shape[self.time_dim]
             logits_length = logits_shape[self.time_dim]
 
@@ -376,11 +376,11 @@ class MaskedCrossEntropy(object):
                 return targets, target_mask, logits
 
             # For teacher-forcing with RNN models
-            targets, target_mask, logits = tf.cond(tf.equal(targets_length, logits_length),
-                                                   lambda: (targets, target_mask, logits),
-                                                   lambda: tf.cond(tf.less(targets_length, logits_length),
-                                                                   lambda: _pad_targets(targets, target_mask, logits),
-                                                                   lambda: _pad_logits(targets, target_mask, logits)))
+            targets, target_mask, logits = tf.cond(pred=tf.equal(targets_length, logits_length),
+                                                   true_fn=lambda: (targets, target_mask, logits),
+                                                   false_fn=lambda: tf.cond(pred=tf.less(targets_length, logits_length),
+                                                                   true_fn=lambda: _pad_targets(targets, target_mask, logits),
+                                                                   false_fn=lambda: _pad_logits(targets, target_mask, logits)))
 
             # Project and optionally smooth target token ids
             projected_targets = tf.one_hot(targets,
@@ -392,12 +392,12 @@ class MaskedCrossEntropy(object):
             # Compute token-level loss
             flat_logits = tf.reshape(logits, [-1, self.vocab_size])
             flat_targets = tf.reshape(projected_targets, [-1, self.vocab_size])
-            flat_loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits, labels=flat_targets)
+            flat_loss = tf.nn.softmax_cross_entropy_with_logits(logits=flat_logits, labels=flat_targets)
             flat_normalized_loss = flat_loss - normalizing_factor
             # Compute sentence- and batch-level losses (i.e. mean token-loss per sentence/ batch)
-            normalized_loss = tf.reshape(flat_normalized_loss, tf.shape(targets))
+            normalized_loss = tf.reshape(flat_normalized_loss, tf.shape(input=targets))
             masked_loss = normalized_loss * target_mask
-            sentence_lengths = tf.reduce_sum(target_mask, axis=self.time_dim, keepdims=False)
-            sentence_loss = tf.math.divide(tf.reduce_sum(masked_loss, axis=self.time_dim, keepdims=False), sentence_lengths)
-            batch_loss = tf.reduce_mean(sentence_loss, keepdims=False)
+            sentence_lengths = tf.reduce_sum(input_tensor=target_mask, axis=self.time_dim, keepdims=False)
+            sentence_loss = tf.math.divide(tf.reduce_sum(input_tensor=masked_loss, axis=self.time_dim, keepdims=False), sentence_lengths)
+            batch_loss = tf.reduce_mean(input_tensor=sentence_loss, keepdims=False)
         return masked_loss, sentence_loss, batch_loss

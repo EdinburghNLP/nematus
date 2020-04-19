@@ -50,7 +50,7 @@ INSTALLATION
 Nematus requires the following packages:
 
  - Python 3 (tested on version 3.5.2)
- - TensorFlow 1.X (tested on version 1.15)
+ - TensorFlow 1.15 / 2.X (tested on version 2.0)
 
 To install tensorflow, we recommend following the steps at:
   ( https://www.tensorflow.org/install/ )

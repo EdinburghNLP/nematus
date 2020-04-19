@@ -60,7 +60,7 @@ class RandomSampler:
         self._configs = configs
         self._beam_size = beam_size
 
-        with tf.name_scope('random_sampler'):
+        with tf.compat.v1.name_scope('random_sampler'):
 
             # Define placeholders.
             self.inputs = sampler_inputs.SamplerInputs()
@@ -69,7 +69,7 @@ class RandomSampler:
             # Transformer and RNN models.
             model_adapters = []
             for i, (model, config) in enumerate(zip(models, configs)):
-                with tf.name_scope('model_adapter_{}'.format(i)) as scope:
+                with tf.compat.v1.name_scope('model_adapter_{}'.format(i)) as scope:
                     if config.model_type == 'transformer':
                         adapter = transformer_inference.ModelAdapter(
                             model, config, scope)
@@ -169,10 +169,10 @@ def _random_sample(model_adapters, beam_size, batch_size_x,
         tf.TensorShape([None])]                         # finished
 
     _, sequences, scores, _, _ = \
-        tf.while_loop(loop_cond,
-                      loop_body,
-                      loop_vars,
-                      shape_invariants,
+        tf.while_loop(cond=loop_cond,
+                      body=loop_body,
+                      loop_vars=loop_vars,
+                      shape_invariants=shape_invariants,
                       parallel_iterations=10,
                       swap_memory=False,
                       back_prop=False)
@@ -182,13 +182,13 @@ def _random_sample(model_adapters, beam_size, batch_size_x,
 
     # Normalize scores. Note that we include the <EOS> token when calculating
     # sequence length.
-    seq_len = tf.shape(sequences)[1]
+    seq_len = tf.shape(input=sequences)[1]
     indices = tf.range(seq_len, dtype=tf.int32)
     indices = tf.tile(tf.expand_dims(indices, 0), [batch_size_x*beam_size, 1])
     seq_lens = tf.expand_dims(tf.expand_dims(seq_len, 0), 0)
     seq_lens = tf.tile(seq_lens, [batch_size_x*beam_size, seq_len])
-    eos_indices = tf.where(tf.equal(sequences, eos_id), indices, seq_lens)
-    lengths = tf.reduce_min(eos_indices+1, axis=1)
+    eos_indices = tf.compat.v1.where(tf.equal(sequences, eos_id), indices, seq_lens)
+    lengths = tf.reduce_min(input_tensor=eos_indices+1, axis=1)
     float_lengths = tf.cast(lengths, dtype=tf.float32)
     length_penalties = float_lengths ** normalization_alpha
     scores = scores / length_penalties
@@ -196,10 +196,10 @@ def _random_sample(model_adapters, beam_size, batch_size_x,
     # Reshape / transpose to group translations and scores by input sentence.
 
     sequences = tf.reshape(sequences, [beam_size, batch_size_x, seq_len])
-    sequences = tf.transpose(sequences, perm=[1,0,2])
+    sequences = tf.transpose(a=sequences, perm=[1,0,2])
 
     scores = tf.reshape(scores, [beam_size, batch_size_x])
-    scores = tf.transpose(scores, perm=[1,0])
+    scores = tf.transpose(a=scores, perm=[1,0])
 
     return sequences, scores
 
@@ -209,7 +209,7 @@ def _generate_while_loop_cond_func(max_translation_len):
     def continue_decoding(current_time_step, sequences, scores, memories,
                           finished):
         return tf.logical_and(tf.less(current_time_step, max_translation_len),
-                              tf.logical_not(tf.reduce_all(finished)))
+                              tf.logical_not(tf.reduce_all(input_tensor=finished)))
 
     return continue_decoding
 
@@ -244,8 +244,8 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
                 sum_log_probs += model_log_probs
 
         # Determine the next token to be added to each sequence.
-        next_ids = tf.squeeze(tf.multinomial(sum_log_probs, num_samples=1,
-                                             output_dtype=INT_DTYPE),
+        next_ids = tf.squeeze(tf.random.categorical(logits=sum_log_probs, num_samples=1,
+                                             dtype=INT_DTYPE),
                               axis=1)
 
         # Collect scores associated with the selected tokens.
@@ -255,7 +255,7 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
 
         # Add scores to cumulative scores, except for sequences that were
         # already completed before this timestep.
-        scores += tf.where(tf.logical_not(finished),
+        scores += tf.compat.v1.where(tf.logical_not(finished),
                            increments,
                            tf.zeros([batch_size_x * beam_size]))
 
@@ -263,7 +263,7 @@ def _generate_while_loop_body_func(model_adapters, decoding_functions,
         sequences = tf.concat([sequences, tf.expand_dims(next_ids, 1)], 1)
 
         # Check if sequences have been finished (with a <EOS> token).
-        finished |= tf.equal(tf.reduce_prod(sequences - eos_id, axis=1),
+        finished |= tf.equal(tf.reduce_prod(input_tensor=sequences - eos_id, axis=1),
                              eos_id)
 
         return current_time_step+1, sequences, scores, memories, finished

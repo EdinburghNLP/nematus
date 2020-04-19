@@ -41,8 +41,8 @@ class LegacyBiasType:
 
 
 def matmul3d(x3d, matrix):
-    shape = tf.shape(x3d)
-    mat_shape = tf.shape(matrix)
+    shape = tf.shape(input=x3d)
+    mat_shape = tf.shape(input=matrix)
     x2d = tf.reshape(x3d, [shape[0]*shape[1], shape[2]])
     result2d = tf.matmul(x2d, matrix)
     result3d = tf.reshape(result2d, [shape[0], shape[1], mat_shape[1]])
@@ -53,7 +53,7 @@ def apply_dropout_mask(x, mask, input_is_3d=False):
         return x
     if input_is_3d:
         mask_3d = tf.expand_dims(mask, 0)
-        mask_3d = tf.tile(mask_3d, [tf.shape(x)[0], 1, 1])
+        mask_3d = tf.tile(mask_3d, [tf.shape(input=x)[0], 1, 1])
         return tf.multiply(x, mask_3d)
     else:
         return tf.multiply(x, mask)
@@ -69,9 +69,9 @@ class FeedForwardLayer(object):
                  dropout_input=None):
         if W is None:
             init = initializers.norm_weight(in_size, out_size)
-            W = tf.get_variable('W', initializer=init)
+            W = tf.compat.v1.get_variable('W', initializer=init)
         self.W = W
-        self.b = tf.get_variable('b', [out_size],
+        self.b = tf.compat.v1.get_variable('b', [out_size],
                                  initializer=tf.zeros_initializer)
         self.non_linearity = non_linearity
         self.use_layer_norm = use_layer_norm
@@ -106,29 +106,29 @@ class EmbeddingLayer(object):
             vocab_size, dim = vocabulary_sizes[i], dim_per_factor[i]
             var_name = 'embeddings' if i == 0 else 'embeddings_' + str(i)
             init = initializers.norm_weight(vocab_size, dim)
-            matrix = tf.get_variable(var_name, initializer=init)
+            matrix = tf.compat.v1.get_variable(var_name, initializer=init)
             self.embedding_matrices.append(matrix)
 
     def forward(self, x, factor=None):
         if factor == None:
             # Assumes that x has shape: factors, ...
-            embs = [tf.nn.embedding_lookup(matrix, x[i])
+            embs = [tf.nn.embedding_lookup(params=matrix, ids=x[i])
                     for i, matrix in enumerate(self.embedding_matrices)]
             return tf.concat(embs, axis=-1)
         else:
             matrix = self.embedding_matrices[factor]
-            return tf.nn.embedding_lookup(matrix, x)
+            return tf.nn.embedding_lookup(params=matrix, ids=x)
 
     def zero(self, x, factor=None):
         if factor == None:
             emb_size = sum(self._dim_per_factor)
             out_shape = tf.concat(
-                [tf.shape(x)[1:], tf.constant([emb_size], dtype=tf.int32)],
+                [tf.shape(input=x)[1:], tf.constant([emb_size], dtype=tf.int32)],
                 axis=0)
         else:
             emb_size = self._dim_per_factor[factor]
             out_shape = tf.concat(
-                [tf.shape(x), tf.constant([emb_size], dtype=tf.int32)],
+                [tf.shape(input=x), tf.constant([emb_size], dtype=tf.int32)],
                 axis=0)
         return tf.zeros(out_shape, dtype=tf.float32)
 
@@ -158,14 +158,14 @@ class LayerNormLayer(object):
                  layer_size,
                  eps=1e-5):
         #TODO: If nematus_compat is true, then eps must be 1e-5!
-        self.new_mean = tf.get_variable('new_mean', [layer_size],
+        self.new_mean = tf.compat.v1.get_variable('new_mean', [layer_size],
                                         initializer=tf.zeros_initializer)
-        self.new_std = tf.get_variable('new_std', [layer_size],
-                                       initializer=tf.constant_initializer(1))
+        self.new_std = tf.compat.v1.get_variable('new_std', [layer_size],
+                                       initializer=tf.compat.v1.constant_initializer(1))
         self.eps = eps
 
     def forward(self, x):
-        m, v = tf.nn.moments(x, axes=[-1], keep_dims=True)
+        m, v = tf.nn.moments(x=x, axes=[-1], keepdims=True)
         std = tf.sqrt(v + self.eps)
         norm_x = (x-m)/std
         new_x = norm_x*self.new_std + self.new_mean
@@ -183,33 +183,33 @@ class GRUStep(object):
         init = tf.concat([initializers.ortho_weight(state_size),
                           initializers.ortho_weight(state_size)],
                          axis=1)
-        self.state_to_gates = tf.get_variable('state_to_gates',
+        self.state_to_gates = tf.compat.v1.get_variable('state_to_gates',
                                               initializer=init)
         if input_size > 0:
             init = tf.concat([initializers.norm_weight(input_size, state_size),
                               initializers.norm_weight(input_size, state_size)],
                              axis=1)
-            self.input_to_gates = tf.get_variable('input_to_gates',
+            self.input_to_gates = tf.compat.v1.get_variable('input_to_gates',
                                                   initializer=init)
 
         if input_size == 0 and legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE:
             self.gates_bias = None
         else:
-            self.gates_bias = tf.get_variable('gates_bias', [2*state_size],
+            self.gates_bias = tf.compat.v1.get_variable('gates_bias', [2*state_size],
                                           initializer=tf.zeros_initializer)
 
         init = initializers.ortho_weight(state_size)
-        self.state_to_proposal = tf.get_variable('state_to_proposal',
+        self.state_to_proposal = tf.compat.v1.get_variable('state_to_proposal',
                                                  initializer=init)
         if input_size > 0:
             init = initializers.norm_weight(input_size, state_size)
-            self.input_to_proposal = tf.get_variable('input_to_proposal',
+            self.input_to_proposal = tf.compat.v1.get_variable('input_to_proposal',
                                                      initializer=init)
 
         if input_size == 0 and legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE:
             self.proposal_bias = None
         else:
-            self.proposal_bias = tf.get_variable('proposal_bias', [state_size],
+            self.proposal_bias = tf.compat.v1.get_variable('proposal_bias', [state_size],
                                              initializer=tf.zeros_initializer)
 
         self.legacy_bias_type = legacy_bias_type
@@ -220,14 +220,14 @@ class GRUStep(object):
         self.gates_x_norm = None
         self.proposal_x_norm = None
         if self.use_layer_norm:
-            with tf.variable_scope('gates_state_norm'):
+            with tf.compat.v1.variable_scope('gates_state_norm'):
                 self.gates_state_norm = LayerNormLayer(2*state_size)
-            with tf.variable_scope('proposal_state_norm'):
+            with tf.compat.v1.variable_scope('proposal_state_norm'):
                 self.proposal_state_norm = LayerNormLayer(state_size)
             if input_size > 0:
-                with tf.variable_scope('gates_x_norm'):
+                with tf.compat.v1.variable_scope('gates_x_norm'):
                     self.gates_x_norm = LayerNormLayer(2*state_size)
-                with tf.variable_scope('proposal_x_norm'):
+                with tf.compat.v1.variable_scope('proposal_x_norm'):
                     self.proposal_x_norm = LayerNormLayer(state_size)
 
         # Create dropout masks for input values (reused at every timestep).
@@ -370,7 +370,7 @@ class DeepTransitionGRUStep(object):
                  var_scope_fn=lambda i: "gru{0}".format(i)):
         self.gru_steps = []
         for i in range(transition_depth):
-            with tf.variable_scope(var_scope_fn(i)):
+            with tf.compat.v1.variable_scope(var_scope_fn(i)):
                 gru = GRUStep(input_size=(input_size if i == 0 else 0),
                               state_size=state_size,
                               batch_size=batch_size,
@@ -427,7 +427,7 @@ class GRUStack(object):
         self.grus = []
         for i in range(stack_depth):
             in_size = (input_size if i == 0 else state_size) + context_state_size
-            with tf.variable_scope("level{0}".format(i)):
+            with tf.compat.v1.variable_scope("level{0}".format(i)):
                 self.grus.append(DeepTransitionGRUStep(
                     input_size=in_size,
                     state_size=state_size,
@@ -529,27 +529,27 @@ class AttentionStep(object):
                  dropout_context=None,
                  dropout_state=None):
         init = initializers.norm_weight(state_size, hidden_size)
-        self.state_to_hidden = tf.get_variable('state_to_hidden',
+        self.state_to_hidden = tf.compat.v1.get_variable('state_to_hidden',
                                                initializer=init)
         #TODO: Nematus uses ortho_weight here - important?
         init = initializers.norm_weight(context_state_size, hidden_size)
-        self.context_to_hidden = tf.get_variable('context_to_hidden',
+        self.context_to_hidden = tf.compat.v1.get_variable('context_to_hidden',
                                                  initializer=init)
-        self.hidden_bias = tf.get_variable('hidden_bias', [hidden_size],
+        self.hidden_bias = tf.compat.v1.get_variable('hidden_bias', [hidden_size],
                                            initializer=tf.zeros_initializer)
         init = initializers.norm_weight(hidden_size, 1)
-        self.hidden_to_score = tf.get_variable('hidden_to_score',
+        self.hidden_to_score = tf.compat.v1.get_variable('hidden_to_score',
                                                initializer=init)
         self.use_layer_norm = use_layer_norm
         if self.use_layer_norm:
-            with tf.variable_scope('hidden_context_norm'):
+            with tf.compat.v1.variable_scope('hidden_context_norm'):
                 self.hidden_context_norm = LayerNormLayer(layer_size=hidden_size)
-            with tf.variable_scope('hidden_state_norm'):
+            with tf.compat.v1.variable_scope('hidden_state_norm'):
                 self.hidden_state_norm = LayerNormLayer(layer_size=hidden_size)
         self.context = context
         self.context_mask = context_mask
 
-        batch_size = tf.shape(context)[1]
+        batch_size = tf.shape(input=context)[1]
 
         # Create a dropout mask for context values (reused at every timestep).
         if dropout_context == None:
@@ -589,13 +589,13 @@ class AttentionStep(object):
 
         scores = matmul3d(hidden, self.hidden_to_score) # seqLen x batch x 1
         scores = tf.squeeze(scores, axis=2)
-        scores = scores - tf.reduce_max(scores, axis=0, keepdims=True)
+        scores = scores - tf.reduce_max(input_tensor=scores, axis=0, keepdims=True)
         scores = tf.exp(scores)
         scores *= self.context_mask
-        scores = scores / tf.reduce_sum(scores, axis=0, keepdims=True)
+        scores = scores / tf.reduce_sum(input_tensor=scores, axis=0, keepdims=True)
 
         attention_context = self.context * tf.expand_dims(scores, axis=2)
-        attention_context = tf.reduce_sum(attention_context, axis=0, keepdims=False)
+        attention_context = tf.reduce_sum(input_tensor=attention_context, axis=0, keepdims=False)
 
         return attention_context, scores
 
@@ -617,22 +617,22 @@ class Masked_cross_entropy_loss(object):
 
     def forward(self, logits):
         if self.label_smoothing:
-            uniform_prob = self.smoothing_factor / tf.cast(tf.shape(logits)[-1], tf.float32)
+            uniform_prob = self.smoothing_factor / tf.cast(tf.shape(input=logits)[-1], tf.float32)
             smoothed_prob = 1.0-self.smoothing_factor + uniform_prob
-            onehot_labels = tf.one_hot(self.y_true, tf.shape(logits)[-1], on_value = smoothed_prob, off_value = uniform_prob, dtype = tf.float32)
-            cost = tf.losses.softmax_cross_entropy(
+            onehot_labels = tf.one_hot(self.y_true, tf.shape(input=logits)[-1], on_value = smoothed_prob, off_value = uniform_prob, dtype = tf.float32)
+            cost = tf.compat.v1.losses.softmax_cross_entropy(
                 onehot_labels=onehot_labels,
                 logits=logits,
                 weights=self.y_mask,
-                reduction=tf.losses.Reduction.NONE)
+                reduction=tf.compat.v1.losses.Reduction.NONE)
         else:
-            cost = tf.losses.sparse_softmax_cross_entropy(
+            cost = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                 labels=self.y_true,
                 logits=logits,
                 weights=self.y_mask,
-                reduction=tf.losses.Reduction.NONE)
+                reduction=tf.compat.v1.losses.Reduction.NONE)
 
-        cost = tf.reduce_sum(cost, axis=0, keepdims=False)
+        cost = tf.reduce_sum(input_tensor=cost, axis=0, keepdims=False)
         return cost
 
 class LexicalModel(object):
@@ -660,7 +660,7 @@ class LexicalModel(object):
     def forward(self, x_embs, att_alphas, multi_step=False):
         x_embs = apply_dropout_mask(x_embs, self.dropout_mask_embedding, input_is_3d=True)
         x_emb_weighted = x_embs * tf.expand_dims(att_alphas, axis=(3 if multi_step else 2))
-        x_emb_weighted = tf.nn.tanh(tf.reduce_sum(x_emb_weighted, axis=(1 if multi_step else 0), keepdims=False))
+        x_emb_weighted = tf.nn.tanh(tf.reduce_sum(input_tensor=x_emb_weighted, axis=(1 if multi_step else 0), keepdims=False))
         lexical_state = self.ff.forward(x_emb_weighted, input_is_3d=multi_step) + x_emb_weighted
 
         return lexical_state
@@ -670,7 +670,7 @@ class PReLU(object):
                  in_size,
                  initial_slope = 1.0):
         init = initial_slope * tf.ones([in_size])
-        self.slope = tf.get_variable('slope', initializer=init)
+        self.slope = tf.compat.v1.get_variable('slope', initializer=init)
 
     def forward(self, x):
         pos = tf.nn.relu(x)

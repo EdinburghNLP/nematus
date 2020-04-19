@@ -6,7 +6,8 @@ import sys
 
 import numpy
 import tensorflow as tf
-import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
+from tensorflow.python.framework import ops
+#import tensorflow.contrib.slim as slim #tensorflow.contrib.framework ???
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -55,7 +56,7 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
             return True
         return False
 
-    variables = slim.get_variables_to_restore()
+    variables = ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)
 
     # Construct a mapping between saved variable names and names in the current
     # scope. There are two reasons why names might be different:
@@ -86,7 +87,7 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
             # Backwards compatibility with the old variable naming scheme.
             saved_name = _revert_variable_name(saved_name, 0.1)
         var_map[saved_name] = v
-    saver = tf.train.Saver(var_map, max_to_keep=None)
+    saver = tf.compat.v1.train.Saver(var_map, max_to_keep=None)
 
     # compute reload model filename
     reload_filename = None
@@ -129,7 +130,7 @@ def init_or_restore_variables(config, sess, ensemble_scope=None, train=False):
     if train and config.prior_model != None:
         load_prior(config, sess, saver)
 
-    init_op = tf.global_variables_initializer()
+    init_op = tf.compat.v1.global_variables_initializer()
 
     # initialize or restore model
     if reload_filename == None:
@@ -159,15 +160,15 @@ def load_prior(config, sess, saver):
      saver.restore(sess, os.path.abspath(config.prior_model))
 
      # fill prior variables with the loaded values
-     prior_variables = tf.get_collection_ref('prior_variables')
+     prior_variables = tf.compat.v1.get_collection_ref('prior_variables')
      prior_variables_dict = dict([(v.name, v) for v in prior_variables])
      assign_tensors = []
-     with tf.variable_scope('prior'):
-         for v in tf.trainable_variables():
+     with tf.compat.v1.variable_scope('prior'):
+         for v in tf.compat.v1.trainable_variables():
              prior_name = 'loss/prior/'+v.name
              prior_variable = prior_variables_dict[prior_name]
              assign_tensors.append(prior_variable.assign(v))
-     tf.variables_initializer(prior_variables)
+     tf.compat.v1.variables_initializer(prior_variables)
      sess.run(assign_tensors)
 
 

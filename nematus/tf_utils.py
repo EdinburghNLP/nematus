@@ -12,7 +12,7 @@ def assert_shapes(shapes):
         assertion_op = tf.debugging.assert_shapes(shapes)
         with tf.control_dependencies([assertion_op]):
             pass
-    except AttributeError:
+    except (AttributeError, TypeError) as e:
         pass
 
 
@@ -33,13 +33,13 @@ def get_shape_list(inputs):
 
     Adopted from the tensor2tensor library.
     """
-    inputs = tf.convert_to_tensor(inputs)
+    inputs = tf.convert_to_tensor(value=inputs)
     # If input's rank is unknown, return dynamic shape.
     if inputs.get_shape().dims is None:
-        dims_list = tf.shape(inputs)
+        dims_list = tf.shape(input=inputs)
     else:
         static_dims_list = inputs.get_shape().as_list()
-        dynamic_shape = tf.shape(inputs)
+        dynamic_shape = tf.shape(input=inputs)
         # Replace the unspecified static dimensions with dynamic ones.
         dims_list = list()
         for i in range(len(static_dims_list)):

@@ -4,9 +4,15 @@ CHANGELOG
 development version
 -----------
 
+v0.5 (19/5/2020)
+----------
+
+changes since 0.4:
+
  - main new features:
    - minimum risk training (MRT)
    - new inference code with ensemble decoding support for Transformer/RNN mix
+   - compatibility with TF 2
 
  - other new features
    - lexical model for RNNs
@@ -17,6 +23,7 @@ development version
 
  - fixes
    - fix regressions with deep RNN decoders
+
 
 v0.4 (17/12/2018)
 ----------

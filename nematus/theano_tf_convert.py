@@ -151,11 +151,11 @@ def theano_to_tensorflow_model(in_path, out_path):
     config = theano_to_tensorflow_config(in_path)
     th2tf = construct_parameter_map(config)
 
-    with tf.Session() as sess:
+    with tf.compat.v1.Session() as sess:
         logging.info('Building model...')
         model = rnn_model.RNNModel(config)
         init = tf.zeros_initializer(dtype=tf.int32)
-        global_step = tf.get_variable('time', [], initializer=init, trainable=False)
+        global_step = tf.compat.v1.get_variable('time', [], initializer=init, trainable=False)
         saver = model_loader.init_or_restore_variables(config, sess)
         seen = set()
         assign_ops = []
@@ -170,8 +170,8 @@ def theano_to_tensorflow_model(in_path, out_path):
                 continue
             assert tf_name not in seen
             seen.add(tf_name)
-            tf_var = tf.get_default_graph().get_tensor_by_name(tf_name)
-            tf_shape = sess.run(tf.shape(tf_var))
+            tf_var = tf.compat.v1.get_default_graph().get_tensor_by_name(tf_name)
+            tf_shape = sess.run(tf.shape(input=tf_var))
             th_var = saved_model[th_name]
             th_shape = th_var.shape
             if list(tf_shape) != list(th_shape):
@@ -180,12 +180,12 @@ def theano_to_tensorflow_model(in_path, out_path):
                 logging.error("Shape of {} is {}".format(tf_name, tf_shape))
                 logging.error("Shape of {} is {}".format(th_name, th_shape))
                 sys.exit(1)
-            assign_ops.append(tf.assign(tf_var, th_var))
+            assign_ops.append(tf.compat.v1.assign(tf_var, th_var))
         sess.run(assign_ops)
         saver.save(sess, save_path=out_path)
 
         unassigned = []
-        for tf_var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
+        for tf_var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
             if tf_var.name not in seen:
                 unassigned.append(tf_var.name)
         logging.info("The following TF variables were not " \
@@ -197,14 +197,14 @@ def tensorflow_to_theano_model(in_path, out_path):
     config = load_config_from_json_file(in_path)
     th2tf = construct_parameter_map(config)
     keys, values = list(zip(*list(th2tf.items())))
-    with tf.Session() as sess:
-        new_saver = tf.train.import_meta_graph(in_path + '.meta')
+    with tf.compat.v1.Session() as sess:
+        new_saver = tf.compat.v1.train.import_meta_graph(in_path + '.meta')
         new_saver.restore(sess, in_path)
         params = {}
         for th_name, tf_name in list(th2tf.items()):
             if tf_name is not None:
                 try:
-                    v = sess.run(tf.get_default_graph().get_tensor_by_name(tf_name))
+                    v = sess.run(tf.compat.v1.get_default_graph().get_tensor_by_name(tf_name))
                 except:
                     logging.info("Skipping {} because it was not " \
                                  "found".format(tf_name))

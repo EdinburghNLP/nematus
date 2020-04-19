@@ -36,14 +36,14 @@ class RNNModel(object):
         dropout_source, dropout_target = None, None
         if config.rnn_use_dropout and config.rnn_dropout_source > 0.0:
             def dropout_source(x):
-                return tf.layers.dropout(
-                    x, noise_shape=(tf.shape(x)[0], tf.shape(x)[1], 1),
+                return tf.compat.v1.layers.dropout(
+                    x, noise_shape=(tf.shape(input=x)[0], tf.shape(input=x)[1], 1),
                     rate=config.rnn_dropout_source,
                     training=self.inputs.training)
         if config.rnn_use_dropout and config.rnn_dropout_target > 0.0:
             def dropout_target(y):
-                return tf.layers.dropout(
-                    y, noise_shape=(tf.shape(y)[0], tf.shape(y)[1], 1),
+                return tf.compat.v1.layers.dropout(
+                    y, noise_shape=(tf.shape(input=y)[0], tf.shape(input=y)[1], 1),
                     rate=config.rnn_dropout_target,
                     training=self.inputs.training)
 
@@ -54,23 +54,23 @@ class RNNModel(object):
         dropout_embedding, dropout_hidden = None, None
         if config.rnn_use_dropout and config.rnn_dropout_embedding > 0.0:
             def dropout_embedding(e):
-                return tf.layers.dropout(e, noise_shape=tf.shape(e),
+                return tf.compat.v1.layers.dropout(e, noise_shape=(tf.shape(input=e)[0], tf.shape(input=e)[1]),
                                          rate=config.rnn_dropout_embedding,
                                          training=self.inputs.training)
         if config.rnn_use_dropout and config.rnn_dropout_hidden > 0.0:
             def dropout_hidden(h):
-                return tf.layers.dropout(h, noise_shape=tf.shape(h),
+                return tf.compat.v1.layers.dropout(h, noise_shape=(tf.shape(input=h)[0], tf.shape(input=h)[1]),
                                          rate=config.rnn_dropout_hidden,
                                          training=self.inputs.training)
 
-        batch_size = tf.shape(self.inputs.x)[-1]  # dynamic value
+        batch_size = tf.shape(input=self.inputs.x)[-1]  # dynamic value
 
-        with tf.variable_scope("encoder"):
+        with tf.compat.v1.variable_scope("encoder"):
             self.encoder = Encoder(config, batch_size, dropout_source,
                                    dropout_embedding, dropout_hidden)
             ctx, embs = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
 
-        with tf.variable_scope("decoder"):
+        with tf.compat.v1.variable_scope("decoder"):
             if config.tie_encoder_decoder_embeddings:
                 tied_embeddings = self.encoder.emb_layer
             else:
@@ -80,12 +80,12 @@ class RNNModel(object):
                                    dropout_hidden, tied_embeddings)
             self.logits = self.decoder.score(self.inputs.y)
 
-        with tf.variable_scope("loss"):
+        with tf.compat.v1.variable_scope("loss"):
             self.loss_layer = layers.Masked_cross_entropy_loss(
                 self.inputs.y, self.inputs.y_mask, config.label_smoothing,
                 training=self.inputs.training)
             self._loss_per_sentence = self.loss_layer.forward(self.logits)
-            self._loss = tf.reduce_mean(self._loss_per_sentence, keepdims=False)
+            self._loss = tf.reduce_mean(input_tensor=self._loss_per_sentence, keepdims=False)
 
         self.sampling_utils = SamplingUtils(config)
 
@@ -104,15 +104,15 @@ class Decoder(object):
                  encoder_embedding_layer=None):
 
         self.dropout_target = dropout_target
-        batch_size = tf.shape(x_mask)[1]
+        batch_size = tf.shape(input=x_mask)[1]
 
-        with tf.variable_scope("initial_state_constructor"):
+        with tf.compat.v1.variable_scope("initial_state_constructor"):
             context_sum = tf.reduce_sum(
-                            context * tf.expand_dims(x_mask, axis=2),
+                            input_tensor=context * tf.expand_dims(x_mask, axis=2),
                             axis=0)
 
             context_mean = context_sum / tf.expand_dims(
-                                            tf.reduce_sum(x_mask, axis=0),
+                                            tf.reduce_sum(input_tensor=x_mask, axis=0),
                                             axis=1)
             self.init_state_layer = layers.FeedForwardLayer(
                 in_size=config.state_size * 2,
@@ -128,7 +128,7 @@ class Decoder(object):
             self.state_size = config.state_size
             self.target_vocab_size = config.target_vocab_size
 
-        with tf.variable_scope("embedding"):
+        with tf.compat.v1.variable_scope("embedding"):
             if encoder_embedding_layer == None:
                 self.y_emb_layer = layers.EmbeddingLayer(
                     vocabulary_sizes=[config.target_vocab_size],
@@ -136,8 +136,8 @@ class Decoder(object):
             else:
                 self.y_emb_layer = encoder_embedding_layer
 
-        with tf.variable_scope("base"):
-            with tf.variable_scope("gru0"):
+        with tf.compat.v1.variable_scope("base"):
+            with tf.compat.v1.variable_scope("gru0"):
                 if config.theano_compat:
                     bias_type = layers.LegacyBiasType.THEANO_A
                 else:
@@ -150,7 +150,7 @@ class Decoder(object):
                     legacy_bias_type=bias_type,
                     dropout_input=dropout_embedding,
                     dropout_state=dropout_hidden)
-            with tf.variable_scope("attention"):
+            with tf.compat.v1.variable_scope("attention"):
                 self.attstep = layers.AttentionStep(
                     context=context,
                     context_state_size=2*config.state_size,
@@ -175,7 +175,7 @@ class Decoder(object):
                 transition_depth=config.rnn_dec_base_transition_depth-1,
                 var_scope_fn=lambda i: "gru{0}".format(i+1))
 
-        with tf.variable_scope("high"):
+        with tf.compat.v1.variable_scope("high"):
             if config.rnn_dec_depth == 1:
                 self.high_gru_stack = None
             else:
@@ -198,7 +198,7 @@ class Decoder(object):
                     first_residual_output=0)
 
         if config.rnn_lexical_model:
-            with tf.variable_scope("lexical"):
+            with tf.compat.v1.variable_scope("lexical"):
                 self.lexical_layer = layers.LexicalModel(
                     in_size=config.embedding_size,
                     out_size=config.embedding_size,
@@ -209,27 +209,27 @@ class Decoder(object):
         else:
             self.lexical_layer = None
 
-        with tf.variable_scope("next_word_predictor"):
+        with tf.compat.v1.variable_scope("next_word_predictor"):
             W = None
             if config.tie_decoder_embeddings:
                 W = self.y_emb_layer.get_embeddings(factor=0)
-                W = tf.transpose(W)
+                W = tf.transpose(a=W)
             self.predictor = Predictor(config, batch_size, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
 
 
     def score(self, y):
-        with tf.variable_scope("y_embeddings_layer"):
-            y_but_last = tf.slice(y, [0,0], [tf.shape(y)[0]-1, -1])
+        with tf.compat.v1.variable_scope("y_embeddings_layer"):
+            y_but_last = tf.slice(y, [0,0], [tf.shape(input=y)[0]-1, -1])
             y_embs = self.y_emb_layer.forward(y_but_last, factor=0)
             if self.dropout_target != None:
                 y_embs = self.dropout_target(y_embs)
-            y_embs = tf.pad(y_embs,
+            y_embs = tf.pad(tensor=y_embs,
                             mode='CONSTANT',
                             paddings=[[1,0],[0,0],[0,0]]) # prepend zeros
 
-        init_attended_context = tf.zeros([tf.shape(self.init_state)[0], self.state_size*2])
-        init_att_alphas = tf.zeros([tf.shape(self.x_embs)[0], tf.shape(self.x_embs)[1]])
+        init_attended_context = tf.zeros([tf.shape(input=self.init_state)[0], self.state_size*2])
+        init_att_alphas = tf.zeros([tf.shape(input=self.x_embs)[0], tf.shape(input=self.x_embs)[1]])
         init_state_att_ctx = (self.init_state, init_attended_context, init_att_alphas)
         gates_x, proposal_x = self.grustep1.precompute_from_x(y_embs)
         def step_fn(prev, x):
@@ -269,7 +269,7 @@ class Predictor(object):
     def __init__(self, config, batch_size, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
         self.config = config
 
-        with tf.variable_scope("prev_emb_to_hidden"):
+        with tf.compat.v1.variable_scope("prev_emb_to_hidden"):
             self.prev_emb_to_hidden = layers.FeedForwardLayer(
                 in_size=config.target_embedding_size,
                 out_size=config.target_embedding_size,
@@ -277,7 +277,7 @@ class Predictor(object):
                 non_linearity=lambda y: y,
                 use_layer_norm=config.rnn_layer_normalization,
                 dropout_input=dropout_embedding)
-        with tf.variable_scope("state_to_hidden"):
+        with tf.compat.v1.variable_scope("state_to_hidden"):
             self.state_to_hidden = layers.FeedForwardLayer(
                 in_size=config.state_size,
                 out_size=config.target_embedding_size,
@@ -285,7 +285,7 @@ class Predictor(object):
                 non_linearity=lambda y: y,
                 use_layer_norm=config.rnn_layer_normalization,
                 dropout_input=dropout_hidden)
-        with tf.variable_scope("attended_context_to_hidden"):
+        with tf.compat.v1.variable_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = layers.FeedForwardLayer(
                 in_size=2*config.state_size,
                 out_size=config.target_embedding_size,
@@ -295,10 +295,10 @@ class Predictor(object):
                 dropout_input=dropout_hidden)
 
         if config.output_hidden_activation == 'prelu':
-            with tf.variable_scope("hidden_prelu"):
+            with tf.compat.v1.variable_scope("hidden_prelu"):
                 self.hidden_prelu = PReLU(in_size=config.target_embedding_size)
 
-        with tf.variable_scope("hidden_to_logits"):
+        with tf.compat.v1.variable_scope("hidden_to_logits"):
             self.hidden_to_logits = layers.FeedForwardLayer(
                 in_size=config.target_embedding_size,
                 out_size=config.target_vocab_size,
@@ -308,7 +308,7 @@ class Predictor(object):
                 dropout_input=dropout_embedding)
 
         if config.softmax_mixture_size > 1:
-            with tf.variable_scope("hidden_to_pi_logits"):
+            with tf.compat.v1.variable_scope("hidden_to_pi_logits"):
                 self.hidden_to_pi_logits = layers.FeedForwardLayer(
                     in_size=config.target_embedding_size,
                     out_size=config.softmax_mixture_size,
@@ -317,7 +317,7 @@ class Predictor(object):
                     dropout_input=dropout_embedding)
             self.hidden_to_mos_hidden = []
             for k in range(config.softmax_mixture_size):
-                with tf.variable_scope("hidden_to_mos_hidden_{}".format(k)):
+                with tf.compat.v1.variable_scope("hidden_to_mos_hidden_{}".format(k)):
                     layer = layers.FeedForwardLayer(
                         in_size=config.target_embedding_size,
                         out_size=config.target_embedding_size,
@@ -327,7 +327,7 @@ class Predictor(object):
                     self.hidden_to_mos_hidden.append(layer)
 
         if config.rnn_lexical_model:
-            with tf.variable_scope("lexical_to_logits"):
+            with tf.compat.v1.variable_scope("lexical_to_logits"):
                 self.lexical_to_logits = layers.FeedForwardLayer(
                                 in_size=config.target_embedding_size,
                                 out_size=config.target_vocab_size,
@@ -336,13 +336,13 @@ class Predictor(object):
                                 dropout_input=dropout_embedding)
 
     def get_logits(self, y_embs, states, attended_states, lexical_states, multi_step=True):
-        with tf.variable_scope("prev_emb_to_hidden"):
+        with tf.compat.v1.variable_scope("prev_emb_to_hidden"):
             hidden_emb = self.prev_emb_to_hidden.forward(y_embs, input_is_3d=multi_step)
 
-        with tf.variable_scope("state_to_hidden"):
+        with tf.compat.v1.variable_scope("state_to_hidden"):
             hidden_state = self.state_to_hidden.forward(states, input_is_3d=multi_step)
 
-        with tf.variable_scope("attended_context_to_hidden"):
+        with tf.compat.v1.variable_scope("attended_context_to_hidden"):
             hidden_att_ctx = self.att_ctx_to_hidden.forward(attended_states,input_is_3d=multi_step)
 
         hidden = hidden_emb + hidden_state + hidden_att_ctx
@@ -358,11 +358,11 @@ class Predictor(object):
             assert False, 'Unknown output activation function "%s"' % self.config.output_hidden_activation
 
         if self.config.softmax_mixture_size == 1:
-            with tf.variable_scope("hidden_to_logits"):
+            with tf.compat.v1.variable_scope("hidden_to_logits"):
                 logits = self.hidden_to_logits.forward(hidden, input_is_3d=multi_step)
 
             if self.config.rnn_lexical_model:
-                with tf.variable_scope("lexical_to_logits"):
+                with tf.compat.v1.variable_scope("lexical_to_logits"):
                     logits += self.lexical_to_logits.forward(lexical_states, input_is_3d=multi_step)
 
         else:
@@ -382,7 +382,7 @@ class Predictor(object):
                     probs = probs_k * weight
                 else:
                     probs += probs_k * weight
-            logits = tf.log(probs)
+            logits = tf.math.log(probs)
 
         return logits 
 
@@ -393,7 +393,7 @@ class Encoder(object):
 
         self.dropout_source = dropout_source
 
-        with tf.variable_scope("embedding"):
+        with tf.compat.v1.variable_scope("embedding"):
             self.emb_layer = layers.EmbeddingLayer(config.source_vocab_sizes,
                                                    config.dim_per_factor)
 
@@ -402,7 +402,7 @@ class Encoder(object):
         else:
             bias_type = layers.LegacyBiasType.NEMATUS_COMPAT_FALSE
 
-        with tf.variable_scope("forward-stack"):
+        with tf.compat.v1.variable_scope("forward-stack"):
             self.forward_encoder = layers.GRUStack(
                 input_size=config.embedding_size,
                 state_size=config.state_size,
@@ -417,7 +417,7 @@ class Encoder(object):
                 residual_connections=True,
                 first_residual_output=1)
 
-        with tf.variable_scope("backward-stack"):
+        with tf.compat.v1.variable_scope("backward-stack"):
             self.backward_encoder = layers.GRUStack(
                 input_size=config.embedding_size,
                 state_size=config.state_size,
@@ -435,15 +435,15 @@ class Encoder(object):
 
     def get_context(self, x, x_mask):
 
-        with tf.variable_scope("embedding"):
+        with tf.compat.v1.variable_scope("embedding"):
             embs = self.emb_layer.forward(x)
             if self.dropout_source != None:
                 embs = self.dropout_source(embs)
 
-        with tf.variable_scope("forward-stack"):
+        with tf.compat.v1.variable_scope("forward-stack"):
             fwd_states = self.forward_encoder.forward(embs, x_mask)
 
-        with tf.variable_scope("backward-stack"):
+        with tf.compat.v1.variable_scope("backward-stack"):
             bwd_states = self.backward_encoder.forward(embs, x_mask)
 
         # Concatenate the left-to-right and the right-to-left states, in that

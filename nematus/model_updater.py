@@ -522,30 +522,30 @@ class _ModelUpdateGraph(object):
         self._global_step = global_step
 
         # Create the placeholder for the scaling factor.
-        self._scaling_factor = tf.placeholder(name='scaling_factor',
+        self._scaling_factor = tf.compat.v1.placeholder(name='scaling_factor',
                                               shape=(), dtype=tf.float32)
 
         # Create the placeholders for the replica weights.
         self._replica_weights = []
         for i in range(len(self._replicas)):
             name = 'replica_weight_{}'.format(i)
-            placeholder = tf.placeholder(name=name, shape=(), dtype=tf.float32)
+            placeholder = tf.compat.v1.placeholder(name=name, shape=(), dtype=tf.float32)
             self._replica_weights.append(placeholder)
 
         # Define the (non-trainable) variables for accumulating gradients and
         # losses. These need to be variables because their values must be
         # preserved over multiple runs.
 
-        self._accumulated_loss = tf.get_variable(
+        self._accumulated_loss = tf.compat.v1.get_variable(
             name='accumulated_loss',
             shape=[],
-            initializer=tf.zeros_initializer(dtype=tf.float32),
+            initializer=tf.zeros_initializer(),
             trainable=False)
 
         self._trainables, self._accumulated_gradients = {}, {}
-        for i, v in enumerate(tf.trainable_variables()):
+        for i, v in enumerate(tf.compat.v1.trainable_variables()):
             self._trainables[v.name] = v
-            g = tf.get_variable(
+            g = tf.compat.v1.get_variable(
                 name='accum'+str(i),  # FIXME better name. Variable scope?
                 initializer=tf.zeros_like(v),
                 trainable=False)
@@ -597,7 +597,7 @@ class _ModelUpdateGraph(object):
             device_spec = tf.DeviceSpec(device_type=device_type,
                                         device_index=i)
             with tf.device(device_spec):
-                with tf.variable_scope(tf.get_variable_scope(), reuse=(i>0)):
+                with tf.compat.v1.variable_scope(tf.compat.v1.get_variable_scope(), reuse=(i>0)):
                     if self._config.print_per_token_pro:
                         print_pro = self._replicas[i].print_pro
                     elif self._config.loss_function == "cross-entropy": # 正常的loss/n,n是sample数
@@ -605,9 +605,9 @@ class _ModelUpdateGraph(object):
                     elif self._config.loss_function == \
                             "per-token-cross-entropy":
                         ce_per_sent = self._replicas[i].loss_per_sentence
-                        ce_total = tf.reduce_sum(ce_per_sent)
+                        ce_total = tf.reduce_sum(input_tensor=ce_per_sent)
                         num_tokens = tf.reduce_sum(
-                            self._replicas[i].inputs.y_mask)
+                            input_tensor=self._replicas[i].inputs.y_mask)
                         loss = ce_total / tf.cast(num_tokens, tf.float32)
                     elif self._config.loss_function == "MRT":
                         # here the expected risk is the expected risk per real sentences(before sampling)
@@ -629,9 +629,9 @@ class _ModelUpdateGraph(object):
             summed_grad_vars = self._sum_gradients(all_grad_vars,
                                                self._replica_weights)
 
-            self._accum_ops = [tf.assign_add(self._accumulated_loss, summed_loss)]
+            self._accum_ops = [tf.compat.v1.assign_add(self._accumulated_loss, summed_loss)]
 
-            self._accum_ops += [tf.assign_add(self._accumulated_gradients[v.name],
+            self._accum_ops += [tf.compat.v1.assign_add(self._accumulated_gradients[v.name],
                                           g * self._scaling_factor)
                             for g, v in summed_grad_vars]
         else:
@@ -662,26 +662,26 @@ class _ModelUpdateGraph(object):
 
     def _define_summary_ops(self):
         """Defines the summary ops."""
-        tf.summary.scalar(name='mean_cost', tensor=self._accumulated_loss)
-        tf.summary.scalar(name='t', tensor=self._global_step)
-        self._summary_ops = [tf.summary.merge_all()]
+        tf.compat.v1.summary.scalar(name='mean_cost', tensor=self._accumulated_loss)
+        tf.compat.v1.summary.scalar(name='t', tensor=self._global_step)
+        self._summary_ops = [tf.compat.v1.summary.merge_all()]
 
     def _regularize(self, loss, decay_c, map_decay_c):
         """Optionally, adds L2 and MAP-L2 regularization terms to the loss."""
-        with tf.variable_scope("loss"):
+        with tf.compat.v1.variable_scope("loss"):
             # Optionally, add an L2 loss term.
             if decay_c > 0.0:
                 l2_sum = tf.add_n([tf.nn.l2_loss(v)
-                                   for v in tf.trainable_variables()])
+                                   for v in tf.compat.v1.trainable_variables()])
                 l2_loss = l2_sum * tf.constant(decay_c, dtype=tf.float32)
                 loss += l2_loss
             # Optionally, add an L2 loss term based on a prior model.
             if map_decay_c > 0.0:
                 map_l2_loss = tf.constant(0.0, dtype=tf.float32)
                 map_l2_acc = []
-                for v in tf.trainable_variables():
+                for v in tf.compat.v1.trainable_variables():
                     prior_name = 'prior/'+v.name.split(':')[0]
-                    prior_v = tf.get_variable(
+                    prior_v = tf.compat.v1.get_variable(
                         prior_name, initializer=v.initialized_value(),
                         trainable=False, collections=['prior_variables'],
                         dtype=v.initialized_value().dtype)
@@ -732,7 +732,7 @@ class _ModelUpdateGraph(object):
                     expanded = tf.expand_dims(g * weights[i], 0)
                     weighted_grads.append(expanded)
                 tmp = tf.concat(axis=0, values=weighted_grads)
-                avg_grad = tf.reduce_sum(tmp, 0)
+                avg_grad = tf.reduce_sum(input_tensor=tmp, axis=0)
                 avg_grad_vars.append((avg_grad, var))
 
         return avg_grad_vars
