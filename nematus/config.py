@@ -533,6 +533,13 @@ class ConfigSpecification:
             help='dropout applied to attention weights (default: '
                  '%(default)s)'))
 
+        group.append(ParameterSpecification(
+            name='transformer_drophead', default=0.0,
+            visible_arg_names=['--transformer_drophead'],
+            type=float, metavar='FLOAT',
+            help='dropout of entire attention heads (default: '
+                 '%(default)s)'))
+
         # Add command-line parameters for 'training' group.
 
         group = param_specs['training']
