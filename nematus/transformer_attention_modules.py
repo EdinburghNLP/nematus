@@ -28,6 +28,7 @@ class MultiHeadAttentionLayer(object):
                  num_heads,
                  float_dtype,
                  dropout_attn,
+                 drophead,
                  training,
                  name=None):
 
@@ -40,6 +41,7 @@ class MultiHeadAttentionLayer(object):
         self.num_heads = num_heads
         self.float_dtype = float_dtype
         self.dropout_attn = dropout_attn
+        self.drophead = drophead
         self.training = training
         self.name = name
 
@@ -159,6 +161,11 @@ class MultiHeadAttentionLayer(object):
         # Optionally apply dropout:
         if self.dropout_attn > 0.0:
             attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        # Optionally apply DropHead:
+        if self.drophead > 0.0:
+            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.drophead,
+                                                       noise_shape=[tf.shape(input=attn_weights)[0], tf.shape(input=attn_weights)[1], 1, 1],
+                                                       training=self.training)
         # Weigh attention values
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories

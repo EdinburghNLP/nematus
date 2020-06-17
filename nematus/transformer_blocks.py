@@ -62,6 +62,7 @@ class AttentionBlock(object):
                                             config.transformer_num_heads,
                                             float_dtype,
                                             dropout_attn=config.transformer_dropout_attn,
+                                            drophead=config.transformer_drophead,
                                             training=training,
                                             name='{:s}_sublayer'.format(attn_name))
 

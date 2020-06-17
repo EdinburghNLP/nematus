@@ -16,6 +16,9 @@ Notable features include:
      - mixture of softmaxes (Yang et al., 2017) https://arxiv.org/abs/1711.03953
      - lexical model (Nguyen and Chiang, 2018) https://www.aclweb.org/anthology/N18-1031
 
+  - support for advanced Transformer architectures:
+     - DropHead: dropout of entire attention heads (Zhou et al., 2020) https://arxiv.org/abs/2004.13342
+
  - training features:
      - multi-GPU support [documentation](doc/multi_gpu_training.md)
      - label smoothing
@@ -169,6 +172,7 @@ An updated version of these scripts that uses the Transformer model can be found
 | --transformer_dropout_residual FLOAT | dropout applied to residual connections (default: 0.1) |
 | --transformer_dropout_relu FLOAT | dropout applied to the internal activation of the feed-forward sub-layers (default: 0.1) |
 | --transformer_dropout_attn FLOAT | dropout applied to attention weights (default: 0.1) |
+| --transformer_drophead FLOAT | dropout of entire attention heads (default: 0.0) |
 
 #### training parameters
 | parameter | description |
