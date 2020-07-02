@@ -152,21 +152,25 @@ class ProcessingLayer(object):
     def __init__(self, out_size, use_layer_norm, dropout_rate, training, name):
         # Set attributes
         self.use_layer_norm = use_layer_norm
-        self.dropout_rate = dropout_rate
         self.training = training
         self.name = name
 
-        # Initialize layer normalization, if specified
         with tf.compat.v1.variable_scope(self.name):
+            # Initialize layer normalization, if specified
             if use_layer_norm:
                 self.layer_norm = LayerNormLayer(out_size)
+
+            if dropout_rate > 0:
+                self.dropout = tf.keras.layers.Dropout(rate=dropout_rate)
+            else:
+                self.dropout = None
 
     def forward(self, inputs, residual_inputs=None):
         with tf.compat.v1.variable_scope(self.name, values=[inputs, residual_inputs], reuse=True):
             outputs = inputs
             # Apply dropout
-            if self.dropout_rate > 0.0:
-                outputs = tf.compat.v1.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+            if self.dropout is not None:
+                outputs = self.dropout(inputs, training=self.training)
             # Apply residual connections
             if residual_inputs is not None:
                 outputs = outputs + residual_inputs
@@ -205,6 +209,11 @@ class FeedForwardLayer(object):
             else:
                 self.layer_norm_layer = None
 
+            if dropout_rate > 0:
+                self.dropout = tf.keras.layers.Dropout(rate=dropout_rate)
+            else:
+                self.dropout = None
+
             # Define parameters
             weights_shape = [in_size, out_size] if out_size is not None else [in_size]
             self.weights = tf.compat.v1.get_variable(name='dense_layer_weights',
@@ -223,8 +232,8 @@ class FeedForwardLayer(object):
     def forward(self, inputs):
         with tf.compat.v1.variable_scope(self.name, values=[inputs]):
             # Optionally apply dropout
-            if self.dropout_rate > 0.0:
-                inputs = tf.compat.v1.layers.dropout(inputs, rate=self.dropout_rate, training=self.training)
+            if self.dropout is not None:
+                inputs = self.dropout(inputs, training=self.training)
             # Feed through a dense layer
             outputs = matmul_nd(inputs, self.weights)
             if self.use_bias:
@@ -392,7 +401,7 @@ class MaskedCrossEntropy(object):
             # Compute token-level loss
             flat_logits = tf.reshape(logits, [-1, self.vocab_size])
             flat_targets = tf.reshape(projected_targets, [-1, self.vocab_size])
-            flat_loss = tf.nn.softmax_cross_entropy_with_logits(logits=flat_logits, labels=flat_targets)
+            flat_loss = tf.nn.softmax_cross_entropy_with_logits(logits=flat_logits, labels=tf.stop_gradient(flat_targets))
             flat_normalized_loss = flat_loss - normalizing_factor
             # Compute sentence- and batch-level losses (i.e. mean token-loss per sentence/ batch)
             normalized_loss = tf.reshape(flat_normalized_loss, tf.shape(input=targets))

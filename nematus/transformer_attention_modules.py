@@ -40,8 +40,6 @@ class MultiHeadAttentionLayer(object):
         self.output_dims = output_dims
         self.num_heads = num_heads
         self.float_dtype = float_dtype
-        self.dropout_attn = dropout_attn
-        self.drophead = drophead
         self.training = training
         self.name = name
 
@@ -52,6 +50,16 @@ class MultiHeadAttentionLayer(object):
         if total_value_dims % num_heads != 0:
             raise ValueError('Specified total attention value dimensions {:d} must be divisible by the number of '
                              'attention heads {:d}'.format(total_value_dims, num_heads))
+
+        if dropout_attn > 0:
+            self.dropout_attn = tf.keras.layers.Dropout(rate=dropout_attn)
+        else:
+            self.dropout_attn = None
+
+        if drophead > 0:
+            self.drophead = tf.keras.layers.Dropout(rate=drophead, noise_shape=[None, None, 1, 1])
+        else:
+            self.drophead = None
 
         # Instantiate parameters
         with tf.compat.v1.variable_scope(self.name):
@@ -159,13 +167,11 @@ class MultiHeadAttentionLayer(object):
         # Calculate attention weights
         attn_weights = tf.nn.softmax(attn_logits)
         # Optionally apply dropout:
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
         # Optionally apply DropHead:
-        if self.drophead > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.drophead,
-                                                       noise_shape=[tf.shape(input=attn_weights)[0], tf.shape(input=attn_weights)[1], 1, 1],
-                                                       training=self.training)
+        if self.drophead is not None:
+            attn_weights = self.drophead(attn_weights, training=self.training)
         # Weigh attention values
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -218,12 +224,16 @@ class SingleHeadAttentionLayer(object):
         self.hypothesis_dims = hypothesis_dims
         self.hidden_dims = hidden_dims
         self.float_dtype = float_dtype
-        self.dropout_attn = dropout_attn
         self.attn_type = attn_type
         self.training = training
         self.name = name
 
         assert attn_type in ['additive', 'multiplicative'], 'Attention type {:s} is not supported.'.format(attn_type)
+
+        if dropout_attn > 0:
+            self.dropout_attn = tf.keras.layers.Dropout(rate=dropout_attn)
+        else:
+            self.dropout_attn = None
 
         # Instantiate parameters
         with tf.compat.v1.variable_scope(self.name):
@@ -291,8 +301,8 @@ class SingleHeadAttentionLayer(object):
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-1, name='attn_weights')
         # Optionally apply dropout
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
         # Obtain context vectors
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -315,8 +325,8 @@ class SingleHeadAttentionLayer(object):
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-1, name='attn_weights')
         # Optionally apply dropout
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
         # Obtain context vectors
         weighted_memories = tf.matmul(attn_weights, values)
         return weighted_memories
@@ -386,8 +396,8 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-2, name='attn_weights')
         # Optionally apply dropout
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
 
         # Obtain context vectors
         expanded_values = tf.expand_dims(values, axis=1)
@@ -421,8 +431,8 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
         # Compute the attention weights
         attn_weights = tf.nn.softmax(attn_logits, axis=-2, name='attn_weights')
         # Optionally apply dropout
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
 
         # Obtain context vectors
         expanded_values = tf.expand_dims(values, axis=1)
@@ -463,8 +473,8 @@ class FineGrainedAttentionLayer(SingleHeadAttentionLayer):
         attn_weights = tf.nn.softmax(attn_logits, axis=-2, name='attn_weights')
 
         # Optionally apply dropout
-        if self.dropout_attn > 0.0:
-            attn_weights = tf.compat.v1.layers.dropout(attn_weights, rate=self.dropout_attn, training=self.training)
+        if self.dropout_attn is not None:
+            attn_weights = self.dropout_attn(attn_weights, training=self.training)
 
         # Obtain context vectors
         weighted_memories = tf.map_fn(_weighting_fn, attn_weights)

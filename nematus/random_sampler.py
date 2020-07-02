@@ -169,13 +169,12 @@ def _random_sample(model_adapters, beam_size, batch_size_x,
         tf.TensorShape([None])]                         # finished
 
     _, sequences, scores, _, _ = \
-        tf.while_loop(cond=loop_cond,
+        tf.nest.map_structure(tf.stop_gradient, tf.while_loop(cond=loop_cond,
                       body=loop_body,
                       loop_vars=loop_vars,
                       shape_invariants=shape_invariants,
                       parallel_iterations=10,
-                      swap_memory=False,
-                      back_prop=False)
+                      swap_memory=False))
 
     # Truncate sequences to remove leading <GO> tokens.
     sequences = sequences[:, 1:]

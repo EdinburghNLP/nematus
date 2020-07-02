@@ -215,6 +215,12 @@ class TransformerEncoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.compat.v1.variable_scope(self.name):
+
+            if self.config.transformer_dropout_embeddings > 0:
+                self.dropout_embedding = tf.keras.layers.Dropout(rate=self.config.transformer_dropout_embeddings)
+            else:
+                self.dropout_embedding = None
+
             for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
@@ -260,9 +266,8 @@ class TransformerEncoder(object):
             positional_signal = get_positional_signal(time_steps, depth, FLOAT_DTYPE)
             source_embeddings += positional_signal
             # Apply dropout
-            if self.config.transformer_dropout_embeddings > 0:
-                source_embeddings = tf.compat.v1.layers.dropout(source_embeddings,
-                                                      rate=self.config.transformer_dropout_embeddings, training=self.training)
+            if self.dropout_embedding is not None:
+                source_embeddings = self.dropout_embedding(source_embeddings, training=self.training)
             return source_embeddings, self_attn_mask, cross_attn_mask
 
         with tf.compat.v1.variable_scope(self.name):
@@ -313,6 +318,12 @@ class TransformerDecoder(object):
         """ Defines the model graph. """
         # Initialize layers
         with tf.compat.v1.variable_scope(self.name):
+
+            if self.config.transformer_dropout_embeddings > 0:
+                self.dropout_embedding = tf.keras.layers.Dropout(rate=self.config.transformer_dropout_embeddings)
+            else:
+                self.dropout_embedding = None
+
             for layer_id in range(1, self.config.transformer_dec_depth + 1):
                 layer_name = 'layer_{:d}'.format(layer_id)
                 # Check if constructed layer is final
@@ -364,9 +375,8 @@ class TransformerDecoder(object):
             # Embed target_ids
             target_embeddings = self._embed(target_ids)
             target_embeddings += positional_signal
-            if self.config.transformer_dropout_embeddings > 0:
-                target_embeddings = tf.compat.v1.layers.dropout(target_embeddings,
-                                                      rate=self.config.transformer_dropout_embeddings, training=self.training)
+            if self.dropout_embedding is not None:
+                target_embeddings = self.dropout_embedding(target_embeddings, training=self.training)
             return target_embeddings
 
         def _decoding_function():

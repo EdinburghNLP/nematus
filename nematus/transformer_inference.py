@@ -70,6 +70,11 @@ class ModelAdapter:
 
         decoder = self._model.dec
 
+        if self.config.transformer_dropout_embeddings > 0:
+            dropout = tf.keras.layers.Dropout(rate=self.config.transformer_dropout_embeddings)
+        else:
+            dropout = None
+
         def _decoding_function(step_target_ids, current_time_step, memories):
             """Single-step decoding function.
 
@@ -90,10 +95,9 @@ class ModelAdapter:
                     :, current_time_step-1:current_time_step, :]
                 target_embeddings += signal_slice
                 # Optionally, apply dropout to embeddings.
-                if self.config.transformer_dropout_embeddings > 0:
-                    target_embeddings = tf.compat.v1.layers.dropout(
+                if dropout is not None:
+                    target_embeddings = dropout(
                         target_embeddings,
-                        rate=self.config.transformer_dropout_embeddings,
                         training=decoder.training)
                 # Propagate values through the decoder stack.
                 # NOTE: No self-attention mask is applied at decoding, as
