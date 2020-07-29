@@ -344,6 +344,14 @@ class ConfigSpecification:
             help='number of softmax components to use (default: '
                  '%(default)s) - CURRENTLY ONLY WORKS FOR \'rnn\' MODEL'))
 
+        group.append(ParameterSpecification(
+            name='layer_normalization_type', default='layernorm',
+            visible_arg_names=['--layer_normalisation_type'],
+            hidden_arg_names=['--layer_normalization_type'],
+            type=str, choices=['layernorm', 'rmsnorm'],
+            help='layer normalisation variant to apply'
+                 '%(default)s)'))
+
         # Add command-line parameters for 'network_rnn' group.
 
         group = param_specs['network_rnn']

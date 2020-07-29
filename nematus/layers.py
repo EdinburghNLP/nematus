@@ -76,7 +76,7 @@ class FeedForwardLayer(object):
         self.non_linearity = non_linearity
         self.use_layer_norm = use_layer_norm
         if use_layer_norm:
-            self.layer_norm = LayerNormLayer(layer_size=out_size)
+            self.layer_norm = self.use_layer_norm(layer_size=out_size)
         # Create a dropout mask for input values (reused at every timestep).
         if dropout_input == None:
             self.dropout_mask = None
@@ -171,6 +171,18 @@ class LayerNormLayer(object):
         new_x = norm_x*self.new_std + self.new_mean
         return new_x
 
+class RMSNormLayer(object):
+    def __init__(self,
+                 layer_size,
+                 eps=1e-5):
+        self.scale = tf.compat.v1.get_variable('scale', [layer_size],
+                                       initializer=tf.compat.v1.constant_initializer(1))
+        self.eps = eps
+
+    def forward(self, x):
+        ms = tf.reduce_mean(x**2, axis=-1, keepdims=True)
+        return x * tf.math.rsqrt(ms + self.eps) * self.scale
+
 class GRUStep(object):
     def __init__(self, 
                  input_size, 
@@ -219,16 +231,16 @@ class GRUStep(object):
         self.proposal_state_norm = None
         self.gates_x_norm = None
         self.proposal_x_norm = None
-        if self.use_layer_norm:
+        if self.use_layer_norm is not None and self.use_layer_norm is not False:
             with tf.compat.v1.variable_scope('gates_state_norm'):
-                self.gates_state_norm = LayerNormLayer(2*state_size)
+                self.gates_state_norm = self.use_layer_norm(2*state_size)
             with tf.compat.v1.variable_scope('proposal_state_norm'):
-                self.proposal_state_norm = LayerNormLayer(state_size)
+                self.proposal_state_norm = self.use_layer_norm(state_size)
             if input_size > 0:
                 with tf.compat.v1.variable_scope('gates_x_norm'):
-                    self.gates_x_norm = LayerNormLayer(2*state_size)
+                    self.gates_x_norm = self.use_layer_norm(2*state_size)
                 with tf.compat.v1.variable_scope('proposal_x_norm'):
-                    self.proposal_x_norm = LayerNormLayer(state_size)
+                    self.proposal_x_norm = self.use_layer_norm(state_size)
 
         # Create dropout masks for input values (reused at every timestep).
         if dropout_input == None:
@@ -290,7 +302,6 @@ class GRUStep(object):
                                          x_is_input=False)
 
     def _layer_norm_and_bias(self, x, b, layer_norm, x_is_input):
-        assert self.use_layer_norm == (layer_norm is not None)
         if (self.legacy_bias_type == LegacyBiasType.THEANO_A
             or self.legacy_bias_type == LegacyBiasType.NEMATUS_COMPAT_FALSE):
             if x_is_input:
@@ -543,9 +554,9 @@ class AttentionStep(object):
         self.use_layer_norm = use_layer_norm
         if self.use_layer_norm:
             with tf.compat.v1.variable_scope('hidden_context_norm'):
-                self.hidden_context_norm = LayerNormLayer(layer_size=hidden_size)
+                self.hidden_context_norm = self.use_layer_norm(layer_size=hidden_size)
             with tf.compat.v1.variable_scope('hidden_state_norm'):
-                self.hidden_state_norm = LayerNormLayer(layer_size=hidden_size)
+                self.hidden_state_norm = self.use_layer_norm(layer_size=hidden_size)
         self.context = context
         self.context_mask = context_mask
 

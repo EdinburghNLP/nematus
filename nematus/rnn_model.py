@@ -63,10 +63,20 @@ class RNNModel(object):
                                          rate=config.rnn_dropout_hidden,
                                          training=self.inputs.training)
 
+        # layer normalization can be off, or if it is on,
+        # one of two types: standard layer normalization or RMS layer normalization
+        if config.rnn_layer_normalization:
+            if config.layer_normalization_type == 'layernorm':
+                layernorm = layers.LayerNormLayer
+            elif config.layer_normalization_type == 'rmsnorm':
+                layernorm = layers.RMSNormLayer
+        else:
+            layernorm = False
+
         batch_size = tf.shape(input=self.inputs.x)[-1]  # dynamic value
 
         with tf.compat.v1.variable_scope("encoder"):
-            self.encoder = Encoder(config, batch_size, dropout_source,
+            self.encoder = Encoder(config, batch_size, layernorm, dropout_source,
                                    dropout_embedding, dropout_hidden)
             ctx, embs = self.encoder.get_context(self.inputs.x, self.inputs.x_mask)
 
@@ -76,6 +86,7 @@ class RNNModel(object):
             else:
                 tied_embeddings = None
             self.decoder = Decoder(config, ctx, embs, self.inputs.x_mask,
+                                   layernorm,
                                    dropout_target, dropout_embedding,
                                    dropout_hidden, tied_embeddings)
             self.logits = self.decoder.score(self.inputs.y)
@@ -99,7 +110,7 @@ class RNNModel(object):
 
 
 class Decoder(object):
-    def __init__(self, config, context, x_embs, x_mask,
+    def __init__(self, config, context, x_embs, x_mask, layernorm,
                  dropout_target, dropout_embedding, dropout_hidden,
                  encoder_embedding_layer=None):
 
@@ -118,7 +129,7 @@ class Decoder(object):
                 in_size=config.state_size * 2,
                 out_size=config.state_size,
                 batch_size=batch_size,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 dropout_input=dropout_hidden)
             self.init_state = self.init_state_layer.forward(context_mean)
             self.x_embs = x_embs
@@ -146,7 +157,7 @@ class Decoder(object):
                     input_size=config.target_embedding_size,
                     state_size=config.state_size,
                     batch_size=batch_size,
-                    use_layer_norm=config.rnn_layer_normalization,
+                    use_layer_norm=layernorm,
                     legacy_bias_type=bias_type,
                     dropout_input=dropout_embedding,
                     dropout_state=dropout_hidden)
@@ -157,7 +168,7 @@ class Decoder(object):
                     context_mask=x_mask,
                     state_size=config.state_size,
                     hidden_size=2*config.state_size,
-                    use_layer_norm=config.rnn_layer_normalization,
+                    use_layer_norm=layernorm,
                     dropout_context=dropout_hidden,
                     dropout_state=dropout_hidden)
             if config.theano_compat:
@@ -168,7 +179,7 @@ class Decoder(object):
                 input_size=2*config.state_size,
                 state_size=config.state_size,
                 batch_size=batch_size,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 legacy_bias_type=bias_type,
                 dropout_input=dropout_hidden,
                 dropout_state=dropout_hidden,
@@ -187,7 +198,7 @@ class Decoder(object):
                     input_size=config.state_size,
                     state_size=config.state_size,
                     batch_size=batch_size,
-                    use_layer_norm=config.rnn_layer_normalization,
+                    use_layer_norm=layernorm,
                     legacy_bias_type=bias_type,
                     dropout_input=dropout_hidden,
                     dropout_state=dropout_hidden,
@@ -203,7 +214,7 @@ class Decoder(object):
                     in_size=config.embedding_size,
                     out_size=config.embedding_size,
                     batch_size=batch_size,
-                    use_layer_norm=config.rnn_layer_normalization,
+                    use_layer_norm=layernorm,
                     dropout_embedding=dropout_embedding,
                     dropout_hidden=dropout_hidden)
         else:
@@ -214,7 +225,7 @@ class Decoder(object):
             if config.tie_decoder_embeddings:
                 W = self.y_emb_layer.get_embeddings(factor=0)
                 W = tf.transpose(a=W)
-            self.predictor = Predictor(config, batch_size, dropout_embedding,
+            self.predictor = Predictor(config, batch_size, layernorm, dropout_embedding,
                                        dropout_hidden, hidden_to_logits_W=W)
 
 
@@ -266,7 +277,7 @@ class Decoder(object):
         return logits
 
 class Predictor(object):
-    def __init__(self, config, batch_size, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
+    def __init__(self, config, batch_size, layernorm, dropout_embedding, dropout_hidden, hidden_to_logits_W=None):
         self.config = config
 
         with tf.compat.v1.variable_scope("prev_emb_to_hidden"):
@@ -275,7 +286,7 @@ class Predictor(object):
                 out_size=config.target_embedding_size,
                 batch_size=batch_size,
                 non_linearity=lambda y: y,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 dropout_input=dropout_embedding)
         with tf.compat.v1.variable_scope("state_to_hidden"):
             self.state_to_hidden = layers.FeedForwardLayer(
@@ -283,7 +294,7 @@ class Predictor(object):
                 out_size=config.target_embedding_size,
                 batch_size=batch_size,
                 non_linearity=lambda y: y,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 dropout_input=dropout_hidden)
         with tf.compat.v1.variable_scope("attended_context_to_hidden"):
             self.att_ctx_to_hidden = layers.FeedForwardLayer(
@@ -291,7 +302,7 @@ class Predictor(object):
                 out_size=config.target_embedding_size,
                 batch_size=batch_size,
                 non_linearity=lambda y: y,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 dropout_input=dropout_hidden)
 
         if config.output_hidden_activation == 'prelu':
@@ -322,7 +333,7 @@ class Predictor(object):
                         in_size=config.target_embedding_size,
                         out_size=config.target_embedding_size,
                         batch_size=batch_size,
-                        use_layer_norm=config.rnn_layer_normalization,
+                        use_layer_norm=layernorm,
                         dropout_input=dropout_embedding)
                     self.hidden_to_mos_hidden.append(layer)
 
@@ -388,7 +399,7 @@ class Predictor(object):
 
 
 class Encoder(object):
-    def __init__(self, config, batch_size, dropout_source, dropout_embedding,
+    def __init__(self, config, batch_size, layernorm, dropout_source, dropout_embedding,
                  dropout_hidden):
 
         self.dropout_source = dropout_source
@@ -407,7 +418,7 @@ class Encoder(object):
                 input_size=config.embedding_size,
                 state_size=config.state_size,
                 batch_size=batch_size,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 legacy_bias_type=bias_type,
                 dropout_input=dropout_embedding,
                 dropout_state=dropout_hidden,
@@ -422,7 +433,7 @@ class Encoder(object):
                 input_size=config.embedding_size,
                 state_size=config.state_size,
                 batch_size=batch_size,
-                use_layer_norm=config.rnn_layer_normalization,
+                use_layer_norm=layernorm,
                 legacy_bias_type=bias_type,
                 dropout_input=dropout_embedding,
                 dropout_state=dropout_hidden,

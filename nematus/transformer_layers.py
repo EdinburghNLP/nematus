@@ -146,6 +146,30 @@ class LayerNormLayer(object):
         return normalized
 
 
+class RMSNormLayer(object):
+    """ Performs root mean square layer normalization by computing root mean square of a layer and normalizing by this, thus re-scaling the layer.
+        In contrast to layer normalization, no mean re-centering is performed, making this computationally more efficient."""
+
+    def __init__(self, dims_out, name=None, eps=1e-5):
+        if name is None:
+            name = 'rms_norm'
+        else:
+            name = '{:s}_rms_norm'.format(name)
+
+        with tf.compat.v1.variable_scope(name, values=[dims_out]):
+            self.scale = tf.compat.v1.get_variable(name='scale',
+                                         shape=[dims_out],
+                                         dtype=tf.float32,
+                                         initializer=tf.compat.v1.ones_initializer())
+            self.eps = tf.constant(eps)
+
+    def forward(self, inputs):
+        meansquare = tf.reduce_mean(inputs**2, axis=-1, keepdims=True)
+        normalized = self.scale * inputs * tf.math.rsqrt(meansquare + self.eps)
+
+        return normalized
+
+
 class ProcessingLayer(object):
     """ Optionally applies residual connections, layer normalization, or dropout. """
 
@@ -157,8 +181,8 @@ class ProcessingLayer(object):
 
         with tf.compat.v1.variable_scope(self.name):
             # Initialize layer normalization, if specified
-            if use_layer_norm:
-                self.layer_norm = LayerNormLayer(out_size)
+            if use_layer_norm is not False and use_layer_norm is not None:
+                self.layer_norm = use_layer_norm(out_size)
 
             if dropout_rate > 0:
                 self.dropout = tf.keras.layers.Dropout(rate=dropout_rate)
@@ -204,8 +228,8 @@ class FeedForwardLayer(object):
 
         with tf.compat.v1.variable_scope(self.name):
             # Set up layer normalization
-            if use_layer_norm:
-                self.layer_norm_layer = LayerNormLayer(out_size)
+            if use_layer_norm is not False and use_layer_norm is not None:
+                self.layer_norm_layer = use_layer_norm(out_size)
             else:
                 self.layer_norm_layer = None
 

@@ -11,13 +11,17 @@ try:
     from .transformer_attention_modules import MultiHeadAttentionLayer
     from .transformer_layers import \
         ProcessingLayer, \
-        FeedForwardNetwork
+        FeedForwardNetwork, \
+        LayerNormLayer, \
+        RMSNormLayer
 
 except (ModuleNotFoundError, ImportError) as e:
     from transformer_attention_modules import MultiHeadAttentionLayer
     from transformer_layers import \
         ProcessingLayer, \
-        FeedForwardNetwork
+        FeedForwardNetwork, \
+        LayerNormLayer, \
+        RMSNormLayer
 
 # from attention_modules import SingleHeadAttentionLayer, FineGrainedAttentionLayer
 
@@ -47,9 +51,14 @@ class AttentionBlock(object):
         if from_rnn:
             memory_size *= 2
 
+        if config.layer_normalization_type == 'layernorm':
+            layernorm = LayerNormLayer
+        elif config.layer_normalization_type == 'rmsnorm':
+            layernorm = RMSNormLayer
+
         # Build layers
         self.pre_attn = ProcessingLayer(config.state_size,
-                                        use_layer_norm=True,
+                                        use_layer_norm=layernorm,
                                         dropout_rate=0.,
                                         training=training,
                                         name='pre_{:s}_sublayer'.format(attn_name))
@@ -96,9 +105,14 @@ class FFNBlock(object):
         # Set attributes
         self.is_final = is_final
 
+        if config.layer_normalization_type == 'layernorm':
+            layernorm = LayerNormLayer
+        elif config.layer_normalization_type == 'rmsnorm':
+            layernorm = RMSNormLayer
+
         # Build layers
         self.pre_ffn = ProcessingLayer(config.state_size,
-                                       use_layer_norm=True,
+                                       use_layer_norm=layernorm,
                                        dropout_rate=0.,
                                        training=training,
                                        name='pre_ffn_sublayer')
@@ -117,7 +131,7 @@ class FFNBlock(object):
                                         name='post_ffn_sublayer')
         if is_final:
             self.pre_final = ProcessingLayer(config.state_size,
-                                             use_layer_norm=True,
+                                             use_layer_norm=layernorm,
                                              dropout_rate=0.,
                                              training=training,
                                              name='final_transform')
