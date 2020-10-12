@@ -89,8 +89,7 @@ def main(settings):
         if configs[0].exponential_smoothing > 0.0:
             session.run(fetches=smoothing.swap_ops)
 
-        # FIXME Should be an option in settings
-        max_translation_len = configs[0].translation_maxlen
+        max_translation_len = settings.translation_maxlen
 
         # Create a BeamSearchSampler / RandomSampler.
         if settings.translation_strategy == 'beam_search':

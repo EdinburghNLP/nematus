@@ -114,6 +114,12 @@ class TranslationSettings(BaseSettings):
             help="softmax temperature used for sampling (default %(default)s)")
 
         self._parser.add_argument(
+            '--translation_maxlen', default=200,
+            type=int, metavar='INT',
+            help='Maximum length of translation output sentence (default: '
+                 '%(default)s)')
+
+        self._parser.add_argument(
             '--translation_strategy', type=str, choices=['beam_search', 'sampling'], default="beam_search",
             help="translation_strategy, either beam_search or sampling (default: %(default)s)")
 
