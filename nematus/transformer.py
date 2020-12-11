@@ -128,7 +128,7 @@ class Transformer(object):
             else:
                 decoder_embedding_layer = encoder_embedding_layer
 
-            if not self.config.tie_encoder_decoder_embeddings:
+            if not self.config.tie_decoder_embeddings:
                 softmax_projection_layer = EmbeddingLayer(dec_vocab_size,
                                                           self.config.embedding_size,
                                                           self.config.state_size,
