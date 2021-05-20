@@ -67,10 +67,12 @@ class Transformer(object):
 
         with tf.compat.v1.name_scope('{:s}_loss'.format(self.name)):
             # Encode source sequences
+            ### comment: here starts the encode
             with tf.compat.v1.name_scope('{:s}_encode'.format(self.name)):
                 enc_output, cross_attn_mask = self.enc.encode(
                     self.source_ids, self.source_mask)
             # Decode into target sequences
+            ### comment: here starts the decode
             with tf.compat.v1.name_scope('{:s}_decode'.format(self.name)):
                 logits = self.dec.decode_at_train(self.target_ids_in,
                                                   enc_output,
@@ -251,6 +253,7 @@ class TransformerEncoder(object):
         def _prepare_source():
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
             # Embed
+            ### comment: first embedding without positional signal
             source_embeddings = self._embed(source_ids)
             # Obtain length and depth of the input tensors
             _, time_steps, depth = tf_utils.get_shape_list(source_embeddings)
@@ -264,7 +267,8 @@ class TransformerEncoder(object):
             cross_attn_mask = attn_mask
             # Add positional encodings
             positional_signal = get_positional_signal(time_steps, depth, FLOAT_DTYPE)
-            source_embeddings += positional_signal
+            source_embeddings += positional_signal ### comment: first embedding with positional signal
+
             # Apply dropout
             if self.dropout_embedding is not None:
                 source_embeddings = self.dropout_embedding(source_embeddings, training=self.training)
@@ -277,7 +281,18 @@ class TransformerEncoder(object):
             enc_output = enc_inputs
             for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 enc_output, _ = self.encoder_stack[layer_id]['self_attn'].forward(enc_output, None, self_attn_mask)
+                ### comment: after each layer enc_output is the corrent embedding
                 enc_output = self.encoder_stack[layer_id]['ffn'].forward(enc_output)
+                ### comment: enc_output is the final embedding of the encoding.
+                ### comment: check: the size of enc_output is batch_size*max_sentence_len*word_embedding_size(probably 256)
+
+                ############################################ PRINT #########################################################
+                # printops = []
+                # printops.append(tf.compat.v1.Print([], [tf.shape(enc_output), enc_output], "enc_output ", summarize=10000))
+                # printops.append(tf.compat.v1.Print([], [layer_id], "layer_id ", summarize=10000))
+                # with tf.control_dependencies(printops):
+                #     enc_output = enc_output * 1
+                ############################################################################################################
         return enc_output, cross_attn_mask
 
 

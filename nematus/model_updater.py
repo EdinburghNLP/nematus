@@ -148,6 +148,7 @@ class ModelUpdater(object):
         # Accumulate gradients.
         # the list to store the per-token-probability if required
         print_pro = []
+        ### comment: untill here can debug peacefully
         for i in range(0, len(split_x), len(self._replicas)):
             feed_dict = {}
             feed_dict[self._graph.scaling_factor] = scaling_factor
