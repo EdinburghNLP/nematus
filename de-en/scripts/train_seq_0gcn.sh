@@ -20,7 +20,6 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-#script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
 script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
@@ -117,10 +116,10 @@ python3 $nematus_home/nematus/train.py \
     --sample_freq 0 \
     --beam_freq 1000 \
     --beam_size 8 \
-    --valid_remove_parse #&> /cs/snapless/oabend/borgr/TG/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
-    # --print_per_token_pro /cs/snapless/oabend/borgr/TG/slurm/probs.last\
+    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus/slurm/probs.last\
     # --max_sentences_per_device $sent_per_device \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \

@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/snapless/oabend/borgr/TG/slurm/en-de_translate%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/de-en_translate%j.out
 #SBATCH --wckey=strmt
 
 
@@ -13,7 +13,7 @@ module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 
@@ -24,7 +24,7 @@ main_dir=$script_dir/../..
 . $script_dir/vars
 
 model_type="0gcn"
-output_path=/cs/snapless/oabend/borgr/TG/en-de/output/tmp.out
+output_path=/cs/usr/bareluz/gabi_labs/nematus/de-en/output/tmp.out
 input_path=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.${src}
 model_name=model_seq_trans.npz
 

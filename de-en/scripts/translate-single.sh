@@ -1,7 +1,7 @@
 #!/bin/bash
 
 model_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 
 #language-independent variables (toolkit locations)
 . $model_dir/../vars

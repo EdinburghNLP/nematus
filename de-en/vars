@@ -10,5 +10,5 @@ moses_scripts=/cs/snapless/oabend/borgr/SSMT/preprocess/mosesdecoder/scripts
 bpe_scripts=/cs/snapless/oabend/borgr/SSMT/preprocess/subword-nmt
 
 #nematus: https://github.com/EdinburghNLP/nematus
-nematus_home=/cs/snapless/oabend/borgr/TG/
+nematus_home=/cs/usr/bareluz/gabi_labs/nematus/
 

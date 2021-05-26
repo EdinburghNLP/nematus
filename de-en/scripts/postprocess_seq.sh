@@ -4,7 +4,7 @@ translations=$1
 processed=$2
 
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 main_dir=$script_dir/../
 # data_dir=$main_dir/data
 # data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/

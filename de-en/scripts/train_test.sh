@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/snapless/oabend/borgr/TG/slurm/en-de_test%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/de_en_test%j.out
 
 # #SBATCH --gres=gpu:4,vmem:8g
 
@@ -21,7 +21,7 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -124,10 +124,10 @@ python3 $nematus_home/nematus/train.py \
     --beam_freq 21 \
     --beam_size 8 \
     --parent_head \
-    --valid_remove_parse #&> /cs/snapless/oabend/borgr/TG/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
-    # --print_per_token_pro /cs/snapless/oabend/borgr/TG/slurm/probs.last\
+    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus/slurm/probs.last\
     # --max_sentences_per_device $sent_per_device \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \
@@ -138,7 +138,7 @@ echo done
 
 
 # script_dir=`dirname $0`
-# script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+# script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 # echo "script_dir is ${script_dir}"
 # main_dir=$script_dir/../..
 # # data_dir=$script_dir/data
@@ -220,7 +220,7 @@ echo done
 #     --beam_size 4 \
 #     --translation_maxlen $len \
 #     --inverse_loss \
-#     --normalization_alpha 0.6 &> /cs/snapless/oabend/borgr/TG/slurm/out_train$(date "+%Y.%m.%d-%H.%M.%S") &
+#     --normalization_alpha 0.6 &> /cs/usr/bareluz/gabi_labs/nematus/slurm/out_train$(date "+%Y.%m.%d-%H.%M.%S") &
 
 # # #     # --tie_encoder_decoder_embeddings \
 # # #     # --tie_decoder_embeddings \

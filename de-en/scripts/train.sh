@@ -19,7 +19,7 @@ module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
