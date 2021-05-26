@@ -1,0 +1,15 @@
+src=de
+trg=en
+nematus_home=/cs/snapless/oabend/borgr/TG
+remove_edges=$nematus_home/nematus/parsing/remove_edges.py
+capitalized_langs=(en de fr es ru)
+if [[ " ${capitalized_langs[@]} " =~ " ${trg} " ]]; then
+  trg_tc=".tc"
+else
+  trg_tc=""
+fi
+if [[ " ${capitalized_langs[@]} " =~ " ${src} " ]]; then
+  src_tc=".tc"
+else
+  src_tc=""
+fi

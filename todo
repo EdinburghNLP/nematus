@@ -1,0 +1,17 @@
+* enter to gate 
+ssh phoenix-gw
+* enter cd gabi_labs/nematus/de-en/scripts/
+* request gpus and memory (aviv asks 64g mamory)
+two options:
+1. srun --mem=4000m -c2 --time=1-12 --gres=gpu:2 --pty $SHELL
+sh train.sh 
+( runs with the paramenters given, stops when the computer is turned off, runs immidiatly)
+2. sbatch train.sh
+( enters the run to a queue, takes the paramenters from /cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/train.sh,
+doesn't run immidiatly, doesn't stop when the computer is turned off)
+* check the run with
+squeue -u bareluz
+
+*what to change
+grep --color -r "/borgr/TG"
+
