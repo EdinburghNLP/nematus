@@ -92,6 +92,15 @@ class EmbeddingLayer(object):
 
     def embed(self, one_hot_inputs):
         """ Embeds one-hot-vectors corresponding to input tokens. """
+
+        # ########################################### PRINT #########################################################
+        # printops = []
+        # printops.append(tf.compat.v1.Print([], [tf.shape(one_hot_inputs), one_hot_inputs], "one_hot_inputs ", summarize=10000))
+        # printops.append(tf.compat.v1.Print([], [tf.shape(self.embedding_table), self.embedding_table], "self.embedding_table ", summarize=10000))
+        # with tf.control_dependencies(printops):
+        #     one_hot_inputs = one_hot_inputs * 1
+        # ###########################################################################################################
+
         embeddings = tf.nn.embedding_lookup(params=self.embedding_table, ids=one_hot_inputs)
         # Apply transformer-specific scaling
         embeddings *= tf.sqrt(tf.cast(self.hidden_size, self.float_dtype))

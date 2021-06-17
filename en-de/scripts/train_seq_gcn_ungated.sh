@@ -19,7 +19,7 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data

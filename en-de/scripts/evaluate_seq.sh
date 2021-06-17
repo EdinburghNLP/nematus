@@ -10,7 +10,7 @@
 module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
-main_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/
+main_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/
 # data_dir=$main_dir/data
 # data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
 #data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD

@@ -208,6 +208,7 @@ def train(config, sess):
         config.max_epochs = progress.eidx+1
     for progress.eidx in range(progress.eidx, config.max_epochs):
         logging.info('Starting epoch {0}'.format(progress.eidx))
+        ### comment: source_sents and target_sents are numbered sentences. the number is mapped to word in num_to_source and num_to_target
         for source_sents, target_sents in text_iterator:
             if len(source_sents[0][0]) != config.factors:
                 logging.error('Mismatch between number of factors in settings ({0}), and number in training corpus ({1})\n'.format(config.factors, len(source_sents[0][0])))
@@ -220,6 +221,7 @@ def train(config, sess):
             write_summary_for_this_batch = config.summary_freq and ((progress.uidx % config.summary_freq == 0) or (config.finish_after and progress.uidx % config.finish_after == 0))
             (factors, seqLen, batch_size) = x_in.shape
 
+            ### comment: here the data is sent
             output = updater.update(
                 sess, x_in, x_mask_in, y_in, y_mask_in, num_to_target,
                 write_summary_for_this_batch)

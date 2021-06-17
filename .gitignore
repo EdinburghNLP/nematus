@@ -4,3 +4,4 @@ dist
 nmt.egg-info
 .idea
 .DS_Store
+nematus_env/*

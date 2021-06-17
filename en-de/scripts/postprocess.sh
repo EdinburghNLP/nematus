@@ -1,7 +1,7 @@
 #!/bin/bash
 
 model_dir=`dirname $0`
-model_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
+model_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
 
 #language-independent variables (toolkit locations)
 . $model_dir/../vars

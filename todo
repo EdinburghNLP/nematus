@@ -1,11 +1,13 @@
 * enter to gate 
 ssh phoenix-gw
-* enter cd gabi_labs/nematus/de-en/scripts/
+* enter cd gabi_labs/nematus/en-de/scripts/
 * request gpus and memory (aviv asks 64g mamory)
 two options:
-1. srun --mem=4000m -c2 --time=1-12 --gres=gpu:2 --pty $SHELL
+1. srun --mem=4000m -c2 --time=1-12 --gres=gpu:m60:2 --pty $SHELL
+srun --mem=30gb -c2 --gres=gpu:1 --time=1-0 --pty $SHELL
 sh train.sh 
-( runs with the paramenters given, stops when the computer is turned off, runs immidiatly)
+( runs with the paramenters given, stops when the computer is turned off, runs immidiatly
+  i added m60 to specifically run cortex-01 cluster)
 2. sbatch train.sh
 ( enters the run to a queue, takes the paramenters from /cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/train.sh,
 doesn't run immidiatly, doesn't stop when the computer is turned off)

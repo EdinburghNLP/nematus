@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:4,vmem:8g
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de_gcn%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de_0gcn%j.out
 #SBATCH --wckey=strmt
 
 # module load cuda/10.0
@@ -20,7 +20,7 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -34,28 +34,15 @@ mkdir -p $model_dir
 #language-dependent variables (source and target language)
 . $script_dir/vars
 
-working_dir=$model_dir/sgcn
+working_dir=$model_dir/0gcn
 mkdir -p $working_dir
 
 # json_bpe=$script_dir/data/conll14st-preprocessed.bpe.${src}${trg}.json
 src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns.en
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns1.en
-# src_train=$data_dir/tmp.de
-# trg_train=$data_dir/UD/tmp.en
-
-src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
-#trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
-#trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns1.en
-# /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-# src_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest_tmp.de
-# trg_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest_tmp.en
-# src_dev=$data_dir/tmp.de
-# trg_dev=$data_dir/UD/tmp.en
-
+trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.en
 src_bpe=$src_train.json
 trg_bpe=$trg_train.json
+
 # create dictionary if needed
 if [ ! -f ${trg_bpe} ]; then
     echo "creating target dict"
@@ -76,14 +63,17 @@ if [ ! -f ${src_bpe} ]; then
 fi
 
 
+src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
+trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
+
 # train="conll14st-preprocessed"
 # corpora=("en_esl-ud-dev.conllu" "en_esl-ud-test.conllu" "en_esl-ud-train.conllu")
-len=80
+len=40
 batch_size=128
 embedding_size=256
 # token_batch_size=2048
 # sent_per_device=4
-tokens_per_device=100
+tokens_per_device=162
 dec_blocks=4
 enc_blocks="${dec_blocks}"
 lshw -C display | tail # write the acquired gpu properties
@@ -92,7 +82,7 @@ python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \
     --dictionaries $src_bpe $trg_bpe\
-    --save_freq 1000 \
+    --save_freq 30000 \
     --model $working_dir/model_seq_trans.npz \
     --reload latest_checkpoint \
     --model_type transformer \
@@ -110,21 +100,22 @@ python3 $nematus_home/nematus/train.py \
     --warmup_steps 4000 \
     --maxlen $len \
     --batch_size $batch_size \
-    --disp_freq 100 \
-    --sample_freq 0 \
-    --beam_freq 1000 \
-    --beam_size 8 \
     --translation_maxlen $len \
-    --target_labels_num 45\
-    --non_sequential \
-    --target_graph \
-    --normalization_alpha 0.6\
+    --normalization_alpha 0.6 \
     --valid_source_dataset $src_dev \
     --valid_target_dataset $trg_dev \
     --valid_batch_size 4 \
     --max_tokens_per_device $tokens_per_device \
     --valid_freq 10000 \
+    --disp_freq 1000 \
     --valid_script $script_dir/validate_seq.sh \
+    --target_labels_num 0\
+    --target_graph \
+    --non_sequential \
+    --target_gcn_layers 0 \
+    --sample_freq 0 \
+    --beam_freq 1000 \
+    --beam_size 8 \
     --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \

@@ -7,7 +7,7 @@
 translations=$1
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
 main_dir=$script_dir/../
 # data_dir=$main_dir/data
 # data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
@@ -18,29 +18,29 @@ data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD
 
 #language-dependent variables (source and target language)
 . $main_dir/vars
-postprocess_to_trans="${nematus_home}/nematus/parsing/postprocess_to_trans.py"
+remove_edges=$nematus_home/nematus/parsing/remove_edges.py
 
 dev_prefix=newstest2013
-ref=$data_dir/$dev_prefix.parse.$trg
-
+ref=$data_dir/$dev_prefix.ref.$trg
 # create ref file if needed
 if [ ! -f $ref ] ; then
-	trans=$data_dir/$dev_prefix.trans.$trg
-	if [ ! -f $trans ] ; then
-		$script_dir/postprocess.sh < "$data_dir/newstest2013.unesc.tok.tc.bpe.trns.$trg" > "$ref"
+	trns=$data_dir/$dev_prefix.trns1.$trg
+	if [ ! -f $trns ] ; then
+		$script_dir/postprocess.sh < "$data_dir/../$dev_prefix.unesc.tok.tc.bpe.trns1.$trg" > "$trns"
 	fi
-	python $postprocess_to_trans $trans -o $ref
+	python $remove_edges $trns -o $ref
 fi
 
 # write resulting file
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
-$script_dir/postprocess.sh < "$translations" > "//cs/usr/bareluz/gabi_labs/nematus/de-en/output/out_$dev_prefix_$current_time.$trg"
+$script_dir/postprocess.sh < "$translations" > "/cs/usr/bareluz/gabi_labs/nematus/en-de/output/out_${dev_prefix}_$current_time.$trg"
+
  
 # evaluate translations and write BLEU score to standard output (for
 # use by nmt.py)
 tmp="tmp_postprocessed$current_time"
 $script_dir/postprocess.sh < $translations > "$tmp.out" 
-python postprocess_to_trans "$tmp.out" |\
+python $remove_edges "$tmp.out" |\
     $nematus_home/data/multi-bleu-detok.perl $ref | \
     cut -f 3 -d ' ' | \
     cut -f 1 -d ','

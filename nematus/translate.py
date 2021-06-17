@@ -73,7 +73,12 @@ def main(settings):
                     model = rnn_model.RNNModel(config)
                 model.sampling_utils = SamplingUtils(settings)
                 models.append(model)
-
+        ########################################### PRINT #########################################################
+        # printops = []
+        # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer before ", summarize=10000))
+        # with tf.control_dependencies(printops):
+        #     models = models * 1
+        ###########################################################################################################
         # Add smoothing variables (if the models were trained with smoothing).
         #FIXME Assumes either all models were trained with smoothing or none were.
         if configs[0].exponential_smoothing > 0.0:
@@ -85,6 +90,12 @@ def main(settings):
                 _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
 
+        ########################################### PRINT #########################################################
+        # printops = []
+        # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer after ", summarize=10000))
+        # with tf.control_dependencies(printops):
+        #     models = models * 1
+        ###########################################################################################################
         # Swap-in the smoothed versions of the variables.
         if configs[0].exponential_smoothing > 0.0:
             session.run(fetches=smoothing.swap_ops)

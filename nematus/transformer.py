@@ -2,7 +2,19 @@
 
 import sys
 import tensorflow as tf
-import numpy
+import os
+import inspect
+from os import path
+try:
+    from . import util
+except (ModuleNotFoundError, ImportError) as e:
+    import util
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
+
+from debiaswe.debiaswe.debias import debias
+
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -121,6 +133,12 @@ class Transformer(object):
                                                      self.config.state_size,
                                                      FLOAT_DTYPE,
                                                      name='encoder_embedding_layer')
+            # ########################################### PRINT #########################################################
+            # printops = []
+            # printops.append(tf.compat.v1.Print([], [encoder_embedding_layer.embedding_table], "embedding_layer before ", summarize=10000))
+            # with tf.control_dependencies(printops):
+            #     dec_vocab_size = dec_vocab_size * 1
+            # ###########################################################################################################
             if not self.config.tie_encoder_decoder_embeddings:
                 decoder_embedding_layer = EmbeddingLayer(dec_vocab_size,
                                                          self.config.embedding_size,
@@ -207,6 +225,18 @@ class TransformerEncoder(object):
 
         # Create nodes
         self._build_graph()
+        _, _, self.num_to_source, self.num_to_target = util.load_dictionaries(config)
+
+    @tf.function
+    # def debias_embedding(self, embedding, source_ids):
+    #
+    #     ########################################### PRINT #########################################################
+    #     printops = []
+    #     printops.append(tf.compat.v1.Print([], [tf.shape(embedding)], "enc_output ", summarize=10000))
+    #     printops.append(tf.compat.v1.Print([], [tf.shape(source_ids)], "source_ids ", summarize=10000))
+    #     with tf.control_dependencies(printops):
+    #         embedding = embedding * 1
+    #     ###########################################################################################################
 
     def _embed(self, index_sequence):
         """ Embeds source-side indices to obtain the corresponding dense tensor representations. """
@@ -252,9 +282,23 @@ class TransformerEncoder(object):
 
         def _prepare_source():
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
+            source_embeddings = self._embed(source_ids)
+
+
+            # ########################################### PRINT #########################################################
+            printops = []
+            for i in list(range(29344)):
+                printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
+                printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
+                tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
+            with tf.control_dependencies(printops):
+                source_embeddings = source_embeddings * 1
+            # ###########################################################################################################
+
+
+
             # Embed
             ### comment: first embedding without positional signal
-            source_embeddings = self._embed(source_ids)
             # Obtain length and depth of the input tensors
             _, time_steps, depth = tf_utils.get_shape_list(source_embeddings)
             # Transform input mask into attention mask
@@ -274,25 +318,46 @@ class TransformerEncoder(object):
                 source_embeddings = self.dropout_embedding(source_embeddings, training=self.training)
             return source_embeddings, self_attn_mask, cross_attn_mask
 
+
         with tf.compat.v1.variable_scope(self.name):
             # Prepare inputs to the encoder, get attention masks
             enc_inputs, self_attn_mask, cross_attn_mask = _prepare_source()
             # Propagate inputs through the encoder stack
+            # ########################################### PRINT #########################################################
+            # printops = []
+            # printops.append(tf.compat.v1.Print([], [enc_inputs], "enc_inputs ", summarize=10000))
+            # with tf.control_dependencies(printops):
+            #     enc_inputs = enc_inputs * 1
+            # ###########################################################################################################
+
             enc_output = enc_inputs
             for layer_id in range(1, self.config.transformer_enc_depth + 1):
                 enc_output, _ = self.encoder_stack[layer_id]['self_attn'].forward(enc_output, None, self_attn_mask)
                 ### comment: after each layer enc_output is the corrent embedding
                 enc_output = self.encoder_stack[layer_id]['ffn'].forward(enc_output)
+
+                # ########################################### PRINT #########################################################
+                # printops = []
+                # printops.append(tf.compat.v1.Print([], [tf.shape(enc_output)], "enc_output ", summarize=10000))
+                # printops.append(tf.compat.v1.Print([], [tf.shape(source_ids[0]),source_ids[0]], "source_ids ", summarize=10000))
+                # for i in range(tf.shape(source_ids[0])):
+                #     printops.append(tf.compat.v1.Print([], [self.num_to_source[source_ids[0][i]]], "self.num_to_source ", summarize=10000))
+                # with tf.control_dependencies(printops):
+                #     enc_output = enc_output * 1
+                # ###########################################################################################################
+
+                # self.debias_embedding(enc_output, source_ids)
                 ### comment: enc_output is the final embedding of the encoding.
                 ### comment: check: the size of enc_output is batch_size*max_sentence_len*word_embedding_size(probably 256)
+                ### comment: after checking the size is [128 41 256] when the 41 changes and ranges around 23-41, probably it's max_sentence_len*batch_size*word_embedding_size
 
-                ############################################ PRINT #########################################################
+                # ########################################### PRINT #########################################################
                 # printops = []
                 # printops.append(tf.compat.v1.Print([], [tf.shape(enc_output), enc_output], "enc_output ", summarize=10000))
                 # printops.append(tf.compat.v1.Print([], [layer_id], "layer_id ", summarize=10000))
                 # with tf.control_dependencies(printops):
                 #     enc_output = enc_output * 1
-                ############################################################################################################
+                # ###########################################################################################################
         return enc_output, cross_attn_mask
 
 

@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/invloss%j.out
 
 # module load cuda/10.0
 # module load cudnn
@@ -19,7 +19,7 @@ module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -33,7 +33,8 @@ mkdir -p $model_dir
 #language-dependent variables (source and target language)
 . $script_dir/vars
 
-working_dir=$model_dir/bpe256
+working_dir=$model_dir/invloss256
+mkdir -p $working_dir
 
 src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
 trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.en
@@ -62,6 +63,9 @@ dec_blocks=4
 enc_blocks="${dec_blocks}"
 lshw -C display | tail # write the acquired gpu properties
 
+train="conll14st-preprocessed"
+corpora=("en_esl-ud-dev.conllu" "en_esl-ud-test.conllu" "en_esl-ud-train.conllu")
+
 python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \
@@ -85,7 +89,7 @@ python3 $nematus_home/nematus/train.py \
     --maxlen $len \
     --batch_size $batch_size \
     --translation_maxlen $len \
-    --normalization_alpha 0.6 \
+    --token_batch_size 8192 \
     --valid_source_dataset $src_dev \
     --valid_target_dataset $trg_dev \
     --valid_batch_size 120 \
@@ -96,9 +100,10 @@ python3 $nematus_home/nematus/train.py \
     --sample_freq 0 \
     --beam_freq 1000 \
     --beam_size 4 \
-    --translation_maxlen $len
+    --inverse_loss \
+    --translation_maxlen $len \
+    --normalization_alpha 0.6
 
-    # --token_batch_size 8192 \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \
     # --token_batch_size 16384 \

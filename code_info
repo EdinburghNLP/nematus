@@ -1,0 +1,167 @@
+[128 23 256]
+[128 25 256]
+[128 25 256]
+[128 27 256]
+[128 32 256]
+[128 34 256]
+[128 41 256]
+
+
+
+--source_dataset /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de --target_dataset /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en --dictionaries /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json --save_freq 10000 --model /cs/usr/bareluz/gabi_labs/nematus/de-en/scripts//models//bpe256/model.npz --reload latest_checkpoint --model_type transformer --embedding_size 256 --state_size 256 --loss_function per-token-cross-entropy --label_smoothing 0.1 --optimizer adam --adam_beta1 0.9 --adam_beta2 0.98 --adam_epsilon 1e-09 --transformer_dec_depth 4 --transformer_enc_depth 4 --learning_schedule transformer --warmup_steps 4000 --maxlen 40 --batch_size 128 --translation_maxlen 40 --normalization_alpha 0.6 --valid_source_dataset /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.de --valid_target_dataset /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.en --valid_batch_size 120 --valid_token_batch_size 4096 --valid_freq 10000 --valid_script /cs/usr/bareluz/gabi_labs/nematus/de-en/scripts//validate.sh --disp_freq 1000 --sample_freq 0 --beam_freq 1000  --beam_size 4 --translation_maxlen 40
+
+
+np.shape(source_sents) = (128,39,1) this means 128 sentences of max length 39
+np.shape(target_sents) = (128,40) this means 128 sentences of max length 40
+np.shape(x_in) = (1, 41, 128)
+np.shape(y_in) = (41, 128)
+
+*******
+np.shape(target_sents[1]) = (35,)
+
+for w in target_sents[1]:
+    print(num_to_target[w], end = " ")
+
+next Monday , drawing on the outcome of the fact = finding missions conducted in September by independent experts , the Foreign Affairs Council is expected to release conclusions that should address this issue .
+
+for w in y_in[:,1]:
+    print(num_to_target[w], end = " ")
+
+next Monday , drawing on the outcome of the fact = finding missions conducted in September by independent experts , the Foreign Affairs Council is expected to release conclusions that should address this issue . <EOS> <EOS> <EOS> <EOS> <EOS> <EOS>
+
+np.shape(split_x) = (1, 1, 41, 128)
+np.shape(split_y) = (1, 1, 41, 128)
+
+one_hot_inputs [128 41]
+self.embedding_table [30519 256]
+
+
+model structure
+
+<tf.Variable 'model0/transformer_model/encoder_embedding_layer/embedding_table:0' shape=(29344, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder_embedding_layer/embedding_table:0' shape=(30519, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/softmax_projection_layer/embedding_table:0' shape=(30519, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_1/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_2/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_3/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/final_transform/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/encoder/layer_4/final_transform/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_cross_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_cross_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/cross_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/cross_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/cross_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/cross_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_1/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_cross_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_cross_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/cross_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/cross_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/cross_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/cross_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_2/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_cross_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_cross_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/cross_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/cross_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/cross_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/cross_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_3/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_self_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_self_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/self_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/self_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/self_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/self_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_cross_attn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_cross_attn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/cross_attn_sublayer/queries_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/cross_attn_sublayer/keys_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/cross_attn_sublayer/values_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/cross_attn_sublayer/context_projection/dense_layer_weights:0' shape=(256, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_ffn_sublayer/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/pre_ffn_sublayer/layer_norm/scale:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/ff_layer_1/dense_layer_weights:0' shape=(256, 2048) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/ff_layer_1/dense_layer_biases:0' shape=(2048,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/ff_layer_2/dense_layer_weights:0' shape=(2048, 256) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/final_transform/layer_norm/offset:0' shape=(256,) dtype=float32>
+<tf.Variable 'model0/transformer_model/decoder/layer_4/final_transform/layer_norm/scale:0' shape=(256,) dtype=float32>

@@ -167,6 +167,7 @@ class ModelUpdater(object):
                 feed_dict[self._replicas[j].inputs.training] = True
 
             if self._config.print_per_token_pro == False:
+                ### comment: runs the transformer, from here can't debug
                 session.run([self._graph.accum_ops], feed_dict=feed_dict)
             else:
                 tmp = session.run([self._graph.accum_ops], feed_dict=feed_dict)

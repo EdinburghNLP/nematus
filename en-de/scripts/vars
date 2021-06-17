@@ -1,6 +1,6 @@
 src=de
 trg=en
-nematus_home=/cs/usr/bareluz/gabi_labs/nematus
+nematus_home=/cs/labs/gabis/bareluz/nematus
 remove_edges=$nematus_home/nematus/parsing/remove_edges.py
 capitalized_langs=(en de fr es ru)
 if [[ " ${capitalized_langs[@]} " =~ " ${trg} " ]]; then
