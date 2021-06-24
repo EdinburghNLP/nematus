@@ -5,3 +5,5 @@ nmt.egg-info
 .idea
 .DS_Store
 nematus_env/*
+*.bin
+embedding_debiaswe.txt

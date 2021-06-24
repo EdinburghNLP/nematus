@@ -165,3 +165,7 @@ model structure
 <tf.Variable 'model0/transformer_model/decoder/layer_4/ff_layer_2/dense_layer_biases:0' shape=(256,) dtype=float32>
 <tf.Variable 'model0/transformer_model/decoder/layer_4/final_transform/layer_norm/offset:0' shape=(256,) dtype=float32>
 <tf.Variable 'model0/transformer_model/decoder/layer_4/final_transform/layer_norm/scale:0' shape=(256,) dtype=float32>
+
+
+
+source dict : /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/train.clean.unesc.tok.tc.bpe.en.json

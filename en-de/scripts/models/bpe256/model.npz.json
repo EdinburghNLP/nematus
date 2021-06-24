@@ -9,8 +9,8 @@
   "datasets": null,
   "decay_c": 0.0,
   "dictionaries": [
-    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json",
-    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json"
+    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json",
+    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json"
   ],
   "dim_per_factor": [
     256
@@ -75,20 +75,20 @@
   "shuffle_each_epoch": true,
   "softmax_mixture_size": 1,
   "sort_by_length": true,
-  "source_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de",
+  "source_dataset": "/cs/usr/bareluz/gabi_labs/nematus/nematus/en_small_data",
   "source_dicts": [
-    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json"
+    "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json"
   ],
   "source_vocab_sizes": [
-    30519
+    29344
   ],
   "state_size": 256,
   "summary_dir": null,
   "summary_freq": 0,
-  "target_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en",
-  "target_dict": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json",
+  "target_dataset": "/cs/usr/bareluz/gabi_labs/nematus/nematus/de_small_data",
+  "target_dict": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json",
   "target_embedding_size": 256,
-  "target_vocab_size": 29344,
+  "target_vocab_size": 30519,
   "theano_compat": false,
   "tie_decoder_embeddings": false,
   "tie_encoder_decoder_embeddings": false,
@@ -105,12 +105,12 @@
   "translation_maxlen": 40,
   "translation_strategy": "beam_search",
   "valid_batch_size": 120,
-  "valid_bleu_source_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.en",
+  "valid_bleu_source_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.de",
   "valid_datasets": null,
   "valid_freq": 10000,
   "valid_script": "/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts//validate.sh",
-  "valid_source_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.en",
-  "valid_target_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.de",
+  "valid_source_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.de",
+  "valid_target_dataset": "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.en",
   "valid_token_batch_size": 4096,
   "warmup_steps": 4000
 }
