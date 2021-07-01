@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de_parent%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_parent%j.out
 
 # module load cuda/10.0
 # module load cudnn
@@ -19,7 +19,7 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -127,10 +127,10 @@ python3 $nematus_home/nematus/train.py \
     --max_tokens_per_device $tokens_per_device \
     --valid_freq 10000 \
     --valid_script $script_dir/validate_seq.sh \
-    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
-    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus/slurm/probs.last\
+    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/probs.last\
     # --max_sentences_per_device $sent_per_device \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \

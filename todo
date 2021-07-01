@@ -9,7 +9,7 @@ sh train.sh
 ( runs with the paramenters given, stops when the computer is turned off, runs immidiatly
   i added m60 to specifically run cortex-01 cluster)
 2. sbatch train.sh
-( enters the run to a queue, takes the paramenters from /cs/usr/bareluz/gabi_labs/nematus/de-en/scripts/train.sh,
+( enters the run to a queue, takes the paramenters from /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/de-en/scripts/train.sh,
 doesn't run immidiatly, doesn't stop when the computer is turned off)
 * check the run with
 squeue -u bareluz

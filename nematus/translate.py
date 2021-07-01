@@ -4,6 +4,7 @@
 
 import sys
 import logging
+USE_DEBIASED = True
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
@@ -14,7 +15,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
 import argparse
-
+from try_load import load_debiased
 import tensorflow as tf
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
@@ -89,7 +90,9 @@ def main(settings):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
-
+        if USE_DEBIASED:
+            embedding_matrix = load_debiased()
+            model[0].enc.embedding_layer.embedding_table = embedding_matrix
         ########################################### PRINT #########################################################
         # printops = []
         # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer after ", summarize=10000))

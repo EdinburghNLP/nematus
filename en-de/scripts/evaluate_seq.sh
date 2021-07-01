@@ -5,12 +5,12 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/evaluate%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/evaluate%j.out
 #SBATCH --wckey=strmt
 module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
-main_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/
+main_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/
 # data_dir=$main_dir/data
 # data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
 #data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD

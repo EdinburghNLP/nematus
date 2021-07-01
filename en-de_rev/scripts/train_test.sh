@@ -2,12 +2,12 @@
 #SBATCH --mem=48g
 #SBATCH -c1
 #SBATCH --time=2-0
-#SBATCH --gres=gpu:1
+# #SBATCH --gres=gpu:4,vmem:8g
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/de_en_test%j.out
+#SBATCH --output=/cs/snapless/oabend/borgr/TG/slurm/en-de_test%j.out
 
-# #SBATCH --gres=gpu:4,vmem:8g
+#SBATCH --gres=gpu:1
 
 # module load cuda/10.0
 # module load cudnn
@@ -21,7 +21,7 @@ source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
 vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -116,18 +116,17 @@ python3 $nematus_home/nematus/train.py \
     --disp_freq 16 \
     --valid_script $script_dir/validate_seq.sh \
     --target_labels_num 0\
-    --non_sequential \
     --target_graph \
     --non_sequential \
-    --target_gcn_layers 0 \
+    --target_gcn_layers 2 \
     --sample_freq 0 \
     --beam_freq 21 \
     --beam_size 8 \
-    --parent_head \
-    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/snapless/oabend/borgr/TG/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+#    --parent_head \
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
-    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/probs.last\
+    # --print_per_token_pro /cs/snapless/oabend/borgr/TG/slurm/probs.last\
     # --max_sentences_per_device $sent_per_device \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \
@@ -138,7 +137,7 @@ echo done
 
 
 # script_dir=`dirname $0`
-# script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+# script_dir=/cs/snapless/oabend/borgr/TG/en-de/scripts/
 # echo "script_dir is ${script_dir}"
 # main_dir=$script_dir/../..
 # # data_dir=$script_dir/data
@@ -220,7 +219,7 @@ echo done
 #     --beam_size 4 \
 #     --translation_maxlen $len \
 #     --inverse_loss \
-#     --normalization_alpha 0.6 &> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/out_train$(date "+%Y.%m.%d-%H.%M.%S") &
+#     --normalization_alpha 0.6 &> /cs/snapless/oabend/borgr/TG/slurm/out_train$(date "+%Y.%m.%d-%H.%M.%S") &
 
 # # #     # --tie_encoder_decoder_embeddings \
 # # #     # --tie_decoder_embeddings \

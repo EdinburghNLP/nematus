@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --mem=50g
-#SBATCH -c4
+#SBATCH -c2
 #SBATCH --time=7-0
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/invloss%j.out
+#SBATCH --output=/cs/snapless/oabend/borgr/TG/slurm/en-de_rev%j.out
+#SBATCH --wckey=strmt
 
 # module load cuda/10.0
 # module load cudnn
@@ -19,7 +20,7 @@ module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+script_dir=/cs/snapless/oabend/borgr/TG/en-de_rev/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -33,11 +34,11 @@ mkdir -p $model_dir
 #language-dependent variables (source and target language)
 . $script_dir/vars
 
-working_dir=$model_dir/invloss256
+working_dir=$model_dir/bpe256
 mkdir -p $working_dir
 
-src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
-trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.en
+src_train=$data_dir/train.clean.unesc.tok.tc.bpe.en
+trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
 src_bpe=$src_train.json
 trg_bpe=$trg_train.json
 
@@ -50,8 +51,8 @@ if [ ! -f ${src_bpe} ]; then
 fi
 
 
-src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
-trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
+src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
+trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
 
 len=40
 batch_size=128
@@ -70,7 +71,7 @@ python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \
     --dictionaries $src_bpe $trg_bpe\
-    --save_freq 30000 \
+    --save_freq 10000 \
     --model $working_dir/model.npz \
     --reload latest_checkpoint \
     --model_type transformer \
@@ -89,7 +90,7 @@ python3 $nematus_home/nematus/train.py \
     --maxlen $len \
     --batch_size $batch_size \
     --translation_maxlen $len \
-    --token_batch_size 8192 \
+    --normalization_alpha 0.6 \
     --valid_source_dataset $src_dev \
     --valid_target_dataset $trg_dev \
     --valid_batch_size 120 \
@@ -100,10 +101,9 @@ python3 $nematus_home/nematus/train.py \
     --sample_freq 0 \
     --beam_freq 1000 \
     --beam_size 4 \
-    --inverse_loss \
-    --translation_maxlen $len \
-    --normalization_alpha 0.6
+    --translation_maxlen $len
 
+    # --token_batch_size 8192 \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \
     # --token_batch_size 16384 \

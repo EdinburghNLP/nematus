@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de%j.out
 
 # module load cuda/10.0
 # module load cudnn
@@ -17,10 +17,10 @@
 
 #module load tensorflow/2.0.0
 #source /cs/snapless/oabend/borgr/envs/tg/bin/activate
-source /cs/usr/bareluz/gabi_labs/nematus/nematus_env3/bin/activate
+source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -152,8 +152,8 @@ python3 $nematus_home/nematus/train.py \
 
 ##############run with small dataset##############
 #    $nematus_home/nematus/train.py \
-#    --source_dataset /cs/usr/bareluz/gabi_labs/nematus/nematus/en_small_data \
-#    --target_dataset /cs/usr/bareluz/gabi_labs/nematus/nematus/de_small_data \
+#    --source_dataset /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus/en_small_data \
+#    --target_dataset /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus/de_small_data \
 #    --dictionaries $src_bpe $trg_bpe\
 #    --save_freq 10000 \
 #    --model $working_dir/model.npz \

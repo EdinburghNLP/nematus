@@ -6,7 +6,7 @@
 #SBATCH --killable
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=bar.iluz@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus/slurm/en-de_translate%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_translate%j.out
 
 
 
@@ -14,7 +14,7 @@
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus/en-de_rev/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de_rev/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 
@@ -26,7 +26,7 @@ main_dir=$script_dir/../..
 
 #model_type="0gcn"
 model_type="bpe256"
-output_path=/cs/usr/bareluz/gabi_labs/nematus/en-de_rev/output/tmp.out
+output_path=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de_rev/output/tmp.out
 input_path=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.${src}
 #model_name=model_seq_trans.npz
 model_name=model.npz

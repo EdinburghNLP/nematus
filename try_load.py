@@ -20,52 +20,57 @@ from debiaswe.debiaswe.debias import debias
 
 
 
-DEFINITIONAL_FILE = "/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/definitional_pairs.json"
-GENDER_SPECIFIC_FILE = "/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/gender_specific_full.json"
-EQUALIZE_FILE = "/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/equalize_pairs.json"
-DEBIASED_TARGET_FILE = "/cs/usr/bareluz/gabi_labs/nematus/debiaswe/embeddings/Nematus-hard-debiased.bin"
-EMBEDDING_TABLE_FILE = "/cs/labs/gabis/bareluz/nematus/embedding_table.bin"
-EMBEDDING_DEBIASWE_FILE = "/cs/labs/gabis/bareluz/nematus/embedding_debiaswe.txt"
+DEFINITIONAL_FILE = "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/debiaswe/data/definitional_pairs.json"
+GENDER_SPECIFIC_FILE = "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/debiaswe/data/gender_specific_full.json"
+EQUALIZE_FILE = "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/debiaswe/data/equalize_pairs.json"
+DEBIASED_TARGET_FILE = "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/debiaswe/embeddings/Nematus-hard-debiased.bin"
+EMBEDDING_TABLE_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/embedding_table.bin"
+EMBEDDING_DEBIASWE_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/embedding_debiaswe.txt"
 ENG_DICT_FILE = "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/train.clean.unesc.tok.tc.bpe.en.json"
 np. set_printoptions(suppress=True)
-output_translate_file = open('/cs/usr/bareluz/gabi_labs/nematus/output_translate.txt', 'r')
+output_translate_file = open('/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/output_translate.txt', 'r')
+
 def check_all_lines_exist():
-  lines_count = np.zeros(29344)
-  while True:
-      line = output_translate_file.readline()
-      if not line:
-          break
-      if line.__contains__("enc_inputs for word"):
-          a = line.split("enc_inputs for word")
-          for i in a:
-            if i.__contains__("["):
-              line_num = i.split("[")[0]
-              lines_count[int(line_num)] += 1
-  for i, l in enumerate(lines_count):
-      print("entry num " + str(i) + ": " + str(l))
-  return lines_count
+    """
+    checks that each line in the embedding table printed in translate run, exists (since the lines are iterated with threads
+    and are printed in random order)
+    """
+    lines_count = np.zeros(29344)
+    while True:
+        line = output_translate_file.readline()
+        if not line:
+            break
+        if line.__contains__("enc_inputs for word"):
+            a = line.split("enc_inputs for word")
+            for i in a:
+                if i.__contains__("["):
+                    line_num = i.split("[")[0]
+                    lines_count[int(line_num)] += 1
+    for i, l in enumerate(lines_count):
+        print("entry num " + str(i) + ": " + str(l))
+    return lines_count
 
 def get_embedding_table():
-  embedding_matrix = (np.zeros((29344,256))).astype(np.str)
-  lines_count = np.zeros(29344)
-  while True:
-      line = output_translate_file.readline()
-      if not line:
-          break
-      if line.__contains__("enc_inputs for word"):
-          a = line.split("enc_inputs for word")
-          for i in a:
-            if i.__contains__("["):
-              line_num = int(i.split("[")[0])
-              if lines_count[line_num]>0:
-                continue
-              lines_count[line_num]+=1
-              row = i[i.find("[")+1:i.rfind("]")]
-              row = row.split(" ")
-              embedding_matrix[line_num,:]=row
-  with open(EMBEDDING_TABLE_FILE, 'wb') as file_:
-      pickle.dump(embedding_matrix,file_)
-  return np.array(embedding_matrix,dtype=np.double)
+    embedding_matrix = (np.zeros((29344, 256))).astype(np.str)
+    lines_count = np.zeros(29344)
+    while True:
+        line = output_translate_file.readline()
+        if not line:
+            break
+        if line.__contains__("enc_inputs for word"):
+            a = line.split("enc_inputs for word")
+            for i in a:
+                if i.__contains__("["):
+                    line_num = int(i.split("[")[0])
+                    if lines_count[line_num] > 0:
+                        continue
+                    lines_count[line_num] += 1
+                    row = i[i.find("[") + 1:i.rfind("]")]
+                    row = row.split(" ")
+                    embedding_matrix[line_num, :] = row
+    with open(EMBEDDING_TABLE_FILE, 'wb') as file_:
+        pickle.dump(embedding_matrix, file_)
+    return np.array(embedding_matrix, dtype=np.double)
 
 def prepare_data_to_debias():
     with open(ENG_DICT_FILE, 'r') as dict_file, open(EMBEDDING_TABLE_FILE,'rb') as embedding_file, open(EMBEDDING_DEBIASWE_FILE, 'w') as embedding_debiaswe_file:
@@ -119,7 +124,7 @@ if __name__ == '__main__':
   # print(embedding_matrix)
 
   # prepare_data_to_debias()
-  # debias_data()
-  embedding_table = load_debiased()
-  print(np.shape(embedding_table))
-  print(embedding_table)
+  debias_data()
+  # embedding_table = load_debiased()
+  # print(np.shape(embedding_table))
+  # print(embedding_table)
