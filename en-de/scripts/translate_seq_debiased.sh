@@ -6,7 +6,7 @@
 #SBATCH --killable
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=bar.iluz@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_translate%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_translate_debiased%j.out
 
 
 
@@ -26,7 +26,7 @@ main_dir=$script_dir/../..
 
 #model_type="0gcn"
 model_type="bpe256"
-output_path=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de_rev/output/tmp.out
+output_path=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de_rev/output/tmp_debiased.out
 input_path=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.${src}
 #model_name=model_seq_trans.npz
 model_name=model.npz
@@ -64,7 +64,7 @@ echo "python ${nematus_home}/nematus/translate.py \n
 python "$nematus_home"/nematus/translate.py \
      -i "$input_path" \
      -m  "$model_dir/$model_name" \
-     -k 12 -n -o "$tmp_path" ${batch_size} -d False
+     -k 12 -n -o "$tmp_path" ${batch_size} -d True
 #echo  python "$nematus_home"/nematus/translate.py \
 #     -i "$input_path" \
 #     -m  "$model_dir/$model_name" \

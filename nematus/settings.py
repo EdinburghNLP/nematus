@@ -92,7 +92,9 @@ class TranslationSettings(BaseSettings):
             const=1.0, metavar="ALPHA",
             help="normalize scores by sentence length (with argument, " \
                  "exponentiate lengths by ALPHA)")
-
+        self._parser.add_argument(
+            '-d', '--debiased', type=bool, default=False, nargs="?",
+            help="run translate on the debiased dictionary or not")
         # Support --n-best and --n_best (the dash version was added first, but
         # is inconsistent with the prevailing underscore style).
         group = self._parser.add_mutually_exclusive_group()

@@ -1,6 +1,6 @@
 * enter to gate 
 ssh phoenix-gw
-* enter cd gabi_labs/nematus/en-de/scripts/
+* enter cd gabi_labs/nematus_clean/nematus/en-de/scripts/
 * request gpus and memory (aviv asks 64g mamory)
 two options:
 1. srun --mem=4000m -c2 --time=1-12 --gres=gpu:m60:2 --pty $SHELL
@@ -17,3 +17,95 @@ squeue -u bareluz
 *what to change
 grep --color -r "/borgr/TG"
 
+
+*********************train params:
+--source_dataset
+/cs/usr/bareluz/gabi_labs/nematus/nematus/en_small_data
+--target_dataset
+/cs/usr/bareluz/gabi_labs/nematus/nematus/de_small_data
+--dictionaries
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.en.json
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//train.clean.unesc.tok.tc.bpe.de.json
+--save_freq
+10000
+--model
+/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts//models//bpe256/model.npz
+--reload
+latest_checkpoint
+--model_type
+transformer
+--embedding_size
+256
+--state_size
+256
+--loss_function
+per-token-cross-entropy
+--label_smoothing
+0.1
+--optimizer
+adam
+--adam_beta1
+0.9
+--adam_beta2
+0.98
+--adam_epsilon
+1e-09
+--transformer_dec_depth
+4
+--transformer_enc_depth
+4
+--learning_schedule
+transformer
+--warmup_steps
+4000
+--maxlen
+40
+--batch_size
+128
+--translation_maxlen
+40
+--normalization_alpha
+0.6
+--valid_source_dataset
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.de
+--valid_target_dataset
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8//newstest2013.unesc.tok.tc.bpe.en
+--valid_batch_size
+120
+--valid_token_batch_size
+4096
+--valid_freq
+10000
+--valid_script
+/cs/usr/bareluz/gabi_labs/nematus/en-de/scripts//validate.sh
+--disp_freq
+1000
+--sample_freq
+0
+--beam_freq
+1000
+--beam_size
+4
+--translation_maxlen
+40
+
+***********************translate params:
+-i
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.de
+-m
+/cs/usr/bareluz/gabi_labs/nematus/en-de_rev/scripts//models/bpe256/model.npz
+-k
+12
+-n
+-o
+/cs/usr/bareluz/gabi_labs/nematus/en-de_rev/tmp.out.tmp
+-d
+True
+
+
+************************debias params:
+/cs/usr/bareluz/gabi_labs/nematus/embedding_debiaswe.txt
+/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/definitional_pairs.json
+/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/gender_specific_full.json
+/cs/usr/bareluz/gabi_labs/nematus/debiaswe/data/equalize_pairs.json
+../embeddings/GoogleNews-vectors-negative300-hard-debiased.bin

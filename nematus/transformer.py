@@ -284,16 +284,16 @@ class TransformerEncoder(object):
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
             source_embeddings = self._embed(source_ids)
 
-
-            # ########################################### PRINT #########################################################
-            printops = []
-            for i in list(range(29344)):
-                printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
-                printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
-                tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
-            with tf.control_dependencies(printops):
-                source_embeddings = source_embeddings * 1
-            # ###########################################################################################################
+            ### print the embedding table
+            # # ########################################### PRINT #########################################################
+            # printops = []
+            # for i in list(range(29344)):
+            #     printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
+            #     printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
+            #     tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
+            # with tf.control_dependencies(printops):
+            #     source_embeddings = source_embeddings * 1
+            # # ###########################################################################################################
 
 
 

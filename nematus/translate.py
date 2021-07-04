@@ -4,7 +4,6 @@
 
 import sys
 import logging
-USE_DEBIASED = True
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
@@ -90,9 +89,13 @@ def main(settings):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
-        if USE_DEBIASED:
+        if settings.debiased:
+            print("using debiased data")
             embedding_matrix = load_debiased()
-            model[0].enc.embedding_layer.embedding_table = embedding_matrix
+            models[0].enc.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
+        else:
+            print("using non debiased data")
+
         ########################################### PRINT #########################################################
         # printops = []
         # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer after ", summarize=10000))
