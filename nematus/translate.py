@@ -4,6 +4,7 @@
 
 import sys
 import logging
+from try_load import debias_sanity_check
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
@@ -13,8 +14,7 @@ if __name__ == '__main__':
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
-import argparse
-from try_load import load_debiased
+from try_load import load_debias_format_to_array
 import tensorflow as tf
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
@@ -42,7 +42,7 @@ except (ModuleNotFoundError, ImportError) as e:
     from transformer import Transformer as TransformerModel
     import translate_utils
 
-
+USE_DEBIASED =False
 def main(settings):
     """
     Translates a source language file (or STDIN) into a target language file
@@ -89,10 +89,13 @@ def main(settings):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
-        if settings.debiased:
+        if USE_DEBIASED:
             print("using debiased data")
-            embedding_matrix = load_debiased()
+            embedding_matrix = load_debias_format_to_array()
             models[0].enc.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
+            print("*******************sanity check*****************")
+            debias_sanity_check(debiased_embedding_table=embedding_matrix)
+            print("************************************************")
         else:
             print("using non debiased data")
 

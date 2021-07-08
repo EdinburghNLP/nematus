@@ -5,25 +5,18 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_parent%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-he_parent%j.out
 
-# module load cuda/10.0
-# module load cudnn
-# source /cs/snapless/oabend/borgr/envs/tf15/bin/activate
 
-# module load tensorflow
 module load tensorflow/2.0.0
 source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 # export CUDA_VISIBLE_DEVICES='0,1,2,3'
 
-vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
-vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
-data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
 model_dir=$script_dir/models
 mkdir -p $model_dir
 
@@ -33,28 +26,35 @@ mkdir -p $model_dir
 #language-dependent variables (source and target language)
 . $script_dir/vars
 
+
 working_dir=$model_dir/parent
 mkdir -p $working_dir
+vocab_in=$data_dir/vocab.clean.unesc.tok.tc.bpe.${src}
+if [ ! -f ${vocab_in} ]; then
+  vocab_in=$data_dir/vocab.clean.unesc.tok.bpe.${src}
+fi
+vocab_out=$data_dir/vocab.clean.unesc.tok.tc.bpe.${trg}
+if [ ! -f ${vocab_out} ]; then
+  vocab_out=$data_dir/vocab.clean.unesc.tok.bpe.${trg}
+fi
 
-# json_bpe=$script_dir/data/conll14st-preprocessed.bpe.${src}${trg}.json
-src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns.en
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns1.en
-# src_train=$data_dir/tmp.de
-# trg_train=$data_dir/UD/tmp.en
-
-src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
-#trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
-#trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns1.en
-# /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-# src_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest_tmp.de
-# trg_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest_tmp.en
-# src_dev=$data_dir/tmp.de
-# trg_dev=$data_dir/UD/tmp.en
-
+src_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.${src}
+if [ ! -f ${src_train} ]; then
+  src_train=$data_dir/UD/train.clean.unesc.tok.bpe.${src}
+fi
+trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns1.${trg}
+if [ ! -f ${trg_train} ]; then
+  trg_train=$data_dir/UD/train.clean.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_train} ]; then
+  trg_train=$data_dir/UD/train.clean.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_train} ]; then
+  echo "Not found $trg_train"
+fi
 src_bpe=$src_train.json
 trg_bpe=$trg_train.json
+
 # create dictionary if needed
 if [ ! -f ${trg_bpe} ]; then
     echo "creating target dict"
@@ -75,6 +75,18 @@ if [ ! -f ${src_bpe} ]; then
 fi
 
 
+src_dev=$data_dir/UD/dev.unesc.tok.tc.bpe.${src}
+trg_dev=$data_dir/UD/dev.unesc.tok.tc.bpe.trns1.${trg}
+if [ ! -f ${src_dev} ]; then
+  src_dev=$data_dir/UD/dev.unesc.tok.bpe.${src}
+fi
+if [ ! -f ${trg_dev} ]; then
+  trg_dev=$data_dir/UD/dev.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_dev} ]; then
+  echo "Not found $trg_dev"
+fi
+
 # train="conll14st-preprocessed"
 # corpora=("en_esl-ud-dev.conllu" "en_esl-ud-test.conllu" "en_esl-ud-train.conllu")
 len=80
@@ -87,6 +99,7 @@ dec_blocks=4
 enc_blocks="${dec_blocks}"
 lshw -C display | tail # write the acquired gpu properties
 
+#python3 -m cProfile -s cumtime $nematus_home/nematus/train.py \
 python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \

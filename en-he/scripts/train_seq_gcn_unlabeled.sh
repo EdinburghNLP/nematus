@@ -2,28 +2,25 @@
 #SBATCH --mem=48g
 #SBATCH -c4
 #SBATCH --time=7-0
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:4,vmem:8g
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_parent%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-he_unlabel%j.out
 
 # module load cuda/10.0
 # module load cudnn
-# source /cs/snapless/oabend/borgr/envs/tf15/bin/activate
+# source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 
 # module load tensorflow
 module load tensorflow/2.0.0
 source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 # export CUDA_VISIBLE_DEVICES='0,1,2,3'
 
-vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
-vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/scripts/
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
-# data_dir=$script_dir/data
-data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
+#data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
 model_dir=$script_dir/models
 mkdir -p $model_dir
 
@@ -33,28 +30,34 @@ mkdir -p $model_dir
 #language-dependent variables (source and target language)
 . $script_dir/vars
 
-working_dir=$model_dir/parent
+working_dir=$model_dir/unlabeled
 mkdir -p $working_dir
+vocab_in=$data_dir/vocab.clean.unesc.tok.tc.bpe.${src}
+if [ ! -f ${vocab_in} ]; then
+  vocab_in=$data_dir/vocab.clean.unesc.tok.bpe.${src}
+fi
+vocab_out=$data_dir/vocab.clean.unesc.tok.tc.bpe.${trg}
+if [ ! -f ${vocab_out} ]; then
+  vocab_out=$data_dir/vocab.clean.unesc.tok.bpe.${trg}
+fi
 
-# json_bpe=$script_dir/data/conll14st-preprocessed.bpe.${src}${trg}.json
-src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns.en
-trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns1.en
-# src_train=$data_dir/tmp.de
-# trg_train=$data_dir/UD/tmp.en
-
-src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
-#trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
-#trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-trg_dev=$data_dir/UD/newstest2013.unesc.tok.tc.bpe.trns1.en
-# /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest2013.unesc.tok.tc.bpe.trns.en
-# src_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest_tmp.de
-# trg_dev=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/UD/newstest_tmp.en
-# src_dev=$data_dir/tmp.de
-# trg_dev=$data_dir/UD/tmp.en
-
+src_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.${src}
+if [ ! -f ${src_train} ]; then
+  src_train=$data_dir/UD/train.clean.unesc.tok.bpe.${src}
+fi
+trg_train=$data_dir/UD/train.clean.unesc.tok.tc.bpe.trns1.${trg}
+if [ ! -f ${trg_train} ]; then
+  trg_train=$data_dir/UD/train.clean.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_train} ]; then
+  trg_train=$data_dir/UD/train.clean.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_train} ]; then
+  echo "Not found $trg_train"
+fi
 src_bpe=$src_train.json
 trg_bpe=$trg_train.json
+
 # create dictionary if needed
 if [ ! -f ${trg_bpe} ]; then
     echo "creating target dict"
@@ -75,13 +78,25 @@ if [ ! -f ${src_bpe} ]; then
 fi
 
 
+src_dev=$data_dir/UD/dev.unesc.tok.tc.bpe.${src}
+trg_dev=$data_dir/UD/dev.unesc.tok.tc.bpe.trns1.${trg}
+if [ ! -f ${src_dev} ]; then
+  src_dev=$data_dir/UD/dev.unesc.tok.bpe.${src}
+fi
+if [ ! -f ${trg_dev} ]; then
+  trg_dev=$data_dir/UD/dev.unesc.tok.bpe.trns1.${trg}
+fi
+if [ ! -f ${trg_dev} ]; then
+  echo "Not found $trg_dev"
+fi
+
 # train="conll14st-preprocessed"
 # corpora=("en_esl-ud-dev.conllu" "en_esl-ud-test.conllu" "en_esl-ud-train.conllu")
 len=80
 batch_size=128
 embedding_size=256
 # token_batch_size=2048
-# sent_per_device=4
+sent_per_device=4
 tokens_per_device=100
 dec_blocks=4
 enc_blocks="${dec_blocks}"
@@ -91,8 +106,8 @@ python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \
     --dictionaries $src_bpe $trg_bpe\
-    --save_freq 1000 \
-    --model $working_dir/model_parent_attn.npz \
+    --save_freq 5000 \
+    --model $working_dir/model_seq_trans.npz \
     --reload latest_checkpoint \
     --model_type transformer \
     --embedding_size $embedding_size \
@@ -114,20 +129,17 @@ python3 $nematus_home/nematus/train.py \
     --beam_freq 1000 \
     --beam_size 8 \
     --translation_maxlen $len \
-    --target_labels_num 45 \
+    --target_labels_num 0\
     --non_sequential \
     --target_graph \
-    --parent_head \
-    --target_gcn_layers 0 \
-    --target_labels_num 0 \
-    --normalization_alpha 0.6 \
+    --normalization_alpha 0.6\
     --valid_source_dataset $src_dev \
     --valid_target_dataset $trg_dev \
     --valid_batch_size 4 \
     --max_tokens_per_device $tokens_per_device \
     --valid_freq 10000 \
     --valid_script $script_dir/validate_seq.sh \
-    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/outunl$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
     # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/probs.last\

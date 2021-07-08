@@ -1,5 +1,5 @@
-src=de
-trg=en
+src=en
+trg=he
 
 # scripts directory of moses decoder: http://www.statmt.org/moses/
 # you do not need to compile moses; a simple download is sufficient
@@ -12,3 +12,4 @@ bpe_scripts=/cs/snapless/oabend/borgr/SSMT/preprocess/subword-nmt
 #nematus: https://github.com/EdinburghNLP/nematus
 nematus_home=/cs/labs/gabis/bareluz/nematus_clean/nematus
 
+data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21/
