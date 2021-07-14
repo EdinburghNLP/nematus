@@ -42,7 +42,8 @@ except (ModuleNotFoundError, ImportError) as e:
     from transformer import Transformer as TransformerModel
     import translate_utils
 
-USE_DEBIASED =False
+USE_DEBIASED =  settings.debiased
+
 def main(settings):
     """
     Translates a source language file (or STDIN) into a target language file

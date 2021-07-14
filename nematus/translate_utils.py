@@ -155,6 +155,7 @@ def translate_file(input_file, output_file, session, sampler, config,
     maxibatch = []
     while True:
         line = input_file.readline()
+        # print(line)
         if line == "":
             if len(maxibatch) > 0:
                 translate_maxibatch(maxibatch, num_to_target, num_translated)
@@ -162,6 +163,7 @@ def translate_file(input_file, output_file, session, sampler, config,
             break
         maxibatch.append(line)
         if len(maxibatch) == (maxibatch_size * minibatch_size):
+        # if len(maxibatch) == (1 ):
             translate_maxibatch(maxibatch, num_to_target, num_translated)
             num_translated += len(maxibatch)
             maxibatch = []

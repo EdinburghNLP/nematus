@@ -94,6 +94,15 @@ class TranslationSettings(BaseSettings):
             help="normalize scores by sentence length (with argument, " \
                  "exponentiate lengths by ALPHA)")
 
+        # self._parser.add_argument(
+        #     '-d', '--debiased', type=float, default=1, nargs="?",
+        #     const=1.0, metavar="ALPHA",
+        #     help="run translate on the debiased dictionary or not")
+
+        self._parser.add_argument(
+            '-d', '--debiased', type=float, required=True,
+            help="run translate on the debiased dictionary or not")
+
         # Support --n-best and --n_best (the dash version was added first, but
         # is inconsistent with the prevailing underscore style).
         group = self._parser.add_mutually_exclusive_group()
@@ -123,9 +132,7 @@ class TranslationSettings(BaseSettings):
         self._parser.add_argument(
             '--translation_strategy', type=str, choices=['beam_search', 'sampling'], default="beam_search",
             help="translation_strategy, either beam_search or sampling (default: %(default)s)")
-        # self._parser.add_argument(
-        #     '-d', '--debiased', type=bool, default=False,
-        #     help="run translate on the debiased dictionary or not")
+
     def _set_additional_vars(self):
         self.request_id = uuid.uuid4()
         self.num_processes = 1

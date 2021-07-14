@@ -59,13 +59,13 @@ echo "python ${nematus_home}/nematus/translate.py \n
 python "$nematus_home"/nematus/translate.py \
      -i "$input_path" \
      -m  "$model_dir/$model_name" \
-     -k 12 -n -o "$tmp_path"
-#$script_dir/postprocess.sh < "$tmp_path" > "$output_path"
-#
-#preprocessed_path="${tmp_path}.proc"
-#$script_dir/postprocess.sh < "${tmp_path}" > "${preprocessed_path}"
-#
-#echo python $remove_edges "${preprocessed_path}" -o "${output_path}"
-#python $remove_edges "${preprocessed_path}" -o "${output_path}"
-#rm $preprocessed_path $tmp_path
-#echo translated to "${output_path}"
+     -k 12 -n -o "$tmp_path" -d 0
+$script_dir/postprocess.sh < "$tmp_path" > "$output_path"
+
+preprocessed_path="${tmp_path}.proc"
+$script_dir/postprocess.sh < "${tmp_path}" > "${preprocessed_path}"
+
+echo python $remove_edges "${preprocessed_path}" -o "${output_path}"
+python $remove_edges "${preprocessed_path}" -o "${output_path}"
+rm $preprocessed_path $tmp_path
+echo translated to "${output_path}"
