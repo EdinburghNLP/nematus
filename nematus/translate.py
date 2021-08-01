@@ -4,7 +4,8 @@
 
 import sys
 import logging
-from try_load import debias_sanity_check
+import os
+import numpy as np
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
@@ -14,8 +15,9 @@ if __name__ == '__main__':
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
 
-from try_load import load_debias_format_to_array
+from try_load import DebiasManager
 import tensorflow as tf
+
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -43,6 +45,12 @@ except (ModuleNotFoundError, ImportError) as e:
     import translate_utils
 
 USE_DEBIASED =  settings.debiased
+# the path of the file that translate wrote the embedding table to. this file will be parsed and debiased
+OUTPUT_TRANSLATE_FILE= "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/output_translate.txt"
+DICT_SIZE = 30546
+# the file to which the debiased embedding table is saved at the end
+ENG_DICT_FILE = "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//train.clean.unesc.tok.tc.bpe.en.json"
+DEBIASED_TARGET_FILE = "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/debiaswe/embeddings/Nematus-hard-debiased.bin"
 
 def main(settings):
     """
@@ -90,15 +98,7 @@ def main(settings):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 _ = model_loader.init_or_restore_variables(config, session,
                                                        ensemble_scope=scope)
-        if USE_DEBIASED:
-            print("using debiased data")
-            embedding_matrix = load_debias_format_to_array()
-            models[0].enc.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
-            print("*******************sanity check*****************")
-            debias_sanity_check(debiased_embedding_table=embedding_matrix)
-            print("************************************************")
-        else:
-            print("using non debiased data")
+
 
         ########################################### PRINT #########################################################
         # printops = []
@@ -127,7 +127,21 @@ def main(settings):
                              'positive to negative (as of commit 95793196...). '
                              'If you are using the scores for reranking etc, then '
                              'you may need to update your scripts.')
-
+        # if USE_DEBIASED:
+        #     print("using debiased data")
+        #
+        #     debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
+        #     # if os.path.isfile(DEBIASED_TARGET_FILE):
+        #     #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
+        #     # else:
+        #     embedding_matrix = debias_manager.load_and_debias()
+        #     # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
+        #     # np.random.shuffle(embedding_matrix)
+        #     # models[0].enc.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
+        #     models[0].enc.embedding_layer.embedding_table = "blabla"
+        #     # debias_manager.debias_sanity_check(debiased_embedding_table=models[0].enc.embedding_layer.embedding_table)
+        # else:
+        #     print("using non debiased data")
         # Translate the source file.
         translate_utils.translate_file(
             input_file=settings.input,

@@ -102,6 +102,10 @@ transformer
 -d
 True
 
+-i /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.en -m /cs/usr/bareluz/gabi_labs/nematus/en-de_rev/scripts//models/bpe256/model.npz -k 12 -n -o /cs/usr/bareluz/gabi_labs/nematus/en-de_rev/tmp.out.tmp -d 0
+
+##en-he##
+python3 translate.py -i /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//test.unesc.tok.tc.bpe.en -m  /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/scripts//models/bpe256//model.npz -k 12 -n -o /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/output/tmp.out.tmp -d 0
 
 ************************debias params:
 /cs/usr/bareluz/gabi_labs/nematus/embedding_debiaswe.txt
@@ -112,5 +116,54 @@ True
 
 
 
--i /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/newstest2014.unesc.tok.tc.bpe.en -m /cs/usr/bareluz/gabi_labs/nematus/en-de_rev/scripts//models/bpe256/model.npz -k 12 -n -o /cs/usr/bareluz/gabi_labs/nematus/en-de_rev/tmp.out.tmp -d 0
-python3 translate.py -i /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//test.unesc.tok.tc.bpe.en -m  /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/scripts//models/bpe256//model.npz -k 12 -n -o /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/output/tmp.out.tmp -d 0
+
+
+
+/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he
+
+<tf.Variable 'model0/transformer_model/encoder_embedding_layer/embedding_table:0' shape=(30546, 256) dtype=float32>
+a.initial_value
+<tf.Tensor 'model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform:0' shape=(30546, 256) dtype=float32>
+a.trainable
+True
+a.name
+'model0/transformer_model/encoder_embedding_layer/embedding_table:0'
+a.dtype
+tf.float32
+a.synchronization
+<VariableSynchronization.AUTO: 0>
+a.aggregation
+<VariableAggregation.NONE: 0>
+a.shape
+TensorShape([30546, 256])
+
+b=a.initial_value
+b.name
+'model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform:0'
+b.op
+<tf.Operation 'model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform' type=Add>
+b.value_index
+0
+b.dtype
+tf.float32
+
+c=b.op
+c.node_def
+name: "model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform"
+op: "Add"
+input: "model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform/mul"
+input: "model0/transformer_model/encoder_embedding_layer/embedding_table/Initializer/random_uniform/min"
+attr {
+  key: "T"
+  value {
+    type: DT_FLOAT
+  }
+}
+attr {
+  key: "_class"
+  value {
+    list {
+      s: "loc:@model0/transformer_model/encoder_embedding_layer/embedding_table"
+    }
+  }
+}

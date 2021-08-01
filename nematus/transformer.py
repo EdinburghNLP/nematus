@@ -5,6 +5,13 @@ import tensorflow as tf
 import os
 import inspect
 from os import path
+
+# DICT_SIZE = 29344
+# DICT_SIZE = 29344
+DICT_SIZE = 30546
+USE_DEBIASED = 1
+ENG_DICT_FILE = "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//train.clean.unesc.tok.tc.bpe.en.json"
+OUTPUT_TRANSLATE_FILE= "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/output_translate.txt"
 try:
     from . import util
 except (ModuleNotFoundError, ImportError) as e:
@@ -42,7 +49,8 @@ except (ModuleNotFoundError, ImportError) as e:
         MaskedCrossEntropy, \
         get_right_context_mask, \
         get_positional_signal
-
+from try_load import DebiasManager
+import numpy as np
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
 
@@ -282,18 +290,40 @@ class TransformerEncoder(object):
 
         def _prepare_source():
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
+
+            if USE_DEBIASED:
+                print("using debiased data")
+
+                # debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
+                # if os.path.isfile(DEBIASED_TARGET_FILE):
+                #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
+                # else:
+                # embedding_matrix = debias_manager.load_and_debias()
+                # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
+                # np.random.shuffle(embedding_matrix)
+                # self.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
+                embedding_matrix = tf.cast(tf.convert_to_tensor(np.zeros((30546,256))), dtype=tf.float32)
+                # self.embedding_layer.embedding_table =embedding_matrix
+                self.embedding_layer.embedding_table = embedding_matrix
+                # sess = tf.compat.v1.Session()
+                # sess.run(assign_op)  # or `assign_op.op.run()`
+
+                # self.embedding_layer.embedding_table = "blabla"
+                # debias_manager.debias_sanity_check(debiased_embedding_table=models[0].enc.embedding_layer.embedding_table)
+
             source_embeddings = self._embed(source_ids)
 
-            ### print the embedding table
-            # # ########################################### PRINT #########################################################
-            # printops = []
-            # for i in list(range(29344)):
-            #     printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
-            #     printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
-            #     tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
-            # with tf.control_dependencies(printops):
-            #     source_embeddings = source_embeddings * 1
-            # # ###########################################################################################################
+            ## print the embedding table
+            # ########################################### PRINT #########################################################
+            printops = []
+            printops.append(tf.compat.v1.Print([], [tf.shape(self.embedding_layer.embedding_table)], "embedding_table shape ", summarize=10000))
+            for i in list(range(DICT_SIZE)):
+                printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
+                printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
+                tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
+            with tf.control_dependencies(printops):
+                source_embeddings = source_embeddings * 1
+            # ###########################################################################################################
 
 
 
