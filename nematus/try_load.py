@@ -129,8 +129,10 @@ class DebiasManager():
             embeddings = non_debiased_embedding_table
         with open(self.eng_dict_file, 'r') as dict_file, open(dest_file, 'w') as embedding_debiaswe_file:
             eng_dictionary = json.load(dict_file)
-            eng_dictionary_list = list(eng_dictionary.keys())
-            for i, w in enumerate(eng_dictionary_list):
+            # eng_dictionary_list = list(eng_dictionary.keys())
+            assert(list(eng_dictionary.values()) == list(range(self.dict_size)))
+            # TODO: if this passes, then put a breakpoint here and examine the value of embeddings[-1, :], what's in there?
+            for w, i in eng_dictionary.items():
                 embedding_debiaswe_file.write(w + " " + ' '.join(map(str, embeddings[i, :])) + "\n")
         self.E = we.WordEmbedding(dest_file)
 
