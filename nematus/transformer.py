@@ -5,13 +5,8 @@ import tensorflow as tf
 import os
 import inspect
 from os import path
+from nematus.consts import *
 
-# DICT_SIZE = 29344
-# DICT_SIZE = 29344
-DICT_SIZE = 30546
-USE_DEBIASED = 1
-ENG_DICT_FILE = "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//train.clean.unesc.tok.tc.bpe.en.json"
-OUTPUT_TRANSLATE_FILE= "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/output_translate.txt"
 try:
     from . import util
 except (ModuleNotFoundError, ImportError) as e:
@@ -21,7 +16,6 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 
 from debiaswe.debiaswe.debias import debias
-
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -51,8 +45,10 @@ except (ModuleNotFoundError, ImportError) as e:
         get_positional_signal
 from try_load import DebiasManager
 import numpy as np
+
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
+
 
 class Transformer(object):
     """ The main transformer model class. """
@@ -69,10 +65,10 @@ class Transformer(object):
 
         # Convert from time-major to batch-major, handle factors
         self.source_ids, \
-            self.source_mask, \
-            self.target_ids_in, \
-            self.target_ids_out, \
-            self.target_mask = self._convert_inputs(self.inputs)
+        self.source_mask, \
+        self.target_ids_in, \
+        self.target_ids_out, \
+        self.target_mask = self._convert_inputs(self.inputs)
 
         self.training = self.inputs.training
         self.scores = self.inputs.scores
@@ -122,7 +118,6 @@ class Transformer(object):
                 self._risk = mru.mrt_cost(self._loss_per_sentence, self.scores, self.index, self.config)
 
             self.sampling_utils = SamplingUtils(config)
-
 
     def _build_graph(self):
         """ Defines the model graph. """
@@ -197,10 +192,10 @@ class Transformer(object):
     def _convert_inputs(self, inputs):
         # Convert from time-major to batch-major. Note that we take factor 0
         # from x and ignore any other factors.
-        source_ids = tf.transpose(a=inputs.x[0], perm=[1,0])
-        source_mask = tf.transpose(a=inputs.x_mask, perm=[1,0])
-        target_ids_out = tf.transpose(a=inputs.y, perm=[1,0])
-        target_mask = tf.transpose(a=inputs.y_mask, perm=[1,0])
+        source_ids = tf.transpose(a=inputs.x[0], perm=[1, 0])
+        source_mask = tf.transpose(a=inputs.x_mask, perm=[1, 0])
+        target_ids_out = tf.transpose(a=inputs.y, perm=[1, 0])
+        target_mask = tf.transpose(a=inputs.y_mask, perm=[1, 0])
 
         # target_ids_in is a bit more complicated since we need to insert
         # the special <GO> symbol (with value 1) at the start of each sentence
@@ -208,7 +203,7 @@ class Transformer(object):
         go_symbols = tf.fill(value=1, dims=[1, batch_size])
         tmp = tf.concat([go_symbols, inputs.y], 0)
         tmp = tmp[:-1, :]
-        target_ids_in = tf.transpose(a=tmp, perm=[1,0])
+        target_ids_in = tf.transpose(a=tmp, perm=[1, 0])
         return (source_ids, source_mask, target_ids_in, target_ids_out,
                 target_mask)
 
@@ -234,6 +229,7 @@ class TransformerEncoder(object):
         # Create nodes
         self._build_graph()
         _, _, self.num_to_source, self.num_to_target = util.load_dictionaries(config)
+        a = 1
 
     @tf.function
     # def debias_embedding(self, embedding, source_ids):
@@ -294,38 +290,36 @@ class TransformerEncoder(object):
             if USE_DEBIASED:
                 print("using debiased data")
 
-                # debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
+                debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
                 # if os.path.isfile(DEBIASED_TARGET_FILE):
                 #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
                 # else:
-                # embedding_matrix = debias_manager.load_and_debias()
+                embedding_matrix = tf.cast(tf.convert_to_tensor(debias_manager.load_and_debias()), dtype=tf.float32)
                 # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
                 # np.random.shuffle(embedding_matrix)
                 # self.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
-                embedding_matrix = tf.cast(tf.convert_to_tensor(np.zeros((30546,256))), dtype=tf.float32)
-                # self.embedding_layer.embedding_table =embedding_matrix
+                # embedding_matrix = tf.cast(tf.convert_to_tensor(np.zeros((30546,256))), dtype=tf.float32)
                 self.embedding_layer.embedding_table = embedding_matrix
-                # sess = tf.compat.v1.Session()
-                # sess.run(assign_op)  # or `assign_op.op.run()`
-
                 # self.embedding_layer.embedding_table = "blabla"
                 # debias_manager.debias_sanity_check(debiased_embedding_table=models[0].enc.embedding_layer.embedding_table)
-
+            else:
+                print("using non debiased data")
             source_embeddings = self._embed(source_ids)
 
-            ## print the embedding table
-            # ########################################### PRINT #########################################################
-            printops = []
-            printops.append(tf.compat.v1.Print([], [tf.shape(self.embedding_layer.embedding_table)], "embedding_table shape ", summarize=10000))
-            for i in list(range(DICT_SIZE)):
-                printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i,:]], "enc_inputs for word " + str(i), summarize=10000))
-                printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
-                tf.io.write_file("output_translate.txt",str(self.embedding_layer.embedding_table[i,:]))
-            with tf.control_dependencies(printops):
-                source_embeddings = source_embeddings * 1
-            # ###########################################################################################################
-
-
+            # ## print the embedding table
+            # # ########################################### PRINT #########################################################
+            # printops = []
+            # printops.append(
+            #     tf.compat.v1.Print([], [tf.shape(self.embedding_layer.embedding_table)], "embedding_table shape ",
+            #                        summarize=10000))
+            # for i in list(range(DICT_SIZE)):
+            #     printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i, :]],
+            #                                        "enc_inputs for word " + str(i), summarize=10000))
+            #     printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
+            #     tf.io.write_file("output_translate.txt", str(self.embedding_layer.embedding_table[i, :]))
+            # with tf.control_dependencies(printops):
+            #     source_embeddings = source_embeddings * 1
+            # # ###########################################################################################################
 
             # Embed
             ### comment: first embedding without positional signal
@@ -341,13 +335,12 @@ class TransformerEncoder(object):
             cross_attn_mask = attn_mask
             # Add positional encodings
             positional_signal = get_positional_signal(time_steps, depth, FLOAT_DTYPE)
-            source_embeddings += positional_signal ### comment: first embedding with positional signal
+            source_embeddings += positional_signal  ### comment: first embedding with positional signal
 
             # Apply dropout
             if self.dropout_embedding is not None:
                 source_embeddings = self.dropout_embedding(source_embeddings, training=self.training)
             return source_embeddings, self_attn_mask, cross_attn_mask
-
 
         with tf.compat.v1.variable_scope(self.name):
             # Prepare inputs to the encoder, get attention masks

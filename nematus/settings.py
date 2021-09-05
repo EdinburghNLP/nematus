@@ -95,13 +95,8 @@ class TranslationSettings(BaseSettings):
                  "exponentiate lengths by ALPHA)")
 
         # self._parser.add_argument(
-        #     '-d', '--debiased', type=float, default=1, nargs="?",
-        #     const=1.0, metavar="ALPHA",
+        #     '-d', '--debiased', type=float, required=True,
         #     help="run translate on the debiased dictionary or not")
-
-        self._parser.add_argument(
-            '-d', '--debiased', type=float, required=True,
-            help="run translate on the debiased dictionary or not")
 
         # Support --n-best and --n_best (the dash version was added first, but
         # is inconsistent with the prevailing underscore style).

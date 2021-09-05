@@ -3,7 +3,7 @@
 # Distributed under MIT license
 
 script_dir=`dirname $0`
-script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/scripts/
 
 main_dir=$script_dir/..
 

@@ -15,7 +15,7 @@ try:
 except (ModuleNotFoundError, ImportError) as e:
     import exception
     import util
-
+MIN_LINE_NUM = 1552
 
 def translate_batch(session, sampler, x, x_mask, max_translation_len,
                     normalization_alpha):
@@ -153,21 +153,30 @@ def translate_file(input_file, output_file, session, sampler, config,
 
     num_translated = 0
     maxibatch = []
-    line_num=0
+    line_num = 0
     while True:
-        line = input_file.readline()
-        print(str(line_num)+": "+line)
-        if line == "":
-            if len(maxibatch) > 0:
+        try:
+            line = input_file.readline()
+            # print(line)
+            line_num+=1
+            if line == "":
+                if len(maxibatch) > 0:
+                    translate_maxibatch(maxibatch, num_to_target, num_translated)
+                    num_translated += len(maxibatch)
+                break
+            # if line_num< MIN_LINE_NUM:
+            #     print("not translating line num: "+str(line_num))
+            #     continue
+            maxibatch.append(line)
+            # if len(maxibatch) == (maxibatch_size * minibatch_size):
+            if len(maxibatch) == (1 ):
                 translate_maxibatch(maxibatch, num_to_target, num_translated)
                 num_translated += len(maxibatch)
-            break
-        maxibatch.append(line)
-        # if len(maxibatch) == (maxibatch_size * minibatch_size):
-        if len(maxibatch) == (1 ):
-            translate_maxibatch(maxibatch, num_to_target, num_translated)
-            num_translated += len(maxibatch)
+                maxibatch = []
+        except:
+            print ("line number "+str(line_num)+" wasn't translated: "+line)
             maxibatch = []
+            continue
 
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
