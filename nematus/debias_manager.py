@@ -14,9 +14,10 @@
 import numpy as np
 import pickle
 import json
-from debiaswe.debiaswe import we
-from debiaswe.debiaswe.debias import debias
-from nematus.consts import *
+from nematus.debiaswe.debiaswe import we
+from nematus.debiaswe.debiaswe.debias import debias
+from nematus.consts import EMBEDDING_SIZE, EMBEDDING_TABLE_FILE, DEBIASED_TARGET_FILE, DEFINITIONAL_FILE, PROFESSIONS_FILE\
+    , EMBEDDING_DEBIASWE_FILE, GENDER_SPECIFIC_FILE,EQUALIZE_FILE,    DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE
 
 
 np.set_printoptions(suppress=True)
@@ -55,8 +56,6 @@ class DebiasManager():
                         if i.__contains__("["):
                             line_num = i.split("[")[0]
                             lines_count[int(line_num)] += 1
-        for i, l in enumerate(lines_count):
-            print("entry num " + str(i) + ": " + str(l))
         print("all lines exist?: "+str(not lines_count.__contains__(0)))
         return not lines_count.__contains__(0)
 
@@ -70,6 +69,8 @@ class DebiasManager():
         """
         if not self.__check_all_lines_exist():
             raise Exception("not all lines exist in the embedding table")
+        else:
+            print("all lines exist")
         embedding_matrix = (np.zeros((self.dict_size, EMBEDDING_SIZE))).astype(np.str)
         lines_count = np.zeros(self.dict_size)
         with open(self.output_translate_file, "r") as output_translate_file:
@@ -201,11 +202,11 @@ class DebiasManager():
         return self.load_debias_format_to_array()
 
 
-# if __name__ == '__main__':
-#     debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE)
-#     # print("does all lines exist?: "+str(check_all_lines_exist()))
-#     debiased_embedding = debias_manager.load_and_debias()
-#
-#     print(np.shape(debiased_embedding))
-#     print(debiased_embedding)
-#     debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding)
+if __name__ == '__main__':
+    debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE)
+    # print("does all lines exist?: "+str(debias_manager.__check_all_lines_exist()))
+    debiased_embedding = debias_manager.load_and_debias()
+
+    print(np.shape(debiased_embedding))
+    print(debiased_embedding)
+    debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding)

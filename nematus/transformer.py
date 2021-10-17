@@ -4,8 +4,7 @@ import sys
 import tensorflow as tf
 import os
 import inspect
-from os import path
-from nematus.consts import *
+from nematus.consts import USE_DEBIASED, DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, COLLECT_EMBEDDING_TABLE
 
 try:
     from . import util
@@ -14,8 +13,6 @@ except (ModuleNotFoundError, ImportError) as e:
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
-
-from debiaswe.debiaswe.debias import debias
 
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
@@ -43,8 +40,7 @@ except (ModuleNotFoundError, ImportError) as e:
         MaskedCrossEntropy, \
         get_right_context_mask, \
         get_positional_signal
-from try_load import DebiasManager
-import numpy as np
+from nematus.nematus.debias_manager import DebiasManager
 
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
@@ -136,12 +132,6 @@ class Transformer(object):
                                                      self.config.state_size,
                                                      FLOAT_DTYPE,
                                                      name='encoder_embedding_layer')
-            # ########################################### PRINT #########################################################
-            # printops = []
-            # printops.append(tf.compat.v1.Print([], [encoder_embedding_layer.embedding_table], "embedding_layer before ", summarize=10000))
-            # with tf.control_dependencies(printops):
-            #     dec_vocab_size = dec_vocab_size * 1
-            # ###########################################################################################################
             if not self.config.tie_encoder_decoder_embeddings:
                 decoder_embedding_layer = EmbeddingLayer(dec_vocab_size,
                                                          self.config.embedding_size,
@@ -232,16 +222,6 @@ class TransformerEncoder(object):
         a = 1
 
     @tf.function
-    # def debias_embedding(self, embedding, source_ids):
-    #
-    #     ########################################### PRINT #########################################################
-    #     printops = []
-    #     printops.append(tf.compat.v1.Print([], [tf.shape(embedding)], "enc_output ", summarize=10000))
-    #     printops.append(tf.compat.v1.Print([], [tf.shape(source_ids)], "source_ids ", summarize=10000))
-    #     with tf.control_dependencies(printops):
-    #         embedding = embedding * 1
-    #     ###########################################################################################################
-
     def _embed(self, index_sequence):
         """ Embeds source-side indices to obtain the corresponding dense tensor representations. """
         # Embed input tokens
@@ -305,21 +285,21 @@ class TransformerEncoder(object):
             else:
                 print("using non debiased data")
             source_embeddings = self._embed(source_ids)
-
-            # ## print the embedding table
-            # # ########################################### PRINT #########################################################
-            # printops = []
-            # printops.append(
-            #     tf.compat.v1.Print([], [tf.shape(self.embedding_layer.embedding_table)], "embedding_table shape ",
-            #                        summarize=10000))
-            # for i in list(range(DICT_SIZE)):
-            #     printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i, :]],
-            #                                        "enc_inputs for word " + str(i), summarize=10000))
-            #     printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
-            #     tf.io.write_file("output_translate.txt", str(self.embedding_layer.embedding_table[i, :]))
-            # with tf.control_dependencies(printops):
-            #     source_embeddings = source_embeddings * 1
-            # # ###########################################################################################################
+            if COLLECT_EMBEDDING_TABLE:
+                ## print the embedding table
+                # ########################################### PRINT #########################################################
+                printops = []
+                printops.append(
+                    tf.compat.v1.Print([], [tf.shape(self.embedding_layer.embedding_table)], "embedding_table shape ",
+                                       summarize=10000))
+                for i in list(range(DICT_SIZE)):
+                    printops.append(tf.compat.v1.Print([], [self.embedding_layer.embedding_table[i, :]],
+                                                       "enc_inputs for word " + str(i), summarize=10000))
+                    printops.append(tf.compat.v1.Print([], [], "**************************************", summarize=10000))
+                    tf.io.write_file("output_translate.txt", str(self.embedding_layer.embedding_table[i, :]))
+                with tf.control_dependencies(printops):
+                    source_embeddings = source_embeddings * 1
+                # ###########################################################################################################
 
             # Embed
             ### comment: first embedding without positional signal

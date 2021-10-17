@@ -4,8 +4,7 @@
 
 import sys
 import logging
-import os
-import numpy as np
+
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
@@ -14,8 +13,6 @@ if __name__ == '__main__':
     # module is imported.
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-
-from nematus.debias_manager import DebiasManager
 import tensorflow as tf
 
 
@@ -43,7 +40,8 @@ except (ModuleNotFoundError, ImportError) as e:
     from sampling_utils import SamplingUtils
     from transformer import Transformer as TransformerModel
     import translate_utils
-from nematus.consts import *
+
+
 def main(settings):
     """
     Translates a source language file (or STDIN) into a target language file

@@ -155,6 +155,8 @@ def translate_file(input_file, output_file, session, sampler, config,
     maxibatch = []
     line_num = 0
     while True:
+        # if print_embedding_table and line_num>1:
+        #     break
         try:
             line = input_file.readline()
             # print(line)
