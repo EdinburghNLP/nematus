@@ -8,3 +8,5 @@ nematus_env/*
 *.bin
 en-*
 debiaswe
+fast_align/
+mt_gender_old/
