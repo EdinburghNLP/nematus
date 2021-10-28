@@ -92,7 +92,7 @@ for prefix in "${apply_to[@]}"
     exit 1
   fi
 done
-
+echo "done checking lengths"
 # remove weird characters and insert = instead of - without spaces
 #if [ ! -f "$workdir/${train}.cln.$SRC" ]; then
 #    python /cs/snapless/oabend/borgr/SSMT/preprocess/preprocess.py -s $SRC -t $TRG -f $datadir -n "${train}" -o "${train}.cln" -d $workdir
@@ -119,6 +119,7 @@ for prefix in "${apply_to[@]}"
         cp "$datadir/$prefix.$TRG" "$workdir/$prefix.$TRG"
     fi
  done
+echo "done remove weird characters and insert = instead of - without spaces"
 
 #srclen=$(cat "$workdir/${train}.cln.$SRC" | wc -l)
 #trglen=$(cat "$workdir/${train}.cln.$TRG" | wc -l)
@@ -157,7 +158,7 @@ for prefix in "${apply_to[@]}"
     #  exit 1
     #fi
  done
-
+echo "done tokenize"
 #
 #if [ ! -f "$workdir/$train.cln.unesc.tok.$TRG" ]; then
 #    echo "$workdir/$train.cln.unesc.tok.$TRG not found, Something failed"
@@ -199,6 +200,7 @@ for prefix in "${apply_to[@]}"
       $mosesdecoder/scripts/ems/support/generic-multicore-parallelizer.perl -in $workdir/$prefix.unesc.tok.$TRG -out $workdir/$prefix.unesc.tok.tc.$TRG -cmd "$mosesdecoder/scripts/recaser/truecase.perl < %s > %s -model $modeldir/truecase-model.$train.$TRG" -cores $cpus -tmpdir $workdir/tmp.$prefix.unesc.tok.tc.$TRG
     fi
  done
+ echo "done apply truecaser. skips if src\trg_tc="""
 #
 ## train BPE
 #if [ $train_models = true ]; then
@@ -218,7 +220,9 @@ for prefix in "${apply_to[@]}"
     if [ ! -f "$workdir/$prefix.unesc.tok$trg_tc.bpe.$TRG" ]; then
       python $subword_nmt/apply_bpe.py --glossaries "=" -c $modeldir/${TRG}_bpe.model < $workdir/$prefix.unesc.tok$trg_tc.$TRG > $workdir/$prefix.unesc.tok$trg_tc.bpe.$TRG
     fi
+  echo "written to  ${workdir}/${prefix}.unesc.tok${trg_tc}.bpe.${TRG}"
  done
+echo "done apply BPE"
 #
 #
 ## For nematus compatibility
@@ -228,7 +232,7 @@ for prefix in "${apply_to[@]}"
 # python /cs/snapless/oabend/borgr/SSMT/vocab.py -c $workdir/config_vocab.yaml
 
 # switch to nematus environment (py3)
-source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
+#source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 
 ## build network dictionary
 #python $nematus_home/data/build_dictionary.py "$workdir/$train.clean.unesc.tok${src_tc}.bpe.$SRC" "$workdir/$train.clean.unesc.tok${trg_tc}.bpe.$TRG" "$workdir/$train.clean.unesc.tok.bpe.$SRC$TRG"

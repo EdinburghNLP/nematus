@@ -14,10 +14,15 @@
 import numpy as np
 import pickle
 import json
-from nematus.debiaswe.debiaswe import we
-from nematus.debiaswe.debiaswe.debias import debias
-from nematus.consts import EMBEDDING_SIZE, EMBEDDING_TABLE_FILE, DEBIASED_TARGET_FILE, DEFINITIONAL_FILE, PROFESSIONS_FILE\
-    , EMBEDDING_DEBIASWE_FILE, GENDER_SPECIFIC_FILE,EQUALIZE_FILE,    DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+from debiaswe.debiaswe import we
+from debiaswe.debiaswe.debias import debias
+CONSTS_CONFIG_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+from consts import get_debias_files_from_config, EMBEDDING_SIZE, DEFINITIONAL_FILE, PROFESSIONS_FILE, GENDER_SPECIFIC_FILE,EQUALIZE_FILE
+DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, EMBEDDING_TABLE_FILE, EMBEDDING_DEBIASWE_FILE, DEBIASED_TARGET_FILE = get_debias_files_from_config(CONSTS_CONFIG_FILE)
 
 
 np.set_printoptions(suppress=True)
@@ -38,7 +43,6 @@ class DebiasManager():
         self.eng_dict_file = eng_dict_file
         self.dict_size = dict_size
         self.non_debiased_embeddings = None
-
     def __check_all_lines_exist(self):
         """
         checks that each line in the embedding table, printed in translate run, exists (since the lines are iterated with threads

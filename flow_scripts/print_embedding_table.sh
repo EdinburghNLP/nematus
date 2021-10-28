@@ -13,11 +13,11 @@ outputh_path=${nematus_dir}/${language_dir}/output/${output_filename}
 echo "outputh_path: ${outputh_path}"
 output_translate_path=${nematus_dir}/${language_dir}/debias/output_translate_${dst_language}.txt
 
-echo "timeout 15m python ${nematus_dir}/nematus/translate.py -i ${input_path} -m  ${model_dir} -k 12 -n -o ${outputh_path} > ${output_translate_path} 2>&1"
+echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m  ${model_dir} -k 12 -n -o ${outputh_path} -d 0 -l 0 -c 1"
 exec > ${output_translate_path}
 exec 2>&1
-timeout 20m python ${nematus_dir}/nematus/translate.py \
+python ${nematus_dir}/nematus/translate.py \
      -i "$input_path" \
      -m  "$model_dir" \
-     -k 12 -n -o "${outputh_path}"
+     -k 12 -n -o "${outputh_path}" -d 0 -l 0 -c 1
 

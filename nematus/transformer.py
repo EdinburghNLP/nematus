@@ -1,10 +1,9 @@
 """Adapted from Nematode: https://github.com/demelin/nematode """
-
+print("in transformer")
 import sys
 import tensorflow as tf
 import os
 import inspect
-from nematus.consts import USE_DEBIASED, DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, COLLECT_EMBEDDING_TABLE
 
 try:
     from . import util
@@ -40,12 +39,21 @@ except (ModuleNotFoundError, ImportError) as e:
         MaskedCrossEntropy, \
         get_right_context_mask, \
         get_positional_signal
-from nematus.nematus.debias_manager import DebiasManager
 
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
 
+# from nematus.nematus.debias_manager import DebiasManager
+# from nematus.nematus.translate import CONSTS_CONFIG_FILE
+CONSTS_CONFIG_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"
+from debias_manager import DebiasManager
+# from nematus.nematus.debias_manager import DebiasManager
+import sys
+sys.path.append("..")  # Adds higher directory to python modules path.
+from consts import get_u_l_c, get_debias_files_from_config
 
+DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, _, _, DEBIASED_TARGET_FILE = get_debias_files_from_config(CONSTS_CONFIG_FILE)
+USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(CONSTS_CONFIG_FILE)
 class Transformer(object):
     """ The main transformer model class. """
 
@@ -270,11 +278,11 @@ class TransformerEncoder(object):
             if USE_DEBIASED:
                 print("using debiased data")
 
-                debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
+                debiasManager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
                 # if os.path.isfile(DEBIASED_TARGET_FILE):
                 #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
                 # else:
-                embedding_matrix = tf.cast(tf.convert_to_tensor(debias_manager.load_and_debias()), dtype=tf.float32)
+                embedding_matrix = tf.cast(tf.convert_to_tensor(debiasManager.load_and_debias()), dtype=tf.float32)
                 # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
                 # np.random.shuffle(embedding_matrix)
                 # self.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable

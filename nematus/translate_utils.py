@@ -15,8 +15,13 @@ try:
 except (ModuleNotFoundError, ImportError) as e:
     import exception
     import util
-MIN_LINE_NUM = 1552
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+from consts import get_u_l_c
+CONSTS_CONFIG_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"
+_, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(CONSTS_CONFIG_FILE)
 
+MIN_LINE_NUM = 1552
 def translate_batch(session, sampler, x, x_mask, max_translation_len,
                     normalization_alpha):
     """Translate a batch using a RandomSampler or BeamSearchSampler.
@@ -104,7 +109,6 @@ def translate_file(input_file, output_file, session, sampler, config,
             num_to_target: dictionary mapping target vocabulary IDs to strings.
             num_prev_translated: the number of previously translated sentences.
         """
-
         # Sort the maxibatch by length and split into minibatches.
         try:
             minibatches, idxs = util.read_all_lines(config, maxibatch,
@@ -144,6 +148,8 @@ def translate_file(input_file, output_file, session, sampler, config,
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
                 output_file.write(line)
 
+    print("COLLECT_EMBEDDING_TABLE")
+    print(COLLECT_EMBEDDING_TABLE)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
@@ -155,8 +161,8 @@ def translate_file(input_file, output_file, session, sampler, config,
     maxibatch = []
     line_num = 0
     while True:
-        # if print_embedding_table and line_num>1:
-        #     break
+        if COLLECT_EMBEDDING_TABLE and line_num>1:
+            break
         try:
             line = input_file.readline()
             # print(line)

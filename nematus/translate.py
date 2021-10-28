@@ -1,24 +1,34 @@
 #!/usr/bin/env python3
+print("in translate")
 
 """Translates a source file using a translation model (or ensemble)."""
 
 import sys
 import logging
-
+import json
+CONSTS_CONFIG_FILE ="/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"#TODO make this not user specific
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
     settings = TranslationSettings(from_console_arguments=True)
+    with open(CONSTS_CONFIG_FILE, 'r+') as f:
+        CONSTS_CONFIG = json.load(f)
+        CONSTS_CONFIG["USE_DEBIASED"] =settings.debiased
+        CONSTS_CONFIG["LANGUAGE"] =  settings.language
+        CONSTS_CONFIG["COLLECT_EMBEDDING_TABLE"] =  settings.collect_embedding_table
+        c = json.dumps(CONSTS_CONFIG)
+        f.seek(0)
+        f.write(c)
     # Set the logging level. This needs to be done before the tensorflow
     # module is imported.
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-import tensorflow as tf
+    # DEBIASED_TARGET_FILE = debias_files['DEBIASED_TARGET_FILE']
+    import tensorflow as tf
 
-
-# ModuleNotFoundError is new in 3.6; older versions will throw SystemError
-if sys.version_info < (3, 6):
-    ModuleNotFoundError = SystemError
+    # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
+    if sys.version_info < (3, 6):
+        ModuleNotFoundError = SystemError
 
 try:
     from .beam_search_sampler import BeamSearchSampler
@@ -79,7 +89,7 @@ def main(settings):
         #     models = models * 1
         ###########################################################################################################
         # Add smoothing variables (if the models were trained with smoothing).
-        #FIXME Assumes either all models were trained with smoothing or none were.
+        # FIXME Assumes either all models were trained with smoothing or none were.
         if configs[0].exponential_smoothing > 0.0:
             smoothing = ExponentialSmoothing(configs[0].exponential_smoothing)
 
@@ -87,8 +97,7 @@ def main(settings):
         for i, config in enumerate(configs):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 _ = model_loader.init_or_restore_variables(config, session,
-                                                       ensemble_scope=scope)
-
+                                                           ensemble_scope=scope)
 
         ########################################### PRINT #########################################################
         # printops = []

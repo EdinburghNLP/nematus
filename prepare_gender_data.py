@@ -1,5 +1,7 @@
-from consts import EN_ANTI_PARSED, ANTI_TRANSLATED_DEBIASED, DEBIASED_EVAL, ANTI_TRANSLATED_NON_DEBIASED, NON_DEBIASED_EVAL
-
+CONSTS_CONFIG_FILE ="/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"#TODO make this not user specific
+from nematus import consts
+EN_ANTI_PARSED, ANTI_TRANSLATED_DEBIASED, ANTI_TRANSLATED_NON_DEBIASED, \
+DEBIASED_EVAL, NON_DEBIASED_EVAL, EN_ANTI = consts.get_evaluate_gender_files(CONSTS_CONFIG_FILE)
 def prepare_gender_sents_to_translation(source_filename, dest_filename):
     with open(source_filename, "r") as s, open(dest_filename, "w") as d:
         while True:
