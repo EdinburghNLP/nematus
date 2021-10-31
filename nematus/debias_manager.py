@@ -10,7 +10,7 @@
 #   # Restore variables from disk.
 #   saver.restore(sess, "/cs/labs/gabis/bareluz/nematus/output_translate.ckpt")
 #   print(embedding_table)
-
+print("in debias manager")
 import numpy as np
 import pickle
 import json
@@ -18,11 +18,9 @@ import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 from debiaswe.debiaswe import we
 from debiaswe.debiaswe.debias import debias
-CONSTS_CONFIG_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 from consts import get_debias_files_from_config, EMBEDDING_SIZE, DEFINITIONAL_FILE, PROFESSIONS_FILE, GENDER_SPECIFIC_FILE,EQUALIZE_FILE
-DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, EMBEDDING_TABLE_FILE, EMBEDDING_DEBIASWE_FILE, DEBIASED_TARGET_FILE = get_debias_files_from_config(CONSTS_CONFIG_FILE)
 
 
 np.set_printoptions(suppress=True)
@@ -30,7 +28,7 @@ np.set_printoptions(suppress=True)
 
 class DebiasManager():
 
-    def __init__(self, dict_size, eng_dict_file, output_translate_file):
+    def __init__(self, dict_size, eng_dict_file, output_translate_file, consts_config_file):
         """
 
         :param dict_size: the size of the english input dictionary
@@ -43,6 +41,9 @@ class DebiasManager():
         self.eng_dict_file = eng_dict_file
         self.dict_size = dict_size
         self.non_debiased_embeddings = None
+        self.DICT_SIZE, self.ENG_DICT_FILE, self.OUTPUT_TRANSLATE_FILE, self.EMBEDDING_TABLE_FILE, \
+        self.EMBEDDING_DEBIASWE_FILE, self.DEBIASED_TARGET_FILE = get_debias_files_from_config(consts_config_file)
+
     def __check_all_lines_exist(self):
         """
         checks that each line in the embedding table, printed in translate run, exists (since the lines are iterated with threads
@@ -94,17 +95,21 @@ class DebiasManager():
                             row = row.split(" ")
                             embedding_matrix[line_num, :] = row
         embedding_matrix = np.array(embedding_matrix, dtype=np.double)
-        with open(EMBEDDING_TABLE_FILE, 'wb') as file_:
+        with open(self.EMBEDDING_TABLE_FILE, 'wb') as file_:
             pickle.dump(embedding_matrix, file_)
         return embedding_matrix
 
-    def __prepare_data_to_debias(self, embedding_table_file=EMBEDDING_TABLE_FILE, dest_file=EMBEDDING_DEBIASWE_FILE,
+    def __prepare_data_to_debias(self, embedding_table_file=None, dest_file=None,
                                  non_debiased_embedding_table=None):
         """
         given path to dictionary, the path to the embedding table saved in get_embedding_table() and the file name to save the data,
         it prepares the embedding table in the format of <word> <embedding>/n , this is the format that debias() in debiaswe, uses.
         saves the embedding with the desired format to dest_file
         """
+        if embedding_table_file is None:
+            embedding_table_file = self.EMBEDDING_TABLE_FILE
+        if dest_file is None:
+            dest_file = self.EMBEDDING_DEBIASWE_FILE
         if non_debiased_embedding_table is None:
             with open(embedding_table_file, 'rb') as embedding_file:
                 self.non_debiased_embeddings = pickle.load(embedding_file)
@@ -119,11 +124,13 @@ class DebiasManager():
                 embedding_debiaswe_file.write(w + " " + ' '.join(map(str, self.non_debiased_embeddings[i, :])) + "\n")
         self.E = we.WordEmbedding(dest_file)
 
-    def __debias_data(self, debiased_target_file=DEBIASED_TARGET_FILE):
+    def __debias_data(self, debiased_target_file=None):
         """
         debiases the nematus embedding table that was created through the learning phase and saved in prepare_data_to_debias()
         saves the
         """
+        if debiased_target_file is None:
+            debiased_target_file = self.DEBIASED_TARGET_FILE
         with open(DEFINITIONAL_FILE, "r") as f:
             defs = json.load(f)
         print("definitional", defs)
@@ -141,16 +148,18 @@ class DebiasManager():
         debias(self.E, gender_specific_words, defs, equalize_pairs)
 
         print("Saving to file...")
-        if EMBEDDING_DEBIASWE_FILE[-4:] == EMBEDDING_DEBIASWE_FILE[-4:] == ".bin":
+        if self.EMBEDDING_DEBIASWE_FILE[-4:] == self.EMBEDDING_DEBIASWE_FILE[-4:] == ".bin":
             self.E.save_w2v(debiased_target_file)
         else:
             self.E.save(debiased_target_file)
 
-    def load_debias_format_to_array(self, filename=DEBIASED_TARGET_FILE):
+    def load_debias_format_to_array(self, filename=None):
         """
         loads a debiased embedding from filename and transforms it to numpy array
         :return: the debiased embedding table as numpy array
         """
+        if filename is None:
+            filename = self.DEBIASED_TARGET_FILE
         embedding_table = []
         with open(filename, "rb") as f:
             while True:
@@ -173,14 +182,16 @@ class DebiasManager():
             bias_after = '{:.20f}'.format(np.dot(debiased_embedding[word_index], gender_direction))
             print(word + ": bias before debias= " + bieas_before + ". bias after debias= " + bias_after)
 
-    def debias_sanity_check(self, embedding_table_file=EMBEDDING_TABLE_FILE, debiased_embedding_table=None):
+    def debias_sanity_check(self, embedding_table_file=None, debiased_embedding_table=None):
+        if embedding_table_file is None:
+            embedding_table_file = self.EMBEDDING_TABLE_FILE
         if self.E is None:
             raise Exception("WordEmbedding E was not created")
         print("*******************sanity check**************************")
-        if debiased_embedding_table is not None:
+        if debiased_embedding_table is None:
             debiased_embedding = debiased_embedding_table
         else:
-            debiased_embedding = self.load_debias_format_to_array(DEBIASED_TARGET_FILE)
+            debiased_embedding = self.load_debias_format_to_array(self.DEBIASED_TARGET_FILE)
         debiased_embedding = debiased_embedding.astype('float32')
         with open(DEFINITIONAL_FILE, "r") as f:
             defs = json.load(f)
@@ -206,11 +217,11 @@ class DebiasManager():
         return self.load_debias_format_to_array()
 
 
-if __name__ == '__main__':
-    debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE)
-    # print("does all lines exist?: "+str(debias_manager.__check_all_lines_exist()))
-    debiased_embedding = debias_manager.load_and_debias()
-
-    print(np.shape(debiased_embedding))
-    print(debiased_embedding)
-    debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding)
+# if __name__ == '__main__':
+#     debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE)
+#     # print("does all lines exist?: "+str(debias_manager.__check_all_lines_exist()))
+#     debiased_embedding = debias_manager.load_and_debias()
+#
+#     print(np.shape(debiased_embedding))
+#     print(debiased_embedding)
+#     debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding)

@@ -92,16 +92,22 @@ class TranslationSettings(BaseSettings):
             const=1.0, metavar="ALPHA",
             help="normalize scores by sentence length (with argument, " \
                  "exponentiate lengths by ALPHA)")
+        self._parser.add_argument(
+            '-c', '--config_file', type=str, required=True,
+            help="path to a config file that conatains: \n"
+                 "debiased= run translate on the debiased dictionary or not\n"
+                 "language= the language to translate to from english. RUSSIAN = 0, GERMAN = 1, HEBREW = 2\n"
+                 "collect_embedding_table= run translate to collect embedding table or not")
 
-        self._parser.add_argument(
-            '-d', '--debiased', type=float, required=True,
-            help="run translate on the debiased dictionary or not")
-        self._parser.add_argument(
-            '-l', '--language', type=int, required=True, choices=[0,1,2],
-            help="the language to translate to from english. RUSSIAN = 0, GERMAN = 1, HEBREW = 2")
-        self._parser.add_argument(
-            '-c', '--collect_embedding_table', type=float, required=True,
-            help="run translate to collect embedding table or not")
+        # self._parser.add_argument(
+        #     '-d', '--debiased', type=float, required=True,
+        #     help="run translate on the debiased dictionary or not")
+        # self._parser.add_argument(
+        #     '-l', '--language', type=int, required=True, choices=[0,1,2],
+        #     help="the language to translate to from english. RUSSIAN = 0, GERMAN = 1, HEBREW = 2")
+        # self._parser.add_argument(
+        #     '-c', '--collect_embedding_table', type=float, required=True,
+        #     help="run translate to collect embedding table or not")
 
         # Support --n-best and --n_best (the dash version was added first, but
         # is inconsistent with the prevailing underscore style).

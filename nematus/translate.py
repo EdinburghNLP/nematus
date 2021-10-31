@@ -6,19 +6,12 @@ print("in translate")
 import sys
 import logging
 import json
-CONSTS_CONFIG_FILE ="/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"#TODO make this not user specific
 if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
     settings = TranslationSettings(from_console_arguments=True)
-    with open(CONSTS_CONFIG_FILE, 'r+') as f:
-        CONSTS_CONFIG = json.load(f)
-        CONSTS_CONFIG["USE_DEBIASED"] =settings.debiased
-        CONSTS_CONFIG["LANGUAGE"] =  settings.language
-        CONSTS_CONFIG["COLLECT_EMBEDDING_TABLE"] =  settings.collect_embedding_table
-        c = json.dumps(CONSTS_CONFIG)
-        f.seek(0)
-        f.write(c)
+    CONSTS_CONFIG_FILE = settings.config_file
+
     # Set the logging level. This needs to be done before the tensorflow
     # module is imported.
     level = logging.DEBUG if settings.verbose else logging.INFO
@@ -77,7 +70,7 @@ def main(settings):
         for i, config in enumerate(configs):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 if config.model_type == "transformer":
-                    model = TransformerModel(config)
+                    model = TransformerModel(config, consts_config_file=settings.config_file)
                 else:
                     model = rnn_model.RNNModel(config)
                 model.sampling_utils = SamplingUtils(settings)
@@ -152,6 +145,7 @@ def main(settings):
             config=configs[0],
             max_translation_len=max_translation_len,
             normalization_alpha=settings.normalization_alpha,
+            consts_config_file=settings.config_file,
             nbest=settings.n_best,
             minibatch_size=settings.minibatch_size,
             maxibatch_size=settings.maxibatch_size)

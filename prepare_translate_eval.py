@@ -1,7 +1,11 @@
 import pickle
 from typing import List
 import re
-CONSTS_CONFIG_FILE ="/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"#TODO make this not user specific
+import argparse
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+from consts import get_evaluate_translate_files
+
 
 def separate_bad_sentences(translate_separate_bad_lines_file: str, source_files: List[str], target_files:List[str]):
     p = re.compile('line number ([0-9]+) wasn\'t translated')
@@ -40,11 +44,19 @@ def file_to_list(source_file,dest_file):
         pickle.dump(lines,f)
 
 if __name__ == '__main__':
-    from nematus.consts import get_evaluate_translate_files
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+            '-c', '--config_file', type=str, required=True,
+            help="path to a config file that conatains: \n"
+                 "debiased= run translate on the debiased dictionary or not\n"
+                 "language= the language to translate to from english. RUSSIAN = 0, GERMAN = 1, HEBREW = 2\n"
+                 "collect_embedding_table= run translate to collect embedding table or not")
+    args = parser.parse_args()
 
-    TRANSLATE_SEPARATE_BAD_LINES, BLEU_SOURCE_DATA, BLEU_GOLD_DATA, BLEU_SOURCE_DATA_FILTERED, BLEU_GOLD_DATA_FILTERED, \
-    BLEU_SOURCE_DATA_FILTERED2, BLEU_GOLD_DATA_FILTERED2, TRANSLATED_DEBIASED, TRANSLATED_NON_DEBIASED, TRANSLATED_NON_DEBIASED2, \
-    TRANSLATED_DEBIASED_PICKLE, TRANSLATED_NON_DEBIASED_PICKLE, BLEU_GOLD_DATA_FILTERED_PICKLE = get_evaluate_translate_files(CONSTS_CONFIG_FILE)
+    TRANSLATE_SEPARATE_BAD_LINES, BLEU_SOURCE_DATA, BLEU_GOLD_DATA, BLEU_SOURCE_DATA_FILTERED, \
+    BLEU_GOLD_DATA_FILTERED, BLEU_SOURCE_DATA_FILTERED2, BLEU_GOLD_DATA_FILTERED2, TRANSLATED_DEBIASED,\
+    TRANSLATED_NON_DEBIASED, TRANSLATED_NON_DEBIASED2,  TRANSLATED_DEBIASED_PICKLE, TRANSLATED_NON_DEBIASED_PICKLE, \
+    BLEU_GOLD_DATA_FILTERED_PICKLE = get_evaluate_translate_files(args.config_file)
     # separate_bad_sentences(TRANSLATE_SEPARATE_BAD_LINES, [BLEU_SOURCE_DATA, BLEU_GOLD_DATA], [BLEU_SOURCE_DATA_FILTERED, BLEU_GOLD_DATA_FILTERED])
     # separate_bad_sentences(TRANSLATE_SEPARATE_BAD_LINES, [BLEU_SOURCE_DATA_FILTERED, BLEU_GOLD_DATA_FILTERED,TRANSLATED_NON_DEBIASED], [BLEU_SOURCE_DATA_FILTERED2, BLEU_GOLD_DATA_FILTERED2, TRANSLATED_NON_DEBIASED2])
     file_to_list(TRANSLATED_DEBIASED, TRANSLATED_DEBIASED_PICKLE)

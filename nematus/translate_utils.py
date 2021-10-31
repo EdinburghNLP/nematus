@@ -1,7 +1,6 @@
 import logging
 import sys
 import time
-
 import numpy
 import tensorflow as tf
 
@@ -18,8 +17,6 @@ except (ModuleNotFoundError, ImportError) as e:
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 from consts import get_u_l_c
-CONSTS_CONFIG_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/consts_config.json"
-_, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(CONSTS_CONFIG_FILE)
 
 MIN_LINE_NUM = 1552
 def translate_batch(session, sampler, x, x_mask, max_translation_len,
@@ -83,7 +80,7 @@ def translate_batch(session, sampler, x, x_mask, max_translation_len,
 
 
 def translate_file(input_file, output_file, session, sampler, config,
-                   max_translation_len, normalization_alpha, nbest=False,
+                   max_translation_len, normalization_alpha,consts_config_file, nbest=False,
                    minibatch_size=80, maxibatch_size=20):
     """Translates a source file using a RandomSampler or BeamSearchSampler.
 
@@ -148,8 +145,7 @@ def translate_file(input_file, output_file, session, sampler, config,
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
                 output_file.write(line)
 
-    print("COLLECT_EMBEDDING_TABLE")
-    print(COLLECT_EMBEDDING_TABLE)
+    _, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(consts_config_file)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
