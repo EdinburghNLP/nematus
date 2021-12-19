@@ -21,14 +21,14 @@ from debiaswe.debiaswe.debias import debias
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 from consts import get_debias_files_from_config, EMBEDDING_SIZE, DEFINITIONAL_FILE, PROFESSIONS_FILE, GENDER_SPECIFIC_FILE,EQUALIZE_FILE
-
+# import numpy as np
 
 np.set_printoptions(suppress=True)
 
 
 class DebiasManager():
 
-    def __init__(self, dict_size, eng_dict_file, output_translate_file, consts_config_file):
+    def __init__(self, dict_size, eng_dict_file, output_translate_file, consts_config_str):
         """
 
         :param dict_size: the size of the english input dictionary
@@ -42,7 +42,7 @@ class DebiasManager():
         self.dict_size = dict_size
         self.non_debiased_embeddings = None
         self.DICT_SIZE, self.ENG_DICT_FILE, self.OUTPUT_TRANSLATE_FILE, self.EMBEDDING_TABLE_FILE, \
-        self.EMBEDDING_DEBIASWE_FILE, self.DEBIASED_TARGET_FILE = get_debias_files_from_config(consts_config_file)
+        self.EMBEDDING_DEBIASWE_FILE, self.DEBIASED_TARGET_FILE = get_debias_files_from_config(consts_config_str)
 
     def __check_all_lines_exist(self):
         """
@@ -58,9 +58,11 @@ class DebiasManager():
                 if line.__contains__("enc_inputs for word"):
                     a = line.split("enc_inputs for word")
                     for i in a:
-                        if i.__contains__("["):
+                        if i.__contains__("[") and not i.__contains__("embedding_table shape"):
                             line_num = i.split("[")[0]
                             lines_count[int(line_num)] += 1
+        # for i in range(len(lines_count)):
+        #     print("line num "+str(i)+": "+str(lines_count[i]))
         print("all lines exist?: "+str(not lines_count.__contains__(0)))
         return not lines_count.__contains__(0)
 
@@ -74,8 +76,6 @@ class DebiasManager():
         """
         if not self.__check_all_lines_exist():
             raise Exception("not all lines exist in the embedding table")
-        else:
-            print("all lines exist")
         embedding_matrix = (np.zeros((self.dict_size, EMBEDDING_SIZE))).astype(np.str)
         lines_count = np.zeros(self.dict_size)
         with open(self.output_translate_file, "r") as output_translate_file:
@@ -86,7 +86,7 @@ class DebiasManager():
                 if line.__contains__("enc_inputs for word"):
                     a = line.split("enc_inputs for word")
                     for i in a:
-                        if i.__contains__("["):
+                        if i.__contains__("[") and not i.__contains__("embedding_table shape"):
                             line_num = int(i.split("[")[0])
                             if lines_count[line_num] > 0:
                                 continue
@@ -218,7 +218,11 @@ class DebiasManager():
 
 
 # if __name__ == '__main__':
-#     debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE)
+#     DICT_SIZE = 30545
+#     ENG_DICT_FILE= "/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.07.21//train.clean.unesc.tok.tc.bpe.en.json"
+#     OUTPUT_TRANSLATE_FILE = "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/output_translate_he.txt"
+#     CONSTS_CONFIG_STR = "{'USE_DEBIASED': 0, 'LANGUAGE': 2, 'COLLECT_EMBEDDING_TABLE': 1, 'PRINT_LINE_NUMS': 0}"
+#     debias_manager = DebiasManager(DICT_SIZE,ENG_DICT_FILE,OUTPUT_TRANSLATE_FILE,CONSTS_CONFIG_STR)
 #     # print("does all lines exist?: "+str(debias_manager.__check_all_lines_exist()))
 #     debiased_embedding = debias_manager.load_and_debias()
 #

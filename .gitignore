@@ -7,6 +7,9 @@ nmt.egg-info
 nematus_env/*
 *.bin
 en-*
+*.en
 debiaswe
 fast_align/
 mt_gender_old/
+*.out.tmp
+*.npz.json

@@ -1,6 +1,7 @@
-src=en
-trg=de
-nematus_home=/cs/snapless/oabend/borgr/TG
+src=de
+trg=en
+nematus_home=/cs/labs/gabis/bareluz/nematus_clean/nematus
+remove_edges=$nematus_home/nematus/parsing/remove_edges.py
 capitalized_langs=(en de fr es ru)
 if [[ " ${capitalized_langs[@]} " =~ " ${trg} " ]]; then
   trg_tc=".tc"

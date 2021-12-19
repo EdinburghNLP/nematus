@@ -16,7 +16,7 @@ except (ModuleNotFoundError, ImportError) as e:
     import util
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
-from consts import get_u_l_c
+from consts import get_u_l_c_p
 
 MIN_LINE_NUM = 1552
 def translate_batch(session, sampler, x, x_mask, max_translation_len,
@@ -80,7 +80,7 @@ def translate_batch(session, sampler, x, x_mask, max_translation_len,
 
 
 def translate_file(input_file, output_file, session, sampler, config,
-                   max_translation_len, normalization_alpha,consts_config_file, nbest=False,
+                   max_translation_len, normalization_alpha, consts_config_str, nbest=False,
                    minibatch_size=80, maxibatch_size=20):
     """Translates a source file using a RandomSampler or BeamSearchSampler.
 
@@ -98,7 +98,7 @@ def translate_file(input_file, output_file, session, sampler, config,
         maxibatch_size: number of minibatches to read and sort, pre-translation.
     """
 
-    def translate_maxibatch(maxibatch, num_to_target, num_prev_translated):
+    def translate_maxibatch(maxibatch, num_to_target, num_prev_translated, line_num):
         """Translates an individual maxibatch.
 
         Args:
@@ -143,9 +143,11 @@ def translate_file(input_file, output_file, session, sampler, config,
             else:
                 best_hypo, cost = beam[0]
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
+                if PRINT_LINE_NUMS:
+                    line = "{} ||| {}".format(line_num, line)
                 output_file.write(line)
 
-    _, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(consts_config_file)
+    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS = get_u_l_c_p(consts_config_str)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
@@ -165,7 +167,7 @@ def translate_file(input_file, output_file, session, sampler, config,
             line_num+=1
             if line == "":
                 if len(maxibatch) > 0:
-                    translate_maxibatch(maxibatch, num_to_target, num_translated)
+                    translate_maxibatch(maxibatch, num_to_target, num_translated, line_num)
                     num_translated += len(maxibatch)
                 break
             # if line_num< MIN_LINE_NUM:
@@ -174,7 +176,7 @@ def translate_file(input_file, output_file, session, sampler, config,
             maxibatch.append(line)
             # if len(maxibatch) == (maxibatch_size * minibatch_size):
             if len(maxibatch) == (1 ):
-                translate_maxibatch(maxibatch, num_to_target, num_translated)
+                translate_maxibatch(maxibatch, num_to_target, num_translated, line_num)
                 num_translated += len(maxibatch)
                 maxibatch = []
         except:

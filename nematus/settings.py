@@ -93,12 +93,12 @@ class TranslationSettings(BaseSettings):
             help="normalize scores by sentence length (with argument, " \
                  "exponentiate lengths by ALPHA)")
         self._parser.add_argument(
-            '-c', '--config_file', type=str, required=True,
-            help="path to a config file that conatains: \n"
+            '-c', '--config_str', type=str, required=True,
+            help="a config dictionary str that conatains: \n"
                  "debiased= run translate on the debiased dictionary or not\n"
                  "language= the language to translate to from english. RUSSIAN = 0, GERMAN = 1, HEBREW = 2\n"
-                 "collect_embedding_table= run translate to collect embedding table or not")
-
+                 "collect_embedding_table= run translate to collect embedding table or not\n"
+                 "print_line_nums= whether to print line numbers to output file in translate")
         # self._parser.add_argument(
         #     '-d', '--debiased', type=float, required=True,
         #     help="run translate on the debiased dictionary or not")

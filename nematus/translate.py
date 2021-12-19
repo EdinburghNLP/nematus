@@ -10,8 +10,6 @@ if __name__ == '__main__':
     # Parse console arguments.
     from settings import TranslationSettings
     settings = TranslationSettings(from_console_arguments=True)
-    CONSTS_CONFIG_FILE = settings.config_file
-
     # Set the logging level. This needs to be done before the tensorflow
     # module is imported.
     level = logging.DEBUG if settings.verbose else logging.INFO
@@ -70,7 +68,7 @@ def main(settings):
         for i, config in enumerate(configs):
             with tf.compat.v1.variable_scope("model%d" % i) as scope:
                 if config.model_type == "transformer":
-                    model = TransformerModel(config, consts_config_file=settings.config_file)
+                    model = TransformerModel(config, consts_config_str=settings.config_str)
                 else:
                     model = rnn_model.RNNModel(config)
                 model.sampling_utils = SamplingUtils(settings)
@@ -145,7 +143,7 @@ def main(settings):
             config=configs[0],
             max_translation_len=max_translation_len,
             normalization_alpha=settings.normalization_alpha,
-            consts_config_file=settings.config_file,
+            consts_config_str=settings.config_str,
             nbest=settings.n_best,
             minibatch_size=settings.minibatch_size,
             maxibatch_size=settings.maxibatch_size)

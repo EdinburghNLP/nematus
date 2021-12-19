@@ -2,10 +2,10 @@
 #SBATCH --mem=48g
 #SBATCH -c4
 #SBATCH --time=7-0
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:4,vmem:8g
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 #SBATCH --mail-user=leshem.choshen@mail.huji.ac.il
-#SBATCH --output=/cs/snapless/oabend/borgr/TG/slurm/en-de_rev_0gcn%j.out
+#SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-de_0gcn%j.out
 #SBATCH --wckey=strmt
 
 # module load cuda/10.0
@@ -17,10 +17,10 @@ module load tensorflow/2.0.0
 source /cs/snapless/oabend/borgr/envs/tg/bin/activate
 # export CUDA_VISIBLE_DEVICES='0,1,2,3'
 
-vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.$trg
-vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.$src
+vocab_in=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.en 
+vocab_out=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/vocab.clean.unesc.tok.tc.bpe.de
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de_rev/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts
 echo "script_dir is ${script_dir}"
 main_dir=$script_dir/../..
 # data_dir=$script_dir/data
@@ -38,8 +38,8 @@ working_dir=$model_dir/0gcn
 mkdir -p $working_dir
 
 # json_bpe=$script_dir/data/conll14st-preprocessed.bpe.${src}${trg}.json
-src_train=$data_dir/train.clean.unesc.tok.tc.bpe.$src
-trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.$trg
+src_train=$data_dir/train.clean.unesc.tok.tc.bpe.de
+trg_train=$data_dir/train.clean.unesc.tok.tc.bpe.en
 src_bpe=$src_train.json
 trg_bpe=$trg_train.json
 
@@ -63,8 +63,8 @@ if [ ! -f ${src_bpe} ]; then
 fi
 
 
-src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.$src
-trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.$trg
+src_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.de
+trg_dev=$data_dir/newstest2013.unesc.tok.tc.bpe.en
 
 # train="conll14st-preprocessed"
 # corpora=("en_esl-ud-dev.conllu" "en_esl-ud-test.conllu" "en_esl-ud-train.conllu")
@@ -82,7 +82,7 @@ python3 $nematus_home/nematus/train.py \
     --source_dataset $src_train \
     --target_dataset $trg_train \
     --dictionaries $src_bpe $trg_bpe\
-    --save_freq 10000 \
+    --save_freq 30000 \
     --model $working_dir/model_seq_trans.npz \
     --reload latest_checkpoint \
     --model_type transformer \
@@ -110,17 +110,16 @@ python3 $nematus_home/nematus/train.py \
     --disp_freq 1000 \
     --valid_script $script_dir/validate_seq.sh \
     --target_labels_num 0\
-    --non_sequential \
     --target_graph \
     --non_sequential \
     --target_gcn_layers 0 \
     --sample_freq 0 \
     --beam_freq 1000 \
     --beam_size 8 \
-    --valid_remove_parse #&> /cs/snapless/oabend/borgr/TG/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
+    --valid_remove_parse #&> /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/out$(date "+%Y.%m.%d-%H.%M.%S") &
     # --token_batch_size $token_batch_size \
     # --valid_token_batch_size $token_batch_size \
-    # --print_per_token_pro /cs/snapless/oabend/borgr/TG/slurm/probs.last\
+    # --print_per_token_pro /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/probs.last\
     # --max_sentences_per_device $sent_per_device \
     # --tie_encoder_decoder_embeddings \
     # --tie_decoder_embeddings \

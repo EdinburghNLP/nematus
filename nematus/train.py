@@ -420,8 +420,10 @@ def validate_with_script(session, beam_search_sampler):
         config=config,
         max_translation_len=config.translation_maxlen,
         normalization_alpha=config.normalization_alpha,
+        consts_config_str=None,
         nbest=False,
-        minibatch_size=config.valid_batch_size)
+        minibatch_size=config.valid_batch_size,
+        )
     out.flush()
     args = [config.valid_script, out.name]
     proc = subprocess.Popen(args, stdin=None, stdout=subprocess.PIPE,

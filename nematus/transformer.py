@@ -47,14 +47,14 @@ from debias_manager import DebiasManager
 # from nematus.nematus.debias_manager import DebiasManager
 import sys
 sys.path.append("..")  # Adds higher directory to python modules path.
-from consts import get_u_l_c, get_debias_files_from_config
+from consts import get_u_l_c_p, get_debias_files_from_config
 
 class Transformer(object):
     """ The main transformer model class. """
 
-    def __init__(self, config, consts_config_file):
+    def __init__(self, config, consts_config_str):
         # Set attributes
-        self.consts_config_file = consts_config_file
+        self.consts_config_str = consts_config_str
         self.config = config
         self.source_vocab_size = config.source_vocab_sizes[0]
         self.target_vocab_size = config.target_vocab_size
@@ -156,7 +156,7 @@ class Transformer(object):
 
             # Instantiate the component networks
             self.enc = TransformerEncoder(self.config,
-                                          self.consts_config_file,
+                                          self.consts_config_str,
                                           encoder_embedding_layer,
                                           self.training,
                                           'encoder')
@@ -208,12 +208,12 @@ class TransformerEncoder(object):
 
     def __init__(self,
                  config,
-                 consts_config_file,
+                 consts_config_str,
                  embedding_layer,
                  training,
                  name):
         # Set attributes
-        self.consts_config_file = consts_config_file
+        self.consts_config_str = consts_config_str
         self.config = config
         self.embedding_layer = embedding_layer
         self.training = training
@@ -274,12 +274,12 @@ class TransformerEncoder(object):
         def _prepare_source():
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
             DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, _, _, DEBIASED_TARGET_FILE = get_debias_files_from_config(
-                self.consts_config_file)
-            USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE = get_u_l_c(self.consts_config_file)
+                self.consts_config_str)
+            USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE,_ = get_u_l_c_p(self.consts_config_str)
             if USE_DEBIASED:
                 print("using debiased data")
 
-                debiasManager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, self.consts_config_file)
+                debiasManager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, self.consts_config_str)
                 # if os.path.isfile(DEBIASED_TARGET_FILE):
                 #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
                 # else:

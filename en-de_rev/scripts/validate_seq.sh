@@ -7,7 +7,7 @@
 translations=$1
 
 script_dir=`dirname $0`
-script_dir=/cs/snapless/oabend/borgr/TG/en-de_rev/scripts/
+script_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/scripts/
 main_dir=$script_dir/../
 # data_dir=$main_dir/data
 # data_dir=/cs/snapless/oabend/borgr/SSMT/preprocess/data/en_de/5.8/
@@ -22,23 +22,18 @@ remove_edges=$nematus_home/nematus/parsing/remove_edges.py
 
 dev_prefix=newstest2013
 ref=$data_dir/$dev_prefix.ref.$trg
-
 # create ref file if needed
 if [ ! -f $ref ] ; then
 	trns=$data_dir/$dev_prefix.trns1.$trg
-	trg_transition_path="$data_dir/$dev_prefix.unesc.tok.tc.bpe.trns1.$trg"
-	if [ ! -f $trg_transition_path ] ; then
-	  trg_transition_path="$data_dir/$dev_prefix.unesc.tok.bpe.trns1.$trg"
-	fi
 	if [ ! -f $trns ] ; then
-		$script_dir/postprocess.sh < $trg_transition_path > "$trns"
+		$script_dir/postprocess.sh < "$data_dir/../$dev_prefix.unesc.tok.tc.bpe.trns1.$trg" > "$trns"
 	fi
 	python $remove_edges $trns -o $ref
 fi
 
 # write resulting file
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
-$script_dir/postprocess.sh < "$translations" > "/cs/snapless/oabend/borgr/TG/en-de/output/out_${dev_prefix}_$current_time.$trg"
+$script_dir/postprocess.sh < "$translations" > "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/output/out_${dev_prefix}_$current_time.$trg"
 
  
 # evaluate translations and write BLEU score to standard output (for
