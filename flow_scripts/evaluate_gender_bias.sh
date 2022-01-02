@@ -2,9 +2,9 @@ echo "###############in evaluate_gender_bias.sh###############"
 set -e
 scripts_dir=`pwd`
 source ${scripts_dir}/consts.sh
-###############preprocess###############
-#echo "###############preprocess###############"
-#sh ${nematus_dir}/${language_dir}/preprocess.sh
+##############preprocess###############
+echo "###############preprocess###############"
+sh ${nematus_dir}/${language_dir}/preprocess.sh
 
 ###############translate anti sentences to test gender bias###############
 input_path=${nematus_dir}/${language_dir}/preprocess/anti.unesc.tok.tc.bpe.en
@@ -23,18 +23,18 @@ echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
 config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1}"
 echo "config_debiased: ${config_debiased}"
 config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1}"
-#echo "###############translate anti debias###############"
-#echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m ${model_dir} -k 12 -n -o ${outputh_path_debiased} -c ${config_debiased}"
-#python ${nematus_dir}/nematus/translate.py \
-#     -i "$input_path" \
-#     -m "$model_dir" \
-#     -k 12 -n -o "${outputh_path_debiased}" -c "${config_debiased}"
-#echo "###############translate anti non debias###############"
-#echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m ${model_dir} -k 12 -n -o ${outputh_path_non_debiased} -c ${config_non_debiased}"
-#python ${nematus_dir}/nematus/translate.py \
-#     -i "$input_path" \
-#     -m "$model_dir" \
-#     -k 12 -n -o "${outputh_path_non_debiased}" -c "${config_non_debiased}"
+echo "###############translate anti debias###############"
+echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m ${model_dir} -k 12 -n -o ${outputh_path_debiased} -c ${config_debiased}"
+python ${nematus_dir}/nematus/translate.py \
+     -i "$input_path" \
+     -m "$model_dir" \
+     -k 12 -n -o "${outputh_path_debiased}" -c "${config_debiased}"
+echo "###############translate anti non debias###############"
+echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m ${model_dir} -k 12 -n -o ${outputh_path_non_debiased} -c ${config_non_debiased}"
+python ${nematus_dir}/nematus/translate.py \
+     -i "$input_path" \
+     -m "$model_dir" \
+     -k 12 -n -o "${outputh_path_non_debiased}" -c "${config_non_debiased}"
 
 ###############preparing translations to evaluation###############
 echo "###############preparing translations to evaluation###############"
