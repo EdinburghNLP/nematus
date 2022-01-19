@@ -147,7 +147,7 @@ def translate_file(input_file, output_file, session, sampler, config,
                     line = "{} ||| {}".format(line_num, line)
                 output_file.write(line)
 
-    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS = get_u_l_c_p(consts_config_str)
+    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, DEBIAS_METHOD  = get_u_l_c_p(consts_config_str)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(

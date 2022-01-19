@@ -20,9 +20,9 @@ output_filename_non_debiased=non_debiased_anti.out.tmp
 outputh_path_non_debiased=${nematus_dir}/${language_dir}/output/${output_filename_non_debiased}
 echo "outputh_path_debiased: ${outputh_path_debiased}"
 echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
-config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1}"
+config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
 echo "config_debiased: ${config_debiased}"
-config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1}"
+config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
 echo "###############translate anti debias###############"
 echo "python ${nematus_dir}/nematus/translate.py -i ${input_path} -m ${model_dir} -k 12 -n -o ${outputh_path_debiased} -c ${config_debiased}"
 python ${nematus_dir}/nematus/translate.py \
@@ -39,7 +39,7 @@ python ${nematus_dir}/nematus/translate.py \
 ###############preparing translations to evaluation###############
 echo "###############preparing translations to evaluation###############"
 lines_to_keep=$(python ${nematus_dir}/prepare_eval.py \
-     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0}" \
+     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0, 'DEBIAS_METHOD': ${debias_method}}" \
      -e 0)
 ################prepare gender data###############
 echo "###############prepare gender data###############"

@@ -275,22 +275,13 @@ class TransformerEncoder(object):
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
             DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, _, _, DEBIASED_TARGET_FILE = get_debias_files_from_config(
                 self.consts_config_str)
-            USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE,_ = get_u_l_c_p(self.consts_config_str)
+            USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE, DEBIAS_METHOD_ = get_u_l_c_p(self.consts_config_str)
             if USE_DEBIASED:
                 print("using debiased data")
 
-                debiasManager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, self.consts_config_str)
-                # if os.path.isfile(DEBIASED_TARGET_FILE):
-                #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
-                # else:
+                debiasManager = DebiasManager.get_manager_instance(self.consts_config_str)
                 embedding_matrix = tf.cast(tf.convert_to_tensor(debiasManager.load_and_debias()), dtype=tf.float32)
-                # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
-                # np.random.shuffle(embedding_matrix)
-                # self.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
-                # embedding_matrix = tf.cast(tf.convert_to_tensor(np.zeros((30546,256))), dtype=tf.float32)
                 self.embedding_layer.embedding_table = embedding_matrix
-                # self.embedding_layer.embedding_table = "blabla"
-                # debias_manager.debias_sanity_check(debiased_embedding_table=models[0].enc.embedding_layer.embedding_table)
             else:
                 print("using non debiased data")
             source_embeddings = self._embed(source_ids)

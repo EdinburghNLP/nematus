@@ -15,6 +15,7 @@ import numpy as np
 import pickle
 import json
 import sys
+import csv
 
 sys.path.append("..")  # Adds higher directory to python modules path.
 from debiaswe.debiaswe import we
@@ -27,20 +28,30 @@ from sklearn.svm import LinearSVC, SVC
 
 sys.path.append("..")  # Adds higher directory to python modules path.
 from consts import get_debias_files_from_config, EMBEDDING_SIZE, DEFINITIONAL_FILE, PROFESSIONS_FILE, \
-    GENDER_SPECIFIC_FILE, EQUALIZE_FILE
+    GENDER_SPECIFIC_FILE, EQUALIZE_FILE, get_u_l_c_p, DebiasMethod
 sys.path.append("../..")  # Adds higher directory to python modules path.
 from nullspace_projection.src.debias import load_word_vectors, project_on_gender_subspaces, get_vectors, get_debiasing_projection
+from nullspace_projection.notebooks.inlp_functions import tsne, compute_v_measure
 np.set_printoptions(suppress=True)
 
 
 class DebiasManager():
 
     def __init__(self, consts_config_str):
-        self.E = None
+        self.consts_config_str = consts_config_str
         self.non_debiased_embeddings = None
         self.DICT_SIZE, self.ENG_DICT_FILE, self.OUTPUT_TRANSLATE_FILE, self.EMBEDDING_TABLE_FILE, \
-        self.EMBEDDING_DEBIASWE_FILE, self.DEBIASED_TARGET_FILE = get_debias_files_from_config(consts_config_str)
+        self.EMBEDDING_DEBIASWE_FILE, self.DEBIASED_TARGET_FILE, self.SANITY_CHECK__FILE = get_debias_files_from_config(consts_config_str)
 
+    @staticmethod
+    def get_manager_instance(consts_config_str):
+        _, _, _, _, DEBIAS_METHOD = get_u_l_c_p(consts_config_str)
+        if DebiasMethod(DEBIAS_METHOD) == DebiasMethod.BOLUKBASY:
+            return DebiasBlukbasyManager(consts_config_str)
+        elif DebiasMethod(DEBIAS_METHOD) == DebiasMethod.NULL_IT_OUT:
+            return DebiasINLPManager(consts_config_str)
+        else:
+            raise Exception("the debias method is incorrect")
     def __check_all_lines_exist(self):
         """
         checks that each line in the embedding table, printed in translate run, exists (since the lines are iterated with threads
@@ -63,7 +74,7 @@ class DebiasManager():
         print("all lines exist?: " + str(not lines_count.__contains__(0)))
         return not lines_count.__contains__(0)
 
-    def __get_non_debiased_embedding_table(self):
+    def get_non_debiased_embedding_table(self):
         """
         if the embedding table , printed in translate run, contains all lines, creates a matrix with the right order of
         lines of the embedding matrix learned during the train phase.
@@ -95,44 +106,171 @@ class DebiasManager():
         with open(self.EMBEDDING_TABLE_FILE, 'wb') as file_:
             pickle.dump(embedding_matrix, file_)
         self.non_debiased_embeddings = embedding_matrix
-        return embedding_matrix
 
-    def __prepare_data_to_debias(self, inlp=False):
+    def compare_tsne(self,X_dev, Y_dev, X_train, Y_train, X_test, Y_test, all_significantly_biased_vecs, all_significantly_biased_labels,n, P, rowspace_projs,input_dim):
+        X_dev = X_dev[Y_dev != -1]
+        X_train = X_train[Y_train != -1]
+        X_test = X_test[Y_test != -1]
+
+        Y_dev = Y_dev[Y_dev != -1]
+        Y_train = Y_train[Y_train != -1]
+        Y_test = Y_test[Y_test != -1]
+
+        M = 2000
+        ind2label = {1: "Male-biased", 0: "Female-biased"}
+        tsne_before = tsne(all_significantly_biased_vecs[:M], all_significantly_biased_labels[:M],
+                           title="Original (t=0)",
+                           ind2label=ind2label)
+        X_dev_cleaned = (P.dot(X_dev.T)).T
+        X_test_cleaned = (P.dot(X_test.T)).T
+        X_trained_cleaned = (P.dot(X_train.T)).T
+        all_significantly_biased_cleaned = P.dot(all_significantly_biased_vecs.T).T
+
+        tsne_after = tsne(all_significantly_biased_cleaned[:M], all_significantly_biased_labels[:M],
+                          title="Projected (t={})".format(n), ind2label=ind2label)
+
+        print("V-measure-before (TSNE space): {}".format(
+            compute_v_measure(tsne_before, all_significantly_biased_labels[:M])))
+        print("V-measure-after (TSNE space): {}".format(
+            compute_v_measure(tsne_after, all_significantly_biased_labels[:M])))
+
+        print("V-measure-before (original space): {}".format(
+            compute_v_measure(all_significantly_biased_vecs[:M], all_significantly_biased_labels[:M]), k=2))
+        print("V-measure-after (original space): {}".format(compute_v_measure(X_test_cleaned[:M], Y_test[:M]), k=2))
+
+        rank_before = np.linalg.matrix_rank(X_train)
+        rank_after = np.linalg.matrix_rank(X_trained_cleaned)
+        print("Rank before: {}; Rank after: {}".format(rank_before, rank_after))
+
+        for t in [1, 3, 12, 18, 25, 35]:
+            p = debias.get_projection_to_intersection_of_nullspaces(rowspace_projs[:t], input_dim)
+            tsne_after = tsne(p.dot(all_significantly_biased_vecs[:M].T).T, all_significantly_biased_labels[:M],
+                              title="Projected (t={})".format(t), ind2label=ind2label)
+
+    def load_debias_format_to_array(self, filename=None):
+        """
+        loads a debiased embedding from filename and transforms it to numpy array
+        :return: the debiased embedding table as numpy array
+        """
+        if filename is None:
+            filename = self.DEBIASED_TARGET_FILE
+        embedding_table = []
+        with open(filename, "rb") as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                line = line.decode("utf-8")
+                embedding = line.split(" ")[1:]
+                embedding_table.append(embedding)
+        if (np.shape(embedding_table)[0] != self.DICT_SIZE):
+            embedding_table = np.vstack([embedding_table, self.non_debiased_embeddings[-1]])
+        return np.array(embedding_table).astype(np.float32)
+
+    def __print_bias_amount(self, word, gender_direction, debiased_embedding, orig_embedding):
+        with open(self.ENG_DICT_FILE, 'r') as dict_file:
+            index = json.load(dict_file)
+        # if self.E is None:
+        #     pass
+        # else:
+        #     index = self.E.index
+        f = open(self.SANITY_CHECK__FILE, 'a')
+        writer = csv.writer(f)
+
+        if word in index:
+            word_index = index[word]
+            bias_before = np.dot(orig_embedding[word_index], gender_direction)
+            bias_after = np.dot(debiased_embedding[word_index], gender_direction)
+            writer.writerow([word, bias_before, bias_after])
+            bieas_before = '{:.20f}'.format(bias_before)
+            bias_after = '{:.20f}'.format(bias_after)
+            print(word + ": bias before debias= " + bieas_before + ". bias after debias= " + bias_after)
+        f.close()
+
+
+
+    def debias_sanity_check(self, debiased_embedding_table=None):
+        print("*******************sanity check**************************")
+        if debiased_embedding_table is None:
+            debiased_embedding_table = self.load_debias_format_to_array(self.DEBIASED_TARGET_FILE)
+        debiased_embedding_table = debiased_embedding_table.astype('float32')
+        gender_direction = self.get_gender_direction()
+        with open(PROFESSIONS_FILE, "r") as f:
+            professions = json.load(f)
+        with open(self.EMBEDDING_TABLE_FILE, 'rb') as embedding_file:
+            orig_embedding = pickle.load(embedding_file)
+            orig_embedding = orig_embedding.astype('float32')
+        with open(self.SANITY_CHECK__FILE, 'wt') as f:
+            writer = csv.writer(f)
+            writer.writerow(["word", "bias before", "bias after"])
+        print("--------professions--------")
+        for p in professions:
+            self.__print_bias_amount(p[0], gender_direction, debiased_embedding_table, orig_embedding)
+
+        with open(DEFINITIONAL_FILE, "r") as f:
+            defs = json.load(f)
+        print("--------gender specific--------")
+        for a, b in defs:
+            self.__print_bias_amount(a, gender_direction, debiased_embedding_table, orig_embedding)
+            self.__print_bias_amount(b, gender_direction, debiased_embedding_table, orig_embedding)
+        print("********************************************************")
+
+    def get_gender_direction(self):
+        raise NotImplementedError()
+    def __prepare_data_to_debias(self):
         """
         given path to dictionary, the path to the embedding table saved in get_embedding_table() and the file name to save the data,
         it prepares the embedding table in the format of <word> <embedding>/n , this is the format that debias() in debiaswe, uses.
         saves the embedding with the desired format to self.EMBEDDING_DEBIASWE_FILE
         """
+        raise NotImplementedError()
+    def load_and_debias(self):
+        raise NotImplementedError()
 
+    # def load_and_prepare_embedding_table(self):
+
+
+class DebiasINLPManager(DebiasManager) :
+    def __init__(self, consts_config_str):
+        super().__init__(consts_config_str)
+    def __prepare_data_to_debias(self):
+        """
+        given path to dictionary, the path to the embedding table saved in get_embedding_table() and the file name to save the data,
+        it prepares the embedding table in the format of <word> <embedding>/n , this is the format that debias() in debiaswe, uses.
+        saves the embedding with the desired format to self.EMBEDDING_DEBIASWE_FILE
+        """
         with open(self.ENG_DICT_FILE, 'r') as dict_file, open(self.EMBEDDING_DEBIASWE_FILE, 'w') as dest_file:
             eng_dictionary = json.load(dict_file)
-            if inlp:
-                s = np.shape(self.non_debiased_embeddings)
-                dest_file.write(str(s[0])+" "+str(s[1]) +"\n")
+            s = np.shape(self.non_debiased_embeddings)
+            dest_file.write(str(s[0]) + " " + str(s[1]) + "\n")
             for w, i in eng_dictionary.items():
                 dest_file.write(w + " " + ' '.join(map(str, self.non_debiased_embeddings[i, :])) + "\n")
-
-    def debias_inlp(self, by_pca):
-        model, vecs, words = load_word_vectors(fname=self.EMBEDDING_DEBIASWE_FILE)
+    def get_gender_direction(self):
+        # if by_pca:
+        #     pairs = [("woman", "man"), ("girl", "boy"), ("she", "he"), ("mother", "father"),
+        #              ("daughter", "son"), ("gal", "guy"), ("female", "male"), ("her", "his"),
+        #              ("herself", "himself"), ("Mary", "John")]
+        #     # pairs = [("male", "female"), ("masculine", "feminine"), ("he", "she"), ("him", "her")]
+        #     gender_vecs = [self.model[p[0]] - self.model[p[1]] for p in pairs]
+        #     pca = PCA(n_components=1)
+        #     pca.fit(gender_vecs)
+        #     gender_direction = pca.components_[0]
+        #
+        # else:
+        return self.model["he"] - self.model["she"]
+    def debias_inlp_preparation(self, by_pca):
+        self.model, vecs, words = load_word_vectors(fname=self.EMBEDDING_DEBIASWE_FILE)
         num_vectors_per_class = 7500
+        gender_direction = self.get_gender_direction()
 
-        if by_pca:
-            pairs = [("male", "female"), ("masculine", "feminine"), ("he", "she"), ("him", "her")]
-            gender_vecs = [model[p[0]] - model[p[1]] for p in pairs]
-            pca = PCA(n_components=1)
-            pca.fit(gender_vecs)
-            gender_direction = pca.components_[0]
-
-        else:
-            gender_direction = model["he"] - model["she"]
         gender_unit_vec = gender_direction / np.linalg.norm(gender_direction)
         masc_words_and_scores, fem_words_and_scores, neut_words_and_scores = project_on_gender_subspaces(
-            gender_direction, model, n=num_vectors_per_class)
+            gender_direction, self.model, n=num_vectors_per_class)
         masc_words, masc_scores = list(zip(*masc_words_and_scores))
         neut_words, neut_scores = list(zip(*neut_words_and_scores))
         fem_words, fem_scores = list(zip(*fem_words_and_scores))
-        masc_vecs, fem_vecs = get_vectors(masc_words, model), get_vectors(fem_words, model)
-        neut_vecs = get_vectors(neut_words, model)
+        masc_vecs, fem_vecs = get_vectors(masc_words, self.model), get_vectors(fem_words, self.model)
+        neut_vecs = get_vectors(neut_words, self.model)
 
         n = min(3000, num_vectors_per_class)
         all_significantly_biased_words = masc_words[:n] + fem_words[:n]
@@ -177,7 +315,14 @@ class DebiasManager():
                                                                                   test_size=0.3,
                                                                                   random_state=0)
         print("Train size: {}; Dev size: {}; Test size: {}".format(X_train.shape[0], X_dev.shape[0], X_test.shape[0]))
-
+        return X_dev, Y_dev, X_train, Y_train, X_test, Y_test, all_significantly_biased_vecs, all_significantly_biased_labels, vecs
+    def load_and_debias(self):
+        # self.load_and_prepare_embedding_table()
+        self.get_non_debiased_embedding_table()
+        self.__prepare_data_to_debias()
+        by_pca = False
+        X_dev, Y_dev, X_train, Y_train, X_test, Y_test, all_significantly_biased_vecs, \
+        all_significantly_biased_labels, vecs = self.debias_inlp_preparation(by_pca)
         gender_clf = LinearSVC
         # gender_clf = SGDClassifier
         # gender_clf = LogisticRegression
@@ -198,15 +343,35 @@ class DebiasManager():
                                                                 X_train, Y_train, X_dev, Y_dev,
                                                                 Y_train_main=None, Y_dev_main=None,
                                                                 by_class=False, dropout_rate=dropout_rate)
-        return (P.dot(vecs.T)).T, gender_direction
-    def __debias_bolukbasi(self, debiased_target_file=None):
+        return (P.dot(vecs.T)).T
+
+class DebiasBlukbasyManager(DebiasManager) :
+    def __init__(self, consts_config_str):
+        super().__init__(consts_config_str)
+        self.E = None
+    def __prepare_data_to_debias(self):
+        """
+        given path to dictionary, the path to the embedding table saved in get_embedding_table() and the file name to save the data,
+        it prepares the embedding table in the format of <word> <embedding>/n , this is the format that debias() in debiaswe, uses.
+        saves the embedding with the desired format to self.EMBEDDING_DEBIASWE_FILE
+        """
+        with open(self.ENG_DICT_FILE, 'r') as dict_file, open(self.EMBEDDING_DEBIASWE_FILE, 'w') as dest_file:
+            eng_dictionary = json.load(dict_file)
+            for w, i in eng_dictionary.items():
+                dest_file.write(w + " " + ' '.join(map(str, self.non_debiased_embeddings[i, :])) + "\n")
+    def get_gender_direction(self):
+        with open(DEFINITIONAL_FILE, "r") as f:
+            defs = json.load(f)
+        return we.doPCA(defs, self.E).components_[0]
+    def load_and_debias(self):
         """
         debiases the nematus embedding table that was created through the learning phase and saved in prepare_data_to_debias()
-        saves the
         """
+        self.get_non_debiased_embedding_table()
+        self.__prepare_data_to_debias()
+        # self.load_and_prepare_embedding_table()
         self.E = we.WordEmbedding(self.EMBEDDING_DEBIASWE_FILE)
-        if debiased_target_file is None:
-            debiased_target_file = self.DEBIASED_TARGET_FILE
+        debiased_target_file = self.DEBIASED_TARGET_FILE
         with open(DEFINITIONAL_FILE, "r") as f:
             defs = json.load(f)
         print("definitional", defs)
@@ -228,84 +393,12 @@ class DebiasManager():
             self.E.save_w2v(debiased_target_file)
         else:
             self.E.save(debiased_target_file)
-
-    def load_debias_format_to_array(self, filename=None):
-        """
-        loads a debiased embedding from filename and transforms it to numpy array
-        :return: the debiased embedding table as numpy array
-        """
-        if filename is None:
-            filename = self.DEBIASED_TARGET_FILE
-        embedding_table = []
-        with open(filename, "rb") as f:
-            while True:
-                line = f.readline()
-                if not line:
-                    break
-                line = line.decode("utf-8")
-                embedding = line.split(" ")[1:]
-                embedding_table.append(embedding)
-        if (np.shape(embedding_table)[0] != self.DICT_SIZE):
-            embedding_table = np.vstack([embedding_table, self.non_debiased_embeddings[-1]])
-        return np.array(embedding_table).astype(np.float32)
-
-    def __print_bias_amount(self, word, gender_direction, debiased_embedding, orig_embedding):
-        if self.E is None:
-            with open(self.ENG_DICT_FILE, 'r') as dict_file:
-                index = json.load(dict_file)
-        else:
-            index = self.E.index
-        if word in index:
-            word_index = index[word]
-            bieas_before = '{:.20f}'.format(np.dot(orig_embedding[word_index], gender_direction))
-            bias_after = '{:.20f}'.format(np.dot(debiased_embedding[word_index], gender_direction))
-            print(word + ": bias before debias= " + bieas_before + ". bias after debias= " + bias_after)
-
-    def debias_sanity_check(self, embedding_table_file=None, debiased_embedding_table=None, gender_direction=None):
-        print("*******************sanity check**************************")
-        if embedding_table_file is None:
-            embedding_table_file = self.EMBEDDING_TABLE_FILE
-        if debiased_embedding_table is None:
-            debiased_embedding = debiased_embedding_table
-        else:
-            debiased_embedding = self.load_debias_format_to_array(self.DEBIASED_TARGET_FILE)
-        debiased_embedding = debiased_embedding.astype('float32')
-        with open(DEFINITIONAL_FILE, "r") as f:
-            defs = json.load(f)
-        if gender_direction is None:
-            if self.E is None:
-                raise Exception("WordEmbedding E was not created")
-            gender_direction = we.doPCA(defs, self.E).components_[0]
-        with open(PROFESSIONS_FILE, "r") as f:
-            professions = json.load(f)
-        with open(embedding_table_file, 'rb') as embedding_file:
-            orig_embedding = pickle.load(embedding_file)
-            orig_embedding = orig_embedding.astype('float32')
-        print("--------professions--------")
-        for p in professions:
-            self.__print_bias_amount(p[0], gender_direction, debiased_embedding, orig_embedding)
-
-        with open(DEFINITIONAL_FILE, "r") as f:
-            defs = json.load(f)
-        print("--------gender specific--------")
-        for a, b in defs:
-            self.__print_bias_amount(a, gender_direction, debiased_embedding, orig_embedding)
-            self.__print_bias_amount(b, gender_direction, debiased_embedding, orig_embedding)
-        print("********************************************************")
-
-    def load_and_debias(self,inlp):
-        embedding_matrix = self.__get_non_debiased_embedding_table()
-        self.__prepare_data_to_debias(inlp)
-        # self.__debias_bolukbasi()
-        # return self.load_debias_format_to_array()
-        return self.debias_inlp(False)
-
+        return self.E.vecs
 if __name__ == '__main__':
 
-    CONSTS_CONFIG_STR = "{'USE_DEBIASED': 0, 'LANGUAGE': 0, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0}"
-    debias_manager = DebiasManager(CONSTS_CONFIG_STR)
-    debiased_embedding, gender_direction = debias_manager.load_and_debias(inlp=True)
-
+    CONSTS_CONFIG_STR = "{'USE_DEBIASED': 0, 'LANGUAGE': 0, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0, 'DEBIAS_METHOD': 1}"
+    debias_manager = DebiasManager.get_manager_instance(CONSTS_CONFIG_STR)
+    debiased_embedding = debias_manager.load_and_debias()
     print(np.shape(debiased_embedding))
     print(debiased_embedding)
-    debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding, gender_direction=gender_direction)
+    debias_manager.debias_sanity_check(debiased_embedding_table=debiased_embedding)

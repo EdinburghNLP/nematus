@@ -12,6 +12,10 @@ class Language(Enum):
     GERMAN = 1
     HEBREW = 2
 
+class DebiasMethod(Enum):
+    BOLUKBASY = 0
+    NULL_IT_OUT = 1
+
 EMBEDDING_SIZE = 256
 param_dict = {
     Language.RUSSIAN:
@@ -21,6 +25,7 @@ param_dict = {
         "OUTPUT_TRANSLATE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-ru/debias/output_translate_ru.txt",
         "EMBEDDING_TABLE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-ru/debias/embedding_table_ru.bin",
         "EMBEDDING_DEBIASWE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-ru/debias/embedding_debiaswe_ru.txt",
+        "SANITY_CHECK__FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-ru/debias/sanity_check.csv",
         "DEBIASED_TARGET_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-ru/debias/Nematus-hard-debiased-ru.bin",
         "EN_ANTI_PARSED": "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-ru/anti.en",
         "EN_ANTI_MERGED": "/cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender/data/aggregates/en_ru_anti.en,txt",
@@ -46,6 +51,7 @@ param_dict = {
         "OUTPUT_TRANSLATE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/debias/output_translate_de.txt",
         "EMBEDDING_TABLE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/debias/embedding_table_de.bin",
         "EMBEDDING_DEBIASWE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/debias/embedding_debiaswe_de.txt",
+        "SANITY_CHECK__FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/debias/sanity_check.csv",
         "DEBIASED_TARGET_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/debias/Nematus-hard-debiased-de.bin",
         "EN_ANTI_PARSED": "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-de/anti.en",
         "EN_ANTI_MERGED": "/cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender/data/aggregates/en_de_anti.en.txt",
@@ -70,6 +76,7 @@ param_dict = {
             "OUTPUT_TRANSLATE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/output_translate_he.txt",
             "EMBEDDING_TABLE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/embedding_table_he.bin",
             "EMBEDDING_DEBIASWE_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/embedding_debiaswe_he.txt",
+            "SANITY_CHECK__FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/sanity_check.csv",
             "DEBIASED_TARGET_FILE": "/cs/labs/gabis/bareluz/nematus_clean/nematus/en-he/debias/Nematus-hard-debiased-he.bin",
             "EN_ANTI_PARSED": "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-he/anti.en",
             "EN_ANTI_MERGED": "/cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender/data/aggregates/en_he_anti.en.txt",
@@ -98,7 +105,9 @@ def get_u_l_c_p(config_str):
     LANGUAGE = config["LANGUAGE"]
     COLLECT_EMBEDDING_TABLE = config["COLLECT_EMBEDDING_TABLE"]
     PRINT_LINE_NUMS = config["PRINT_LINE_NUMS"]
-    return USE_DEBIASED, LANGUAGE, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS
+    DEBIAS_METHOD = config["DEBIAS_METHOD"]
+
+    return USE_DEBIASED, LANGUAGE, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, DEBIAS_METHOD
 
 
 def get_debias_files_from_config(config_str):
@@ -114,7 +123,9 @@ def get_debias_files_from_config(config_str):
     EMBEDDING_DEBIASWE_FILE = param_dict[Language(int(config['LANGUAGE']))]["EMBEDDING_DEBIASWE_FILE"]
     # the file to which the debiased embedding table is saved at the end
     DEBIASED_TARGET_FILE = param_dict[Language(int(config['LANGUAGE']))]["DEBIASED_TARGET_FILE"]
-    return DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, EMBEDDING_TABLE_FILE, EMBEDDING_DEBIASWE_FILE, DEBIASED_TARGET_FILE
+
+    SANITY_CHECK__FILE = param_dict[Language(int(config['LANGUAGE']))]["SANITY_CHECK__FILE"]
+    return DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, EMBEDDING_TABLE_FILE, EMBEDDING_DEBIASWE_FILE, DEBIASED_TARGET_FILE, SANITY_CHECK__FILE
 
 
 
