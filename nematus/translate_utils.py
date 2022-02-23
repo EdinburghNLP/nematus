@@ -16,7 +16,7 @@ except (ModuleNotFoundError, ImportError) as e:
     import util
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
-from consts import get_u_l_c_p
+from consts import get_basic_configurations
 
 MIN_LINE_NUM = 1552
 def translate_batch(session, sampler, x, x_mask, max_translation_len,
@@ -147,7 +147,7 @@ def translate_file(input_file, output_file, session, sampler, config,
                     line = "{} ||| {}".format(line_num, line)
                 output_file.write(line)
 
-    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, DEBIAS_METHOD  = get_u_l_c_p(consts_config_str)
+    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, _  = get_basic_configurations(consts_config_str)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
@@ -179,7 +179,7 @@ def translate_file(input_file, output_file, session, sampler, config,
                 translate_maxibatch(maxibatch, num_to_target, num_translated, line_num)
                 num_translated += len(maxibatch)
                 maxibatch = []
-        except:
+        except Exception as e:
             print ("line number "+str(line_num)+" wasn't translated: "+line)
             maxibatch = []
             continue

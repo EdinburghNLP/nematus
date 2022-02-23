@@ -88,6 +88,7 @@ class EmbeddingLayer(object):
                                                 dtype=float_dtype,
                                                 initializer=glorot_uniform_initializer(),
                                                 trainable=True)
+            ##########comment: this is the projection matrix of the decoder##########
             self.projection_matrix = tf.transpose(a=self.embedding_table, name='vocab_projection_matrix')
 
     def embed(self, one_hot_inputs):

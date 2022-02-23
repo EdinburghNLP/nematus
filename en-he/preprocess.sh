@@ -10,7 +10,6 @@ source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" # fails on symlinks
 SCRIPT_FILE=`basename "$0"`
- echo
 # suffix of language files
 SRC=en
 
@@ -53,19 +52,6 @@ mkdir -p "$modeldir"
 # corpora
 train=train
 apply_to=('anti')
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## check lengths match in train
 #srclen=$(cat $datadir/$train.$SRC | wc -l)

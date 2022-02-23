@@ -47,7 +47,7 @@ from debias_manager import DebiasManager
 # from nematus.nematus.debias_manager import DebiasManager
 import sys
 sys.path.append("..")  # Adds higher directory to python modules path.
-from consts import get_u_l_c_p, get_debias_files_from_config
+from consts import get_basic_configurations, get_debias_files_from_config
 
 class Transformer(object):
     """ The main transformer model class. """
@@ -228,6 +228,13 @@ class TransformerEncoder(object):
         _, _, self.num_to_source, self.num_to_target = util.load_dictionaries(config)
         a = 1
 
+        self.USE_DEBIASED, _, self.COLLECT_EMBEDDING_TABLE, _, _ = get_basic_configurations(self.consts_config_str)
+        if self.USE_DEBIASED:
+            debiasManager = DebiasManager.get_manager_instance(self.consts_config_str)
+            self.embedding_matrix = tf.cast(tf.convert_to_tensor(debiasManager.debias_embedding_table()),
+                                       dtype=tf.float32)
+        else:
+            self.embedding_matrix = None
     @tf.function
     def _embed(self, index_sequence):
         """ Embeds source-side indices to obtain the corresponding dense tensor representations. """
@@ -273,19 +280,16 @@ class TransformerEncoder(object):
 
         def _prepare_source():
             """ Pre-processes inputs to the encoder and generates the corresponding attention masks."""
-            DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, _, _, DEBIASED_TARGET_FILE = get_debias_files_from_config(
+            DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE, _, _, DEBIASED_EMBEDDING, _ = get_debias_files_from_config(
                 self.consts_config_str)
-            USE_DEBIASED, _, COLLECT_EMBEDDING_TABLE, DEBIAS_METHOD_ = get_u_l_c_p(self.consts_config_str)
-            if USE_DEBIASED:
-                print("using debiased data")
-
-                debiasManager = DebiasManager.get_manager_instance(self.consts_config_str)
-                embedding_matrix = tf.cast(tf.convert_to_tensor(debiasManager.load_and_debias()), dtype=tf.float32)
-                self.embedding_layer.embedding_table = embedding_matrix
+            if self.USE_DEBIASED:
+                print("using debiased embeddings")
+                self.embedding_layer.embedding_table = self.embedding_matrix
             else:
-                print("using non debiased data")
+                print("using non debiased embeddings")
+            print(self.embedding_matrix)
             source_embeddings = self._embed(source_ids)
-            if COLLECT_EMBEDDING_TABLE:
+            if self.COLLECT_EMBEDDING_TABLE:
                 ## print the embedding table
                 # ########################################### PRINT #########################################################
                 printops = []
@@ -339,28 +343,6 @@ class TransformerEncoder(object):
                 ### comment: after each layer enc_output is the corrent embedding
                 enc_output = self.encoder_stack[layer_id]['ffn'].forward(enc_output)
 
-                # ########################################### PRINT #########################################################
-                # printops = []
-                # printops.append(tf.compat.v1.Print([], [tf.shape(enc_output)], "enc_output ", summarize=10000))
-                # printops.append(tf.compat.v1.Print([], [tf.shape(source_ids[0]),source_ids[0]], "source_ids ", summarize=10000))
-                # for i in range(tf.shape(source_ids[0])):
-                #     printops.append(tf.compat.v1.Print([], [self.num_to_source[source_ids[0][i]]], "self.num_to_source ", summarize=10000))
-                # with tf.control_dependencies(printops):
-                #     enc_output = enc_output * 1
-                # ###########################################################################################################
-
-                # self.debias_embedding(enc_output, source_ids)
-                ### comment: enc_output is the final embedding of the encoding.
-                ### comment: check: the size of enc_output is batch_size*max_sentence_len*word_embedding_size(probably 256)
-                ### comment: after checking the size is [128 41 256] when the 41 changes and ranges around 23-41, probably it's max_sentence_len*batch_size*word_embedding_size
-
-                # ########################################### PRINT #########################################################
-                # printops = []
-                # printops.append(tf.compat.v1.Print([], [tf.shape(enc_output), enc_output], "enc_output ", summarize=10000))
-                # printops.append(tf.compat.v1.Print([], [layer_id], "layer_id ", summarize=10000))
-                # with tf.control_dependencies(printops):
-                #     enc_output = enc_output * 1
-                # ###########################################################################################################
         return enc_output, cross_attn_mask
 
 

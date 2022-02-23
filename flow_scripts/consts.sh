@@ -5,6 +5,7 @@ export src_language=en
 export dst_language=$1
 export debias_method=$2
 echo "language: ${dst_language}"
+echo "debias_method: ${debias_method}"
 # set PYTHONPATH
 export project_dir=/cs/usr/bareluz/gabi_labs/nematus_clean
 echo "project_dir: ${project_dir}"
@@ -32,5 +33,3 @@ case ${dst_language} in
 		echo "invalid language given. the possible languages are ru, de, he"
 		;;
 esac
-echo "input_path: ${input_path}"
-echo "language_num: ${language_num}"

@@ -14,7 +14,7 @@ if __name__ == '__main__':
     # module is imported.
     level = logging.DEBUG if settings.verbose else logging.INFO
     logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    # DEBIASED_TARGET_FILE = debias_files['DEBIASED_TARGET_FILE']
+    # DEBIASED_EMBEDDING = debias_files['DEBIASED_EMBEDDING']
     import tensorflow as tf
 
     # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
@@ -73,12 +73,6 @@ def main(settings):
                     model = rnn_model.RNNModel(config)
                 model.sampling_utils = SamplingUtils(settings)
                 models.append(model)
-        ########################################### PRINT #########################################################
-        # printops = []
-        # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer before ", summarize=10000))
-        # with tf.control_dependencies(printops):
-        #     models = models * 1
-        ###########################################################################################################
         # Add smoothing variables (if the models were trained with smoothing).
         # FIXME Assumes either all models were trained with smoothing or none were.
         if configs[0].exponential_smoothing > 0.0:
@@ -90,12 +84,6 @@ def main(settings):
                 _ = model_loader.init_or_restore_variables(config, session,
                                                            ensemble_scope=scope)
 
-        ########################################### PRINT #########################################################
-        # printops = []
-        # printops.append(tf.compat.v1.Print([], [models[0].enc.embedding_layer], "embedding_layer after ", summarize=10000))
-        # with tf.control_dependencies(printops):
-        #     models = models * 1
-        ###########################################################################################################
         # Swap-in the smoothed versions of the variables.
         if configs[0].exponential_smoothing > 0.0:
             session.run(fetches=smoothing.swap_ops)
@@ -117,22 +105,6 @@ def main(settings):
                              'positive to negative (as of commit 95793196...). '
                              'If you are using the scores for reranking etc, then '
                              'you may need to update your scripts.')
-        # if USE_DEBIASED:
-        #     print("using debiased data")
-        #
-        #     debias_manager = DebiasManager(DICT_SIZE, ENG_DICT_FILE, OUTPUT_TRANSLATE_FILE)
-        #     # if os.path.isfile(DEBIASED_TARGET_FILE):
-        #     #     embedding_matrix = debias_manager.load_debias_format_to_array(DEBIASED_TARGET_FILE)
-        #     # else:
-        #     embedding_matrix = tf.cast(tf.convert_to_tensor(debias_manager.load_and_debias()), dtype=tf.float32)
-        #
-        #     # np.apply_along_axis(np.random.shuffle, 1, embedding_matrix)
-        #     # np.random.shuffle(embedding_matrix)
-        #     # models[0].enc.embedding_layer.embedding_table = embedding_matrix #todo make it tf variable
-        #     models[0].enc.embedding_layer.embedding_table = "blabla"
-        #     # debias_manager.debias_sanity_check(debiased_embedding_table=models[0].enc.embedding_layer.embedding_table)
-        # else:
-        #     print("using non debiased data")
 
         # Translate the source file.
         translate_utils.translate_file(

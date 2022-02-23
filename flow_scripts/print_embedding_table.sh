@@ -1,5 +1,6 @@
-echo "###############in print_embedding_table.sh###############"
+#!/bin/bash
 set -e
+echo "###############in print_embedding_table.sh###############"
 scripts_dir=`pwd`
 source ${scripts_dir}/consts.sh
 model_type=bpe256
@@ -7,7 +8,7 @@ model_name=model.npz
 model_dir=${nematus_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
 echo "model_dir: ${model_dir}"
 output_filename=output_translate_${dst_language}.out.tmp
-outputh_path=${nematus_dir}/${language_dir}/output/${output_filename}
+outputh_path=${nematus_dir}/${language_dir}/output/not_important.txt
 echo "outputh_path: ${outputh_path}"
 output_translate_path=${nematus_dir}/${language_dir}/debias/output_translate_${dst_language}.txt
 echo "output_translate_path: ${output_translate_path}"

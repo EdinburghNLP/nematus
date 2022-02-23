@@ -6,10 +6,13 @@ nmt.egg-info
 .DS_Store
 nematus_env/*
 *.bin
-en-*
 *.en
 debiaswe
 fast_align/
 mt_gender_old/
 *.out.tmp
 *.npz.json
+*.pickle
+*vocab.*.json
+*anti.*
+en-de_rev/*
