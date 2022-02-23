@@ -60,6 +60,7 @@ def main(settings):
         for model in settings.models:
             config = load_config_from_json_file(model)
             setattr(config, 'reload', model)
+            setattr(config, 'translation_maxlen', settings.translation_maxlen)
             configs.append(config)
 
         # Create the model graphs.
