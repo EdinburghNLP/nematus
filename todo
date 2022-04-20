@@ -138,3 +138,5 @@ python3 translate.py -i /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he/20.
 /cs/snapless/oabend/borgr/SSMT/preprocess/data/en_he
 
 <tf.Variable 'model0/transformer_model/encoder_embedding_layer/embedding_table:0' shape=(30546, 256) dtype=float32>
+
+perl /cs/snapless/oabend/borgr/SSMT/preprocess/mosesdecoder/scripts/tokenizer/detokenizer.perl  - l en - q < /cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/preprocess/anti.unesc.tok.tc.bpe.en | pv > /cs/labs/gabis/bareluz/nematus_clean/nematus/en-de/preprocess/detokenized.txt

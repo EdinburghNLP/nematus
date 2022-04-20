@@ -89,6 +89,8 @@ class ModelAdapter:
                 # TODO Is this necessary?
                 vocab_ids = tf.reshape(step_target_ids, [-1, 1])
                 # Look up embeddings for target IDs.
+                ### comment: this is the pont whre we use the embedding table at the end of the decoder
+
                 target_embeddings = decoder._embed(vocab_ids)
                 # Add positional signal.
                 signal_slice = positional_signal[
@@ -118,6 +120,7 @@ class ModelAdapter:
                 dec_output = layer_output[:, -1, :]
                 # Project decoder stack outputs and apply the soft-max
                 # non-linearity.
+                ### comment: this is the pont whre we use the embedding table at the beginning of the decoder
                 step_logits = \
                     decoder.softmax_projection_layer.project(dec_output)
                 return step_logits, memories

@@ -16,3 +16,13 @@ mt_gender_old/
 *vocab.*.json
 *anti.*
 en-de_rev/*
+en-de/*
+en-he/*
+en-ru/*
+en_anti_parsed.txt
+nematus_env3/*
+output_translate.txt
+test_file
+slurm/*
+results/*
+todo

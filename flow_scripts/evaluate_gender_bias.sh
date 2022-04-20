@@ -9,6 +9,7 @@ set -e
 echo "###############in evaluate_gender_bias.sh###############"
 scripts_dir=`pwd`
 source ${scripts_dir}/consts.sh
+
 #############preprocess###############
 #echo "###############preprocess###############"
 #echo "sh ${nematus_dir}/global_preprocess.sh ${dst_language}"

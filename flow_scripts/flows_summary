@@ -7,8 +7,8 @@ evaluate_gender_bias:
     - run merge_translations.py
       to keep only the line numbers that are common to the debiased and non debiased translations.
       the resulted sentences are saved to:
-      translatoins using debiased embedding table: ANTI_TRANSLATED_DEBIASED_PICKLE
-      translatoins using non debiased embedding table: ANTI_TRANSLATED_NON_DEBIASED_PICKLE
+      translatoins using debiased embedding table: ANTI_TRANSLATED_DEBIASED_MERGED
+      translatoins using non debiased embedding table: ANTI_TRANSLATED_NON_DEBIASED_MERGED
       source sentences: EN_ANTI_MERGED
     - run prepare_gender_data.py to prepare the sentences in the format of <sentence> ||| <translation>
       for the evaluation in mt_gender.
@@ -22,8 +22,8 @@ evaluate_translation:
     - run merge_translations.py
       to keep only the line numbers that are common to the debiased and non debiased translations.
       the resulted sentences are saved to:
-      translatoins using debiased embedding table: TRANSLATED_DEBIASED_PICKLE
-      translatoins using non debiased embedding table: TRANSLATED_NON_DEBIASED_PICKLE
+      translatoins using debiased embedding table: TRANSLATED_DEBIASED_MERGED
+      translatoins using non debiased embedding table: TRANSLATED_NON_DEBIASED_MERGED
       gold translations: BLEU_GOLD_DATA_FILTERED
     - run evaluate_translation.py to evaluate the translations
       save the results to
