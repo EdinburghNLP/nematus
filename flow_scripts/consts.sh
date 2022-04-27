@@ -4,13 +4,13 @@ source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
 export src_language=en
 export dst_language=$1
 export debias_method=$2
-echo "language: ${dst_language}"
-echo "debias_method: ${debias_method}"
+#echo "language: ${dst_language}"
+#echo "debias_method: ${debias_method}"
 # set PYTHONPATH
 export project_dir=/cs/usr/bareluz/gabi_labs/nematus_clean
-echo "project_dir: ${project_dir}"
+#echo "project_dir: ${project_dir}"
 export PYTHONPATH=${PYTHONPATH}:${project_dir}
-echo "PYTHONPATH: ${PYTHONPATH}"sh parameters
+#echo "PYTHONPATH: ${PYTHONPATH}"sh parameters
 # set up parameters
 export nematus_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus
 export language_dir=${src_language}-${dst_language}

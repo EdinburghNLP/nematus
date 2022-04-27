@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
-echo "###############in print_embedding_table.sh###############"
+echo "**************************************** in print_embedding_table.sh ****************************************"
 scripts_dir=`pwd`
-source ${scripts_dir}/consts.sh
+source ${scripts_dir}/consts.sh ${language} ${debias_method}
 model_type=bpe256
 model_name=model.npz
 model_dir=${nematus_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
