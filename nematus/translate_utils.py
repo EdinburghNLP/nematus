@@ -98,7 +98,7 @@ def translate_file(input_file, output_file, session, sampler, config,
         maxibatch_size: number of minibatches to read and sort, pre-translation.
     """
 
-    def translate_maxibatch(maxibatch, num_to_target, num_prev_translated, line_num):
+    def translate_maxibatch(maxibatch, num_to_target, num_prev_translated):
         """Translates an individual maxibatch.
 
         Args:
@@ -159,28 +159,20 @@ def translate_file(input_file, output_file, session, sampler, config,
     while True:
         if COLLECT_EMBEDDING_TABLE and line_num>1:
             break
-        try:
-            line = input_file.readline()
-            # print(line)
-            line_num+=1
-            if line == "":
-                if len(maxibatch) > 0:
-                    translate_maxibatch(maxibatch, num_to_target, num_translated, line_num)
-                    num_translated += len(maxibatch)
-                break
-            # if line_num< MIN_LINE_NUM:
-            #     print("not translating line num: "+str(line_num))
-            #     continue
-            maxibatch.append(line)
-            # if len(maxibatch) == (maxibatch_size * minibatch_size):
-            if len(maxibatch) == (1 ):
-                translate_maxibatch(maxibatch, num_to_target, num_translated, line_num)
+
+        line = input_file.readline()
+        # print(line)
+        line_num+=1
+        if line == "":
+            if len(maxibatch) > 0:
+                translate_maxibatch(maxibatch, num_to_target, num_translated)
                 num_translated += len(maxibatch)
-                maxibatch = []
-        except Exception as e:
-            print ("line number "+str(line_num)+" wasn't translated: "+line)
+            break
+        maxibatch.append(line)
+        if len(maxibatch) == (maxibatch_size * minibatch_size):
+            translate_maxibatch(maxibatch, num_to_target, num_translated)
+            num_translated += len(maxibatch)
             maxibatch = []
-            continue
 
     duration = time.time() - start_time
     logging.info('Translated {} sents in {} sec. Speed {} sents/sec'.format(
