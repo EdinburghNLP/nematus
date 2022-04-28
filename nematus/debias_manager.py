@@ -55,7 +55,7 @@ class DebiasManager():
         :param consts_config_str: a configuration dictionary of the current
         :return: instance of a relevant debias manager
         """
-        _, _, _, _, DEBIAS_METHOD = get_basic_configurations(consts_config_str)
+        _, _, _, DEBIAS_METHOD = get_basic_configurations(consts_config_str)
         if DebiasMethod(DEBIAS_METHOD) == DebiasMethod.BOLUKBASY:
             return DebiasBlukbasyManager(consts_config_str)
         elif DebiasMethod(DEBIAS_METHOD) == DebiasMethod.NULL_IT_OUT:

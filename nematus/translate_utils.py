@@ -143,11 +143,9 @@ def translate_file(input_file, output_file, session, sampler, config,
             else:
                 best_hypo, cost = beam[0]
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
-                if PRINT_LINE_NUMS:
-                    line = "{} ||| {}".format(line_num, line)
                 output_file.write(line)
 
-    _, _, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, _  = get_basic_configurations(consts_config_str)
+    _, _, COLLECT_EMBEDDING_TABLE, _  = get_basic_configurations(consts_config_str)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(

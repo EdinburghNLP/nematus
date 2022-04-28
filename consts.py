@@ -54,8 +54,6 @@ param_dict = {
 
 
 def parse_config(config_str):
-    print("config_str")
-    print(config_str)
     return ast.literal_eval(config_str)
 
 
@@ -64,10 +62,9 @@ def get_basic_configurations(config_str):
     USE_DEBIASED = config["USE_DEBIASED"]
     LANGUAGE = config["LANGUAGE"]
     COLLECT_EMBEDDING_TABLE = config["COLLECT_EMBEDDING_TABLE"]
-    PRINT_LINE_NUMS = config["PRINT_LINE_NUMS"]
     DEBIAS_METHOD = config["DEBIAS_METHOD"]
 
-    return USE_DEBIASED, LANGUAGE, COLLECT_EMBEDDING_TABLE, PRINT_LINE_NUMS, DEBIAS_METHOD
+    return USE_DEBIASED, LANGUAGE, COLLECT_EMBEDDING_TABLE, DEBIAS_METHOD
 
 
 def get_debias_files_from_config(config_str):
@@ -107,17 +104,17 @@ def get_evaluate_gender_files(config_str):
     # the translations of anti sentences, using the non debiased embedding table, with source line nums printed
     ANTI_TRANSLATED_NON_DEBIASED = NEMATUS_HOME + "en-" + lang + "/output/non_debiased_anti_"+debias_method+".out.tmp"
 
-    # the translations of anti sentences, using the debiased embedding table, after filtering lines that are cummon with the non debiased translation
-    ANTI_TRANSLATED_DEBIASED_PICKLE = NEMATUS_HOME + "en-" + lang + "/output/debiased_anti_"+debias_method+".pickle"
+    # # the translations of anti sentences, using the debiased embedding table, after filtering lines that are cummon with the non debiased translation
+    # ANTI_TRANSLATED_DEBIASED_MERGED = NEMATUS_HOME + "en-" + lang + "/output/debiased_anti_"+debias_method+".txt"
 
-    # the translations of anti sentences, using the non debiased embedding table, after filtering lines that are cummon with the debiased translation
-    ANTI_TRANSLATED_NON_DEBIASED_PICKLE = NEMATUS_HOME + "en-" + lang + "/output/non_debiased_anti_"+debias_method+".pickle"
+    # # the translations of anti sentences, using the non debiased embedding table, after filtering lines that are cummon with the debiased translation
+    # ANTI_TRANSLATED_NON_DEBIASED_MERGED = NEMATUS_HOME + "en-" + lang + "/output/non_debiased_anti_"+debias_method+".txt"
 
     # the full anti sentences in english (in the format <gender> <profession location> <sentence> <profession>)
     EN_ANTI_MT_GENDER = MT_GENDER_HOME + "data/aggregates/en_anti.txt"
 
-    # the source sentences (in english) after filtering lines that were not translated (in the format <gender> <profession location> <sentence> <profession>)
-    EN_ANTI_MERGED = MT_GENDER_HOME + "data/aggregates/en_" + lang + "_anti_"+debias_method+".en.txt"
+    # # the source sentences (in english) after filtering lines that were not translated (in the format <gender> <profession location> <sentence> <profession>)
+    # EN_ANTI_MERGED = MT_GENDER_HOME + "data/aggregates/en_" + lang + "_anti_"+debias_method+".en.txt"
 
     # file prepared to evaluation in the form of source_sentence ||| translated_sentence. translated using debiased embedding table
     DEBIASED_EVAL = MT_GENDER_HOME + "translations/nematus/en-" + lang + "-debiased-"+debias_method+".txt"
@@ -127,8 +124,7 @@ def get_evaluate_gender_files(config_str):
 
 
 
-    return ANTI_TRANSLATED_DEBIASED, ANTI_TRANSLATED_NON_DEBIASED, DEBIASED_EVAL, NON_DEBIASED_EVAL,\
-           EN_ANTI_MERGED, ANTI_TRANSLATED_DEBIASED_PICKLE, ANTI_TRANSLATED_NON_DEBIASED_PICKLE, EN_ANTI_MT_GENDER
+    return ANTI_TRANSLATED_DEBIASED, ANTI_TRANSLATED_NON_DEBIASED, DEBIASED_EVAL, NON_DEBIASED_EVAL, EN_ANTI_MT_GENDER
 
 
 def get_evaluate_translation_files(config_str):
@@ -148,17 +144,16 @@ def get_evaluate_translation_files(config_str):
     # the translations of the dataset sentences, using the non debiased embedding table, with source line nums printed
     TRANSLATED_NON_DEBIASED = NEMATUS_HOME + "en-" + lang + "/output/non_debiased_"+debias_method+".out.tmp"
 
-    # the translations of the dataset sentences, using the debiased embedding table, after filtering lines that are cummon with the non debiased translation
-    TRANSLATED_DEBIASED_PICKLE =  NEMATUS_HOME + "en-" + lang + "/evaluate/debiased_"+debias_method+".pickle"
+    # # the translations of the dataset sentences, using the debiased embedding table, after filtering lines that are cummon with the non debiased translation
+    # TRANSLATED_DEBIASED_MERGED =  NEMATUS_HOME + "en-" + lang + "/evaluate/debiased_"+debias_method+".txt"
+    #
+    # # the translations of the dataset sentences, using the non debiased embedding table, after filtering lines that are cummon with the debiased translation
+    # TRANSLATED_NON_DEBIASED_MERGED = NEMATUS_HOME + "en-" + lang + "/evaluate/non_debiased_"+debias_method+".txt"
 
-    # the translations of the dataset sentences, using the non debiased embedding table, after filtering lines that are cummon with the debiased translation
-    TRANSLATED_NON_DEBIASED_PICKLE = NEMATUS_HOME + "en-" + lang + "/evaluate/non_debiased_"+debias_method+".pickle"
+    # # the gold translations after filtering lines that were not translated
+    # BLEU_GOLD_DATA_FILTERED = NEMATUS_HOME + "en-" + lang + "/evaluate/gold_"+debias_method+".txt"
 
-    # the gold translations after filtering lines that were not translated
-    BLEU_GOLD_DATA_FILTERED = NEMATUS_HOME + "en-" + lang + "/evaluate/gold_"+debias_method+".txt"
-
-    return BLEU_SOURCE_DATA, BLEU_GOLD_DATA, TRANSLATED_DEBIASED, TRANSLATED_NON_DEBIASED, \
-           TRANSLATED_DEBIASED_PICKLE, TRANSLATED_NON_DEBIASED_PICKLE, BLEU_GOLD_DATA_FILTERED
+    return BLEU_SOURCE_DATA, BLEU_GOLD_DATA, TRANSLATED_DEBIASED, TRANSLATED_NON_DEBIASED
 
 
 #################debiaswe files#################

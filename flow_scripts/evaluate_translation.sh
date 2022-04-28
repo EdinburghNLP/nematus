@@ -70,8 +70,8 @@ outputh_path_debiased=${nematus_dir}/${language_dir}/output/debiased_${debias_me
 outputh_path_non_debiased=${nematus_dir}/${language_dir}/output/non_debiased_${debias_method}.out.tmp
 #echo "outputh_path_debiased: ${outputh_path_debiased}"
 #echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
-config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
-config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
+config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
+config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
 
 if [ $translate = true ]; then
   echo "#################### translate debiased ####################"
@@ -87,13 +87,13 @@ if [ $translate = true ]; then
        -m  "$model_dir" \
        -k 12 -n -o "${outputh_path_non_debiased}" -c "${config_non_debiased}"
 fi
-echo "###############merge_translations###############"
-python ${nematus_dir}/merge_translations.py \
-     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0, 'DEBIAS_METHOD': ${debias_method}}" \
-     -e 1
-echo "###############evaluate translation quality###############"
+#echo "#################### merge_translations ####################"
+#python ${nematus_dir}/merge_translations.py \
+#     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}" \
+#     -e 1
+echo "#################### evaluate translation quality ####################"
 output_result_path=${nematus_dir}/${language_dir}/debias/translation_evaluation_${dst_language}_${debias_method}.txt
 exec > ${output_result_path}
 exec 2>&1
 python ${project_dir}/mt_gender/src/evaluate_translation.py \
-     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0, 'DEBIAS_METHOD': ${debias_method}}"
+     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"

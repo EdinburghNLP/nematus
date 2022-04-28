@@ -80,9 +80,9 @@ outputh_path_debiased=${nematus_dir}/${language_dir}/output/debiased_anti_${debi
 outputh_path_non_debiased=${nematus_dir}/${language_dir}/output/non_debiased_anti_${debias_method}.out.tmp
 #echo "outputh_path_debiased: ${outputh_path_debiased}"
 #echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
-config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
+config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
 #echo "config_debiased: ${config_debiased}"
-config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 1, 'DEBIAS_METHOD': ${debias_method}}"
+config_non_debiased="{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
 
 if [ $translate = true ]; then
   echo "#################### translate anti debias ####################"
@@ -100,10 +100,10 @@ if [ $translate = true ]; then
 fi
 
 
-echo "###############merge translations###############"
-python ${nematus_dir}/merge_translations.py \
-     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'PRINT_LINE_NUMS': 0, 'DEBIAS_METHOD': ${debias_method}}" \
-     -e 0
+#echo "#################### merge translations ####################"
+#python ${nematus_dir}/merge_translations.py \
+#     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}" \
+#     -e 0
 echo "#################### prepare gender data ####################"
 python ${nematus_dir}/prepare_gender_data.py  -c "${config_non_debiased}"
 
