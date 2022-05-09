@@ -7,6 +7,7 @@ import json
 import csv
 import math
 from datetime import datetime
+from pathlib import Path
 
 LANGUAGES =LANGUAGE_STR_MAP.values()
 DEBIAS_METHODS = [d.value for d in DebiasMethod]
@@ -80,6 +81,7 @@ def write_results_to_csv(results):
     data = np.append(index, results, axis=1)
     now = datetime.now()
     dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
+    Path(DEBIAS_MANAGER_HOME+"results").mkdir(parents=True, exist_ok=True)
     with open(DEBIAS_MANAGER_HOME+"results/results_"+dt_string+".csv", 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(headers)
@@ -93,7 +95,7 @@ def write_results_to_table(results):
     df = pd.DataFrame(results, index=["Original", "Bolukbasy", "Null It Out"], columns=index)
     now = datetime.now()
     dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
-    with open(NEMATUS_HOME+"results/results_"+dt_string+".tex", 'w') as f:
+    with open(DEBIAS_MANAGER_HOME+"results/results_"+dt_string+".tex", 'w') as f:
         f.write(df.to_latex())
     pass
 if __name__ == '__main__':
