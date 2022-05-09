@@ -46,7 +46,9 @@ FLOAT_DTYPE = tf.float32
 from debias_manager import DebiasManager
 # from nematus.nematus.debias_manager import DebiasManager
 import sys
-sys.path.append("..")  # Adds higher directory to python modules path.
+# sys.path.append("..")  # Adds higher directory to python modules path.
+sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
+
 from consts import get_basic_configurations, get_debias_files_from_config
 
 class Transformer(object):

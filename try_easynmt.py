@@ -2,7 +2,8 @@ from easynmt import EasyNMT
 from sacrebleu.metrics import BLEU
 from detokenize import detokenize_matrix
 import sys
-sys.path.append("../../") # Adds higher directory to python modules path.
+# sys.path.append("../../") # Adds higher directory to python modules path.
+sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
 from consts import get_debias_files_from_config, EMBEDDING_SIZE, DEFINITIONAL_FILE, PROFESSIONS_FILE, \
     GENDER_SPECIFIC_FILE, EQUALIZE_FILE, get_basic_configurations, DebiasMethod
 model = EasyNMT('opus-mt')

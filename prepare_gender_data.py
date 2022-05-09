@@ -1,7 +1,9 @@
 import pickle
 
 import sys
-sys.path.append("..") # Adds higher directory to python modules path.
+# sys.path.append("..") # Adds higher directory to python modules path.
+sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
+
 from consts import get_evaluate_gender_files, LANGUAGE_STR_MAP, parse_config, Language
 import argparse
 from detokenize import detokenize_matrix

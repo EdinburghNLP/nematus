@@ -67,4 +67,4 @@ sh run_all_flows.sh -l ru -d 1 ${collect_embedding_table} ${preprocess} ${transl
 
 echo "#################### write results to table ####################"
 source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus_env3/bin/activate
-python ${nematus_dir}/write_results_to_table.py
+python ${debias_manager_dir}/write_results_to_table.py
