@@ -15,10 +15,10 @@ mt_gender_old/
 *.pickle
 *vocab.*.json
 *anti.*
-en-de_rev/*
-en-de/*
-en-he/*
-en-ru/*
+../debias_manager/en-de_rev/*
+../debias_manager/en-de/*
+../debias_manager/en-he/*
+../debias_manager/en-ru/*
 en_anti_parsed.txt
 nematus_env3/*
 output_translate.txt

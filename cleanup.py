@@ -47,9 +47,9 @@ if __name__ == '__main__':
                               "non_debiased_1.out.tmp",
                               ]
 
-        cleanup(["/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-"+language +"/debias",
-                 "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-"+language +"/evaluate",
-                 "/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/en-"+language +"/output",],
+        cleanup(["/cs/usr/bareluz/gabi_labs/nematus_clean/debias_manager/en-"+language +"/debias",
+                 "/cs/usr/bareluz/gabi_labs/nematus_clean/debias_manager/en-"+language +"/evaluate",
+                 "/cs/usr/bareluz/gabi_labs/nematus_clean/debias_manager/en-"+language +"/output",],
                 files_to_ignore)
     cleanup(["/cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender/translations/nematus",
              "/cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender/data/aggregates"],

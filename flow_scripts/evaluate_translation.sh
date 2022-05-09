@@ -64,10 +64,10 @@ source ${scripts_dir}/consts.sh ${language} ${debias_method}
 #echo "input_path: ${input_path}"
 model_type=bpe256
 model_name=model.npz
-model_dir=${nematus_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
+model_dir=${debias_manager_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
 #echo "model_dir: ${model_dir}"
-outputh_path_debiased=${nematus_dir}/${language_dir}/output/debiased_${debias_method}.out.tmp
-outputh_path_non_debiased=${nematus_dir}/${language_dir}/output/non_debiased_${debias_method}.out.tmp
+outputh_path_debiased=${debias_manager_dir}/${language_dir}/output/debiased_${debias_method}.out.tmp
+outputh_path_non_debiased=${debias_manager_dir}/${language_dir}/output/non_debiased_${debias_method}.out.tmp
 #echo "outputh_path_debiased: ${outputh_path_debiased}"
 #echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
 config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
@@ -92,7 +92,7 @@ fi
 #     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}" \
 #     -e 1
 echo "#################### evaluate translation quality ####################"
-output_result_path=${nematus_dir}/${language_dir}/debias/translation_evaluation_${dst_language}_${debias_method}.txt
+output_result_path=${debias_manager_dir}/${language_dir}/debias/translation_evaluation_${dst_language}_${debias_method}.txt
 exec > ${output_result_path}
 exec 2>&1
 python ${project_dir}/mt_gender/src/evaluate_translation.py \

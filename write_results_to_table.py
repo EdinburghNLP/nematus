@@ -1,6 +1,6 @@
 import argparse
 import re
-from consts import LANGUAGE_STR_MAP,DebiasMethod, NEMATUS_HOME
+from consts import LANGUAGE_STR_MAP,DebiasMethod, DEBIAS_MANAGER_HOME
 import pandas as pd
 import numpy as np
 import json
@@ -80,7 +80,7 @@ def write_results_to_csv(results):
     data = np.append(index, results, axis=1)
     now = datetime.now()
     dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
-    with open(NEMATUS_HOME+"results/results_"+dt_string+".csv", 'w', encoding='UTF8', newline='') as f:
+    with open(DEBIAS_MANAGER_HOME+"results/results_"+dt_string+".csv", 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(headers)
         writer.writerow(sub_headers)
@@ -113,8 +113,8 @@ if __name__ == '__main__':
         result_files[language] = {}
         for debias_method in DEBIAS_METHODS:
             result_files[language][debias_method] = {}
-            result_files[language][debias_method]["translation"] = NEMATUS_HOME + "en-" + language + "/debias/translation_evaluation_" + language + "_"+str(debias_method)+".txt"
-            result_files[language][debias_method]["gender"] = NEMATUS_HOME + "en-" + language + "/debias/gender_evaluation_" + language + "_"+str(debias_method)+".txt"
+            result_files[language][debias_method]["translation"] = DEBIAS_MANAGER_HOME + "en-" + language + "/debias/translation_evaluation_" + language + "_"+str(debias_method)+".txt"
+            result_files[language][debias_method]["gender"] = DEBIAS_MANAGER_HOME + "en-" + language + "/debias/gender_evaluation_" + language + "_"+str(debias_method)+".txt"
     res = get_all_results(result_files)
     for i in res:
         print(i)
