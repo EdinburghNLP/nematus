@@ -8,7 +8,7 @@
 #SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/en-he%j.out
 
 module load tensorflow/2.0.0
-source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
+source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus_env3/bin/activate
 #export CUDA_VISIBLE_DEVICES='0,1,2,3'
 
 

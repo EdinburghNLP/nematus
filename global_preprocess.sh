@@ -7,7 +7,7 @@ set -e
 #SBATCH --mail-user=bar.iluz@mail.huji.ac.il
 #SBATCH --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/preprocess-%j.out
 
-source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
+source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus_env3/bin/activate
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" # fails on symlinks
 #SCRIPT_FILE=`basename "$0"`
 train_models=false

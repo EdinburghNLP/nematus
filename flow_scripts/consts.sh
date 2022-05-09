@@ -1,6 +1,6 @@
 set -e
 #module load tensorflow/2.0.0
-source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus/nematus_env3/bin/activate
+source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus_env3/bin/activate
 export src_language=en
 export dst_language=$1
 export debias_method=$2
