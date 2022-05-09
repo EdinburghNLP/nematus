@@ -45,10 +45,12 @@ Optional arguments:
       exit 1;;
   esac
 done
+scripts_dir=`pwd`
+source ${scripts_dir}/consts.sh ${language} ${debias_method}
 
 echo "#################### cleanup ####################"
 nematus_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus
-python ${nematus_dir}/cleanup.py ${collect_embedding_table} ${translate}
+python ${debias_manager_dir}/cleanup.py ${collect_embedding_table} ${translate}
 
 echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ de 0 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
 sh run_all_flows.sh -l de -d 0 ${collect_embedding_table} ${preprocess} ${translate}
