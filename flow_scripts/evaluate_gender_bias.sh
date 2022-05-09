@@ -105,7 +105,7 @@ fi
 #     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}" \
 #     -e 0
 echo "#################### prepare gender data ####################"
-python ${nematus_dir}/prepare_gender_data.py  -c "${config_non_debiased}"
+python ${debias_manager_dir}/prepare_gender_data.py  -c "${config_non_debiased}"
 
 echo "#################### gender evaluation ####################"
 output_result_path=${debias_manager_dir}/${language_dir}/debias/gender_evaluation_${dst_language}_${debias_method}.txt
