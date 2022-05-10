@@ -7,7 +7,7 @@ nmt.egg-info
 nematus_env/*
 *.bin
 *.en
-debiaswe
+../debiaswe
 fast_align/
 mt_gender_old/
 *.out.tmp
@@ -15,10 +15,10 @@ mt_gender_old/
 *.pickle
 *vocab.*.json
 *anti.*
-../debias_manager/en-de_rev/*
-../debias_manager/en-de/*
-../debias_manager/en-he/*
-../debias_manager/en-ru/*
+../debias_files/en-de_rev/*
+../debias_files/en-de/*
+../debias_files/en-he/*
+../debias_files/en-ru/*
 en_anti_parsed.txt
 nematus_env3/*
 output_translate.txt

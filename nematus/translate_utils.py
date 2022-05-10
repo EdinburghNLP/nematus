@@ -16,7 +16,7 @@ except (ModuleNotFoundError, ImportError) as e:
     import util
 import sys
 # sys.path.append("..") # Adds higher directory to python modules path.
-sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
+sys.path.append("../../debias_files") # Adds higher directory to python modules path.
 from consts import get_basic_configurations
 
 MIN_LINE_NUM = 1552

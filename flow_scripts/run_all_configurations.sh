@@ -50,7 +50,7 @@ source ${scripts_dir}/consts.sh ${language} ${debias_method}
 
 echo "#################### cleanup ####################"
 nematus_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus
-python ${debias_manager_dir}/cleanup.py ${collect_embedding_table} ${translate}
+python ${debias_files_dir}/cleanup.py ${collect_embedding_table} ${translate}
 
 echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ de 0 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
 sh run_all_flows.sh -l de -d 0 ${collect_embedding_table} ${preprocess} ${translate}
@@ -67,4 +67,4 @@ sh run_all_flows.sh -l ru -d 1 ${collect_embedding_table} ${preprocess} ${transl
 
 echo "#################### write results to table ####################"
 source /cs/usr/bareluz/gabi_labs/nematus_clean/nematus_env3/bin/activate
-python ${debias_manager_dir}/write_results_to_table.py
+python ${debias_files_dir}/write_results_to_table.py

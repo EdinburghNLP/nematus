@@ -69,15 +69,15 @@ fi
 
 
 #################### translate anti sentences to test gender bias ####################
-input_path=${debias_manager_dir}/${language_dir}/preprocess/anti.unesc.tok.tc.bpe.en
+input_path=${debias_files_dir}/${language_dir}/preprocess/anti.unesc.tok.tc.bpe.en
 #echo "input_path: ${input_path}"
 model_type=bpe256
 model_name=model.npz
-model_dir=${debias_manager_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
+model_dir=${debias_files_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
 #echo "model_dir: ${model_dir}"
 #output_filename_debiased=debiased_anti_TEST.out.tmp
-outputh_path_debiased=${debias_manager_dir}/${language_dir}/output/debiased_anti_${debias_method}.out.tmp
-outputh_path_non_debiased=${debias_manager_dir}/${language_dir}/output/non_debiased_anti_${debias_method}.out.tmp
+outputh_path_debiased=${debias_files_dir}/${language_dir}/output/debiased_anti_${debias_method}.out.tmp
+outputh_path_non_debiased=${debias_files_dir}/${language_dir}/output/non_debiased_anti_${debias_method}.out.tmp
 #echo "outputh_path_debiased: ${outputh_path_debiased}"
 #echo "outputh_path_non_debiased: ${outputh_path_non_debiased}"
 config_debiased="{'USE_DEBIASED': 1, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}"
@@ -105,10 +105,10 @@ fi
 #     -c "{'USE_DEBIASED': 0, 'LANGUAGE': ${language_num}, 'COLLECT_EMBEDDING_TABLE': 0, 'DEBIAS_METHOD': ${debias_method}}" \
 #     -e 0
 echo "#################### prepare gender data ####################"
-python ${debias_manager_dir}/prepare_gender_data.py  -c "${config_non_debiased}"
+python ${debias_files_dir}/prepare_gender_data.py  -c "${config_non_debiased}"
 
 echo "#################### gender evaluation ####################"
-output_result_path=${debias_manager_dir}/${language_dir}/debias/gender_evaluation_${dst_language}_${debias_method}.txt
+output_result_path=${debias_files_dir}/${language_dir}/debias/gender_evaluation_${dst_language}_${debias_method}.txt
 exec > ${output_result_path}
 exec 2>&1
 cd /cs/usr/bareluz/gabi_labs/nematus_clean/mt_gender

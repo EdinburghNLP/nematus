@@ -13,7 +13,7 @@ export PYTHONPATH=${PYTHONPATH}:${project_dir}
 #echo "PYTHONPATH: ${PYTHONPATH}"sh parameters
 # set up parameters
 export nematus_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus
-export debias_manager_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/debias_manager
+export debias_files_dir=/cs/usr/bareluz/gabi_labs/nematus_clean/debias_files
 export language_dir=${src_language}-${dst_language}
 
 leshem_data_path=/cs/snapless/oabend/borgr/SSMT/preprocess/data

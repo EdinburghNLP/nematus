@@ -43,12 +43,12 @@ except (ModuleNotFoundError, ImportError) as e:
 INT_DTYPE = tf.int32
 FLOAT_DTYPE = tf.float32
 
-from debias_manager.debias_manager import DebiasManager
+from debias_files.debias_manager import DebiasManager
 import sys
 # sys.path.append("..")  # Adds higher directory to python modules path.
-# sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
+# sys.path.append("../../debias_files") # Adds higher directory to python modules path.
 
-from debias_manager.consts import get_basic_configurations, get_debias_files_from_config
+from debias_files.consts import get_basic_configurations, get_debias_files_from_config
 # from consts import get_basic_configurations, get_debias_files_from_config
 
 class Transformer(object):

@@ -4,7 +4,7 @@ import re
 import argparse
 import sys
 # sys.path.append("..") # Adds higher directory to python modules path.
-sys.path.append("../../debias_manager") # Adds higher directory to python modules path.
+sys.path.append("../../debias_files") # Adds higher directory to python modules path.
 
 from consts import get_evaluate_translation_files, get_evaluate_gender_files
 
