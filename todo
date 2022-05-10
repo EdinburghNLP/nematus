@@ -4,7 +4,7 @@ ssh phoenix-gw
 * request gpus and memory (aviv asks 64g mamory)
 two options:
 1. srun --mem=4000m -c2 --time=7-0 --mail-type=BEGIN,END,FAIL,TIME_LIMIT --mail-user=bar.iluz@mail.huji.ac.il --output=/cs/usr/bareluz/gabi_labs/nematus_clean/nematus/slurm/run_all_flows-%j.out --gres=gpu:m60:2 --pty $SHELL
-srun --mem=128g -c4 --time=1-12 --gres=gpu:m60:2 --pty $SHELL
+srun --mem=128g -c4 --time=8 --gres=gpu:m60:2 --pty $SHELL
 srun --mem=30gb -c2 --gres=gpu:1 --time=1-0 --pty $SHELL
 sh train.sh 
 ( runs with the paramenters given, stops when the computer is turned off, runs immidiatly
