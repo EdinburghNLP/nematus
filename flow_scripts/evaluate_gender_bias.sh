@@ -63,13 +63,12 @@ source ${scripts_dir}/consts.sh ${language} ${debias_method}
 ############preprocess###############
 if [ $preprocess = true ]; then
   echo "#################### preprocess ####################"
-  echo "sh ${nematus_dir}/global_preprocess.sh ${dst_language}"
-  sh ${nematus_dir}/global_preprocess.sh ${dst_language}
+  sh ${debias_files_dir}/global_preprocess.sh ${dst_language}
 fi
 
 
 #################### translate anti sentences to test gender bias ####################
-input_path=${debias_files_dir}/${language_dir}/preprocess/anti.unesc.tok.tc.bpe.en
+input_path=${snapless_data_dir}/anti_data/${language_dir}/anti.unesc.tok.tc.bpe.en
 #echo "input_path: ${input_path}"
 model_type=bpe256
 model_name=model.npz
