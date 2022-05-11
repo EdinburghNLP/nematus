@@ -64,7 +64,7 @@ source ${scripts_dir}/consts.sh ${language} ${debias_method}
 #echo "input_path: ${input_path}"
 model_type=bpe256
 model_name=model.npz
-model_dir=${debias_files_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
+model_dir=${snapless_data_dir}/models/${language_dir}/${model_type}/${model_name}
 #echo "model_dir: ${model_dir}"
 outputh_path_debiased=${debias_files_dir}/${language_dir}/output/debiased_${debias_method}.out.tmp
 outputh_path_non_debiased=${debias_files_dir}/${language_dir}/output/non_debiased_${debias_method}.out.tmp

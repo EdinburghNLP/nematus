@@ -5,7 +5,7 @@ scripts_dir=`pwd`
 source ${scripts_dir}/consts.sh ${language} ${debias_method}
 model_type=bpe256
 model_name=model.npz
-model_dir=${debias_files_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
+model_dir=${snapless_data_dir}/models/${language_dir}/${model_type}/${model_name}
 #echo "model_dir: ${model_dir}"
 output_filename=output_translate_${dst_language}.out.tmp
 outputh_path=${debias_files_dir}/${language_dir}/output/not_important.txt

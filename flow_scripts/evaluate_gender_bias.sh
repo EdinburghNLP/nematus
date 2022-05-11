@@ -72,7 +72,7 @@ input_path=${snapless_data_dir}/anti_data/${language_dir}/anti.unesc.tok.tc.bpe.
 #echo "input_path: ${input_path}"
 model_type=bpe256
 model_name=model.npz
-model_dir=${debias_files_dir}/${language_dir}/scripts/models/${model_type}/${model_name}
+model_dir=${snapless_data_dir}/models/${language_dir}/${model_type}/${model_name}
 #echo "model_dir: ${model_dir}"
 #output_filename_debiased=debiased_anti_TEST.out.tmp
 outputh_path_debiased=${debias_files_dir}/${language_dir}/output/debiased_anti_${debias_method}.out.tmp
