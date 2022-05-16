@@ -229,7 +229,7 @@ class TransformerEncoder(object):
         self._build_graph()
         _, _, self.num_to_source, self.num_to_target = util.load_dictionaries(config)
         a = 1
-        self.USE_DEBIASED, _, self.COLLECT_EMBEDDING_TABLE, _ = get_basic_configurations(self.consts_config_str)
+        self.USE_DEBIASED, _, self.COLLECT_EMBEDDING_TABLE, _, _ = get_basic_configurations(self.consts_config_str)
         if self.USE_DEBIASED:
             debiasManager = DebiasManager.get_manager_instance(self.consts_config_str)
             self.embedding_matrix = tf.cast(tf.convert_to_tensor(debiasManager.debias_embedding_table()),

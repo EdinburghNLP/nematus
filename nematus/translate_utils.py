@@ -146,7 +146,7 @@ def translate_file(input_file, output_file, session, sampler, config,
                 line = util.seq2words(best_hypo, num_to_target) + '\n'
                 output_file.write(line)
 
-    _, _, COLLECT_EMBEDDING_TABLE, _  = get_basic_configurations(consts_config_str)
+    _, _, COLLECT_EMBEDDING_TABLE, _ , _ = get_basic_configurations(consts_config_str)
     _, _, _, num_to_target = util.load_dictionaries(config)
 
     logging.info("NOTE: Length of translations is capped to {}".format(
