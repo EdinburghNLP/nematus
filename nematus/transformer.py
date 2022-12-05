@@ -40,7 +40,7 @@ class Transformer(object):
     def __init__(self, config):
         # Set attributes
         self.config = config
-        self.source_vocab_size = config.source_vocab_sizes[0]
+        self.source_vocab_size = config.source_vocab_sizes
         self.target_vocab_size = config.target_vocab_size
         self.name = 'transformer'
 
@@ -110,19 +110,30 @@ class Transformer(object):
                 enc_vocab_size = self.source_vocab_size
                 dec_vocab_size = self.target_vocab_size
             else:
-                assert self.source_vocab_size == self.target_vocab_size, \
+                assert self.source_vocab_size[0] == self.target_vocab_size, \
                     'Input and output vocabularies should be identical when tying embedding tables.'
-                enc_vocab_size = dec_vocab_size = self.source_vocab_size
+                enc_vocab_size = dec_vocab_size = self.source_vocab_size[0]
 
-            encoder_embedding_layer = EmbeddingLayer(enc_vocab_size,
-                                                     self.config.embedding_size,
-                                                     self.config.state_size,
-                                                     FLOAT_DTYPE,
-                                                     name='encoder_embedding_layer')
             if not self.config.tie_encoder_decoder_embeddings:
-                decoder_embedding_layer = EmbeddingLayer(dec_vocab_size,
+                encoder_embedding_layer = EmbeddingLayer(enc_vocab_size,
+                                                        self.config.embedding_size,
+                                                        self.config.state_size,
+                                                        self.config.dim_per_factor,
+                                                        FLOAT_DTYPE,
+                                                        name='encoder_embedding_layer')
+            else:
+                encoder_embedding_layer = EmbeddingLayer([enc_vocab_size],
+                                                        self.config.embedding_size,
+                                                        self.config.state_size,
+                                                        self.config.dim_per_factor,
+                                                        FLOAT_DTYPE,
+                                                        name='encoder_embedding_layer')
+
+            if not self.config.tie_encoder_decoder_embeddings:
+                decoder_embedding_layer = EmbeddingLayer([dec_vocab_size],
                                                          self.config.embedding_size,
                                                          self.config.state_size,
+                                                         [self.config.target_embedding_size],
                                                          FLOAT_DTYPE,
                                                          name='decoder_embedding_layer')
             else:
@@ -132,6 +143,7 @@ class Transformer(object):
                 softmax_projection_layer = EmbeddingLayer(dec_vocab_size,
                                                           self.config.embedding_size,
                                                           self.config.state_size,
+                                                          self.config.target_embedding_size,
                                                           FLOAT_DTYPE,
                                                           name='softmax_projection_layer')
             else:
@@ -169,7 +181,7 @@ class Transformer(object):
     def _convert_inputs(self, inputs):
         # Convert from time-major to batch-major. Note that we take factor 0
         # from x and ignore any other factors.
-        source_ids = tf.transpose(a=inputs.x[0], perm=[1,0])
+        source_ids = tf.transpose(a=inputs.x, perm=[0,2,1])
         source_mask = tf.transpose(a=inputs.x_mask, perm=[1,0])
         target_ids_out = tf.transpose(a=inputs.y, perm=[1,0])
         target_mask = tf.transpose(a=inputs.y_mask, perm=[1,0])
@@ -310,9 +322,9 @@ class TransformerDecoder(object):
         # Create nodes
         self._build_graph()
 
-    def _embed(self, index_sequence):
+    def _embed(self, index_sequence, factor=None):
         """ Embeds target-side indices to obtain the corresponding dense tensor representations. """
-        return self.embedding_layer.embed(index_sequence)
+        return self.embedding_layer.embed(index_sequence, factor)
 
     def _build_graph(self):
         """ Defines the model graph. """
@@ -373,7 +385,7 @@ class TransformerDecoder(object):
             """ Pre-processes target token ids before they're passed on as input to the decoder
             for parallel decoding. """
             # Embed target_ids
-            target_embeddings = self._embed(target_ids)
+            target_embeddings = self._embed(target_ids, factor=0)
             target_embeddings += positional_signal
             if self.dropout_embedding is not None:
                 target_embeddings = self.dropout_embedding(target_embeddings, training=self.training)

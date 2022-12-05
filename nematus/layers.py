@@ -112,8 +112,9 @@ class EmbeddingLayer(object):
     def forward(self, x, factor=None):
         if factor == None:
             # Assumes that x has shape: factors, ...
-            embs = [tf.nn.embedding_lookup(params=matrix, ids=x[i])
-                    for i, matrix in enumerate(self.embedding_matrices)]
+            embs = []
+            for i, matrix in enumerate(self.embedding_matrices):
+                embs.append(tf.nn.embedding_lookup(params=matrix, ids=x[i]))
             return tf.concat(embs, axis=-1)
         else:
             matrix = self.embedding_matrices[factor]

@@ -9,6 +9,11 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.init_ops import glorot_uniform_initializer
 
+try:
+    from . import initializers
+except (ModuleNotFoundError, ImportError) as e:
+    import initializers
+
 # ModuleNotFoundError is new in 3.6; older versions will throw SystemError
 if sys.version_info < (3, 6):
     ModuleNotFoundError = SystemError
@@ -73,46 +78,65 @@ def get_positional_signal(time_steps, depth, float_dtype, min_timescale=1, max_t
 class EmbeddingLayer(object):
     """ Looks up embeddings for the specified token sequence in the learned embedding table; allows for easy weight
     scaling and tying. """
+    def __init__(self, vocabulary_size, embedding_size, hidden_size, dimension_size, float_dtype, name):
 
-    def __init__(self, vocabulary_size, embedding_size, hidden_size, float_dtype, name):
         # Set arguments
         self.vocabulary_size = vocabulary_size
         self.hidden_size = hidden_size
+
+        self.dimension_size = dimension_size
         self.float_dtype = float_dtype
         self.name = name
 
-        # Create embedding matrix and its transposes
+        self.embedding_matrices = []
+        self.projection_matrices = []
         with tf.compat.v1.variable_scope(self.name):
-            self.embedding_table = tf.compat.v1.get_variable(name='embedding_table',
-                                                shape=[vocabulary_size, embedding_size],
+            for i in range(len(self.vocabulary_size)):
+                vocab_size, dim = self.vocabulary_size[i], self.dimension_size[i]
+                var_name = "embedding_table" if i == 0 else "embedding_table" + '_' + str(i)
+                init = initializers.norm_weight(vocab_size, dim)
+                matrix = tf.compat.v1.get_variable(name=var_name,
+                                                shape=[vocab_size, dim],
                                                 dtype=float_dtype,
                                                 initializer=glorot_uniform_initializer(),
                                                 trainable=True)
-            self.projection_matrix = tf.transpose(a=self.embedding_table, name='vocab_projection_matrix')
+                self.embedding_matrices.append(matrix)
 
-    def embed(self, one_hot_inputs):
+                proj_name = 'projection_matrix' if i == 0 else 'projection_matrix_' + str(i)
+                proj_matrix = tf.transpose(a=matrix, name=proj_name)
+                self.projection_matrices.append(proj_matrix)
+
+    def embed(self, one_hot_inputs, factor=None):
         """ Embeds one-hot-vectors corresponding to input tokens. """
-        embeddings = tf.nn.embedding_lookup(params=self.embedding_table, ids=one_hot_inputs)
-        # Apply transformer-specific scaling
-        embeddings *= tf.sqrt(tf.cast(self.hidden_size, self.float_dtype))
-        return embeddings
+        if factor == None:
+            embs = [tf.nn.embedding_lookup(params=matrix, ids=one_hot_inputs[i])
+                    for i, matrix in enumerate(self.embedding_matrices)]
+            embeddings = tf.concat(embs, axis=-1)
+            embeddings *= tf.sqrt(tf.cast(self.hidden_size, self.float_dtype))
+            return embeddings
+        else:
+            matrix = self.embedding_matrices[factor]
+            embs = tf.nn.embedding_lookup(params=matrix, ids=one_hot_inputs)
+            embeddings = tf.concat(embs, axis=-1)
+            embeddings *= tf.sqrt(tf.cast(self.hidden_size, self.float_dtype))
+            return embeddings
 
     def project(self, dec_out):
         """ Projects the transformer decoder's output into the vocabulary space. """
-        projections = matmul_nd(dec_out, self.projection_matrix)
+        projections = matmul_nd(dec_out, self.projection_matrices)
         return projections
 
-    def get_embedding_table(self):
+    def get_embedding_table(self, factor=None):
         """ Recovers the learned embedding table. """
-        return self.embedding_table
+        return self.embedding_matrices
 
-    def get_projection_matrix(self):
+    def get_projection_matrix(self, factor=None):
         """ Recovers the pre-softmax projection matrix which is the inverse of the embedding table. """
-        return self.projection_matrix
+        return self.projection_matrices
 
     def get_vocab_size(self):
         """ Recovers the vocabulary size. """
-        return self.vocabulary_size
+        return self.vocabulary_size[0]
 
 
 class LayerNormLayer(object):
