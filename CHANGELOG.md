@@ -4,6 +4,10 @@ CHANGELOG
 development version
 -----------
 
+ - main new features:
+   - factored input for Transformers
+   - DropHead regularization
+
 v0.5 (19/5/2020)
 ----------
 

@@ -17,6 +17,7 @@ Notable features include:
      - lexical model (Nguyen and Chiang, 2018) https://www.aclweb.org/anthology/N18-1031
 
   - support for advanced Transformer architectures:
+     - [arbitrary input features](doc/factored_neural_machine_translation.md) (factored neural machine translation) http://www.statmt.org/wmt16/pdf/W16-2209.pdf
      - DropHead: dropout of entire attention heads (Zhou et al., 2020) https://arxiv.org/abs/2004.13342
 
  - training features:
